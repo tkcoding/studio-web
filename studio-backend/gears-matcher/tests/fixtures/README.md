@@ -1,7 +1,7 @@
 # Fixtures
 
 Excerpts of [`gears-rust`](https://github.com/constructorfabric/gears-rust), licensed Apache-2.0
-(see `LICENSE` and `NOTICE` at the repository root).
+(see `LICENSE` and `NOTICE` in this component).
 
 | Fixture | Source commit |
 |---|---|

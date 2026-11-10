@@ -1,0 +1,11 @@
+# Python artifacts of this component (a gate or a test run creates them)
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+coverage.xml
+# a local run of the service (GEARS_MATCHER_DATA=./data)
+data/
