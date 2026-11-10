@@ -1,0 +1,10 @@
+The matching code under src/gears_matcher was copied from
+https://github.com/constructorfabric/gears-matcher at commit
+204b0360e3a0b8ff8d68314b8d1522ba3271f5a6 (main, 2026-11-10), with `git archive`.
+
+Not copied: the command line (cli.py), the evaluation (eval/), the `python -m` entry points of
+extract and report, the tests' confidential and large examples, and anything under _local.
+
+From here the studio-web copy is the production line of the service: the command line and the
+evaluation stay in gears-matcher. A change made in one place that the other needs is carried over by
+hand in a pull request that names the commit it comes from; update the commit above when that happens.

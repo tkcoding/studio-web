@@ -1,0 +1,468 @@
+openapi: 3.1.0
+info:
+  title: gears-matcher service
+  version: 0.1.0-draft
+  summary: Run the verified matcher on a spec and read the coverage report (T9, HYP-3172).
+  description: |
+    DRAFT for review with the studio-web architect. Not final; nothing here is built yet.
+
+    The service wraps gears-matcher's own library code (one copy of the matching logic, as for
+    `gears-match`). It always runs the validated matcher (`verified`), so a request has no
+    `matcher` field. The API is **asynchronous**: submit a run, then poll it. There is no
+    streaming in v1.
+
+    **The report is gears-matcher's own coverage report, unchanged**
+    (`schemas/coverage-report.schema.json`, its `schema_version`). This contract does not
+    translate it. A consumer reads `schema_version` and refuses a major version it does not know
+    (see `GET /v1/info`).
+
+    **Paid runs.** A run calls paid models. A retried submit never starts a second run
+    (`Idempotency-Key`). Cancelling stops further calls, but calls already sent may still be
+    billed.
+
+    **How a run ends** (the CLI's exit codes, mapped):
+
+    | Run state   | CLI exit | Meaning |
+    |-------------|----------|---------|
+    | `succeeded` | 0        | every requirement was assessed; the report is complete |
+    | `partial`   | 1        | the report is written, but some requirements were **not assessed** (call bound, or a call that could not be answered). A real outcome, not a failure; `outcome.not_assessed` says how many. To ask again, submit a new run with a new `Idempotency-Key`: replies already received are cached, so only the missing ones are paid for |
+    | `failed`    | 2 or 3   | no report. `error.kind` is `input` (fix the request) or `internal` (a bug) |
+    | `cancelled` | -        | stopped by the caller; no report |
+  license:
+    name: Apache-2.0
+servers:
+  - url: http://matcher.local/
+    description: Placeholder; the real address is set by the deployment task (HYP-3177).
+security:
+  - sharedSecret: []
+paths:
+  /v1/runs:
+    post:
+      operationId: submitRun
+      summary: Submit a run
+      description: |
+        Validates the whole request first (documents, hashes, own Gears, limits) and only then
+        starts the run, so a bad request costs nothing. Returns at once; poll the run.
+        **Size.** A request over `limits.max_request_bytes` (or a document over
+        `limits.max_document_bytes`, or more than `limits.max_documents` documents) is refused
+        whole with `413 too_large`, never truncated. The service reads and discards the rest of
+        the body before it answers, so the caller receives the `413` and not a dropped
+        connection. Every hop between the caller and the service (an ingress, a proxy, the
+        caller's HTTP client) must allow at least `limits.max_request_bytes`.
+
+        **Idempotency.** `Idempotency-Key` is required. The same key with the same body returns
+        the existing run, never a second one, with the same `202` as the first submit (so a
+        caller needs no special case for a retry). The same key with a different body is
+        `409 idempotency_conflict`. A key is remembered as long as its run record is kept
+        (retention is set by HYP-3178). **Only an accepted run is remembered**: a submit refused
+        with a `4xx` starts nothing and stores nothing, so the caller may fix the request and
+        send it again with the same key. Use one key per intent, and reuse it only to retry that
+        intent with the same body.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: The caller's own id for this run, for example Studio's run id.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: '^[A-Za-z0-9._:-]+$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunRequest'
+      responses:
+        '202':
+          description: |
+            Accepted; the run is queued. A repeat of an accepted submit (same key, same body)
+            answers the same `202` with the same run.
+          headers:
+            Location:
+              description: The run's address.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '429':
+          description: Too many runs at the same time (the concurrency cap, HYP-3178).
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{runId}:
+    get:
+      operationId: getRun
+      summary: Read a run's state
+      description: |
+        Poll this. `state` is terminal when it is `succeeded`, `partial`, `failed` or `cancelled`.
+        A state the caller does not know is **not** terminal: keep polling. A caller also ignores
+        response fields it does not know (a minor version may add fields and states).
+        Suggested pause between polls: 2 s, backing off to 10 s. A run can take minutes: the
+        matcher allows each call up to 3 requests and a 100 s budget, so the caller's task lease
+        must outlast the run (see `limits.max_run_seconds` in `GET /v1/info`). If the lease
+        expires anyway and the task is retried, it submits again with the same `Idempotency-Key`
+        and gets the same run back: nothing is paid twice, and polling carries on.
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: The run.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /v1/runs/{runId}/report:
+    get:
+      operationId: getReport
+      summary: Read the coverage report of a finished run
+      description: |
+        The coverage report as JSON, for `succeeded` and `partial` runs. Before the run ends, or
+        for a `failed` or `cancelled` run, there is no report: `409 no_report`.
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: The coverage report, exactly as `gears-match --out` writes it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoverageReport'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /v1/runs/{runId}/cancel:
+    post:
+      operationId: cancelRun
+      summary: Cancel a run
+      description: |
+        Stops further model calls. **Calls already in flight may still be billed**; the run's
+        `usage.calls` after it ends counts every call that was sent. Cancelling a run that has
+        ended changes nothing and answers `200` with the run as it is. Cancelling twice is safe.
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '202':
+          description: Cancelling; poll until `state` is terminal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '200':
+          description: The run had already ended; here it is, unchanged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /v1/info:
+    get:
+      operationId: getInfo
+      summary: What this service runs and accepts
+      description: |
+        Lets a consumer check, before it submits, that it can read what the service writes.
+      responses:
+        '200':
+          description: The service's versions and limits.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Info'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+components:
+  securitySchemes:
+    sharedSecret:
+      type: http
+      scheme: bearer
+      description: A shared secret between studio-web's backend and this service. Never in a URL.
+  parameters:
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9._-]{1,64}$'
+  responses:
+    Problem:
+      description: An error, as RFC 9457 problem details with a stable `code`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    RunRequest:
+      type: object
+      additionalProperties: false
+      required: [product, documents]
+      properties:
+        product:
+          type: string
+          minLength: 1
+          description: Which product, as the matcher names it (the spec folder's product id).
+        own_gears:
+          type: array
+          description: |
+            Gears that are the product itself, never offered as candidates (for Studio, its own
+            Gears). Each must exist in the catalogue, else `422 unknown_own_gear`.
+          items:
+            type: string
+            pattern: '^[a-z0-9][a-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*$'
+          uniqueItems: true
+          default: []
+        documents:
+          type: array
+          description: |
+            The spec, as files. Each document's `sha256` is checked against its `content`
+            (a mismatch is `422 hash_mismatch`), so a truncated upload is caught before any
+            paid call. A document that follows the Constructor Fabric spec format is read as it is
+            (T2). Any other document is read by a model first (free-form extraction, T8) **only
+            when `options.extract_max_calls` is set**; without it, a spec that is not in that
+            format is `422 not_a_template`, and one that extraction cannot read is
+            `422 unreadable_spec`. (Extraction for the verified matcher is a follow-up task,
+            D15 of the T9 design note: until it is built, only the first case works.)
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Document'
+        options:
+          $ref: '#/components/schemas/RunOptions'
+    Document:
+      type: object
+      additionalProperties: false
+      required: [path, sha256, content]
+      properties:
+        path:
+          type: string
+          description: |
+            Relative, with `/`, no `..`, no leading `/`, ends in `.md`. Spaces and non-ASCII
+            letters are allowed (`PRD v2.md` is a valid name); control characters and `\` are
+            not. Kept as given in the report's `inputs`. Anything else is `422 bad_path`.
+          pattern: '^(?!/)(?!.*(^|/)\.\.(/|$))[^\x00-\x1f\x7f\\]+\.md$'
+          maxLength: 300
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Lower-case hex SHA-256 of the UTF-8 bytes of `content`.
+        content:
+          type: string
+          description: The file's text, UTF-8. The size limits are in `GET /v1/info`.
+    RunOptions:
+      type: object
+      additionalProperties: false
+      properties:
+        use_gears_bundle:
+          type: boolean
+          default: false
+          description: |
+            Read Gear descriptions from the service's gears bundle (`gears.gdl`) instead of the
+            pinned `gear.gdl` files. The bundle is held by the service, not sent in the request.
+            Whether the bundle becomes the default is decided in HYP-3179.
+        max_calls:
+          type: integer
+          minimum: 1
+          description: |
+            A lower cost bound for this run, in model calls. It cannot raise the service's own
+            cap (`limits.max_calls`); a larger value is `422 over_cap`. Omitted: the service's
+            default.
+        extract_max_calls:
+          type: integer
+          minimum: 1
+          description: |
+            Turns on free-form reading (T8) and bounds it: the most model calls to spend on
+            reading the documents, before matching. Required for a spec that is not in the
+            Constructor Fabric format. It cannot exceed `limits.max_extract_calls` (else
+            `422 over_cap`). These calls are counted in `usage.calls` and can be billed. Omitted:
+            no free-form reading.
+    Run:
+      type: object
+      required: [id, state, created_at, usage]
+      properties:
+        id:
+          type: string
+        state:
+          type: string
+          enum: [queued, running, cancelling, succeeded, partial, failed, cancelled]
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: [string, 'null']
+          format: date-time
+        finished_at:
+          type: [string, 'null']
+          format: date-time
+        progress:
+          type: object
+          description: How far a running run is. Absent before it starts.
+          properties:
+            requirements_total:
+              type: integer
+            requirements_done:
+              type: integer
+        usage:
+          $ref: '#/components/schemas/Usage'
+        outcome:
+          type: object
+          description: Present when `state` is `succeeded` or `partial`.
+          properties:
+            requirements:
+              type: integer
+            not_assessed:
+              type: integer
+              description: Requirements no model assessed (0 when `succeeded`).
+            report_url:
+              type: string
+              description: Where `GET /v1/runs/{runId}/report` is.
+        error:
+          type: object
+          description: Present when `state` is `failed`.
+          required: [kind, message]
+          properties:
+            kind:
+              type: string
+              enum: [input, internal]
+            message:
+              type: string
+              description: One line. Never contains a key, a header or document text.
+    Usage:
+      type: object
+      description: |
+        What the run has cost so far, extraction calls included. After a cancel, calls already
+        sent are still counted and may be billed.
+      required: [calls, cache_hits]
+      properties:
+        calls:
+          type: integer
+        cache_hits:
+          type: integer
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+    CoverageReport:
+      type: object
+      description: |
+        The coverage report. Its schema is `schemas/coverage-report.schema.json` in this
+        repository and is not copied here, so there is one source of truth. `schema_version`
+        says which version this is.
+      required: [schema_version]
+      properties:
+        schema_version:
+          type: string
+      additionalProperties: true
+    Info:
+      type: object
+      required: [service_version, matcher_version, report_schema_versions, catalogue, models, limits]
+      properties:
+        service_version:
+          type: string
+        matcher_version:
+          type: string
+          description: The gears-matcher version that makes the reports.
+        report_schema_versions:
+          type: array
+          description: The `schema_version` values the service can write.
+          items:
+            type: string
+        catalogue:
+          type: object
+          description: The Gear catalogue the service reads (the pins are also in every report).
+          properties:
+            source:
+              type: string
+              enum: [gears-rust, gears-bundle]
+            gears_md_commit:
+              type: string
+            gear_gdl_commit:
+              type: string
+        models:
+          type: array
+          description: The models a run uses.
+          items:
+            type: string
+        limits:
+          type: object
+          properties:
+            max_documents:
+              type: integer
+            max_document_bytes:
+              type: integer
+            max_request_bytes:
+              type: integer
+            max_calls:
+              type: integer
+            max_extract_calls:
+              type: integer
+            max_concurrent_runs:
+              type: integer
+            max_run_seconds:
+              type: integer
+              description: The longest a run may take; a caller's lease must be longer.
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+          description: |
+            Stable, for programs. One of: `unauthorized`, `bad_request`, `idempotency_conflict`,
+            `too_large`, `hash_mismatch`, `bad_path`, `unknown_own_gear`, `over_cap`,
+            `not_a_template`, `unreadable_spec`, `not_found`, `no_report`, `busy`, `internal`, `unavailable`.
+        detail:
+          type: string
+          description: One line; never a key, header or document text.

@@ -1,0 +1,59 @@
+{
+  "case": "paragraphs",
+  "shape": "paragraphs",
+  "origin": "an invented project brief in flowing prose: no bullets, one or two requirements inside each paragraph. Two statements in one paragraph are a known limit of 'one block is one requirement' (D3), marked known_limit",
+  "variant": {
+    "written_by_model": "claude-sonnet-5-5",
+    "prompt": "../variant-prompt.md",
+    "reviewed_by": []
+  },
+  "requirements": [
+    {
+      "id": "self-service",
+      "kind": "fr",
+      "start": "Patients must be able to book, move and cancel their own appointments online"
+    },
+    {
+      "id": "reminders",
+      "kind": "fr",
+      "start": "Every patient gets a text message the evening before an appointment"
+    },
+    {
+      "id": "reception",
+      "kind": "fr",
+      "start": "Receptionists need one screen that shows a day's appointments"
+    },
+    {
+      "id": "manager-report",
+      "kind": "fr",
+      "start": "Clinic managers need a monthly report of missed appointments",
+      "known_limit": true
+    },
+    {
+      "id": "encryption",
+      "kind": "nfr",
+      "start": "Patient records are health data."
+    },
+    {
+      "id": "access-log",
+      "kind": "nfr",
+      "start": "every time a staff member opens a patient record",
+      "known_limit": true
+    },
+    {
+      "id": "peak",
+      "kind": "nfr",
+      "start": "During the evening peak, between 17:00 and 20:00"
+    }
+  ],
+  "not_requirements": [
+    "We have not decided on a payment step. Fees stay at the desk for now.",
+    "Harbour Clinics runs eleven small clinics"
+  ],
+  "clarifications": [
+    {
+      "topic": "payment step",
+      "anchor": "We have not decided on a payment step."
+    }
+  ]
+}

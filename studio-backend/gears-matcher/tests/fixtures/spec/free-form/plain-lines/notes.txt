@@ -1,0 +1,24 @@
+Subject: Re: shipping tool, what Priya needs
+
+Hi both,
+
+Quick list of what the warehouse team told me, in no order:
+
+must print the packing slip and the label with one click
+must show stock per shelf, not just per product
+needs to work on the handheld scanners (Android, small screen)
+every order needs an audit trail: who packed it and when
+fast. picking a list of 50 lines should not take more than a second to load
+nice to have: dark mode
+
+> Dave wrote earlier:
+> the tool should cope with 10 orders an hour
+
+No, that was last year. We now do about 400 orders an hour at peak and it has to cope with
+double that.
+
+The scanner app must keep working when the wifi drops in the cold store and send what was
+scanned once it is back.
+
+Thanks,
+Ines

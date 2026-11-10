@@ -1,0 +1,442 @@
+{
+  "schema_version": "1.2.0",
+  "provenance": {
+    "product_id": "todo-app",
+    "spec_repository": null,
+    "spec_commit": null,
+    "gears_md_commit": "md-sha",
+    "gear_gdl_commit": "gdl-sha",
+    "judge": "stub",
+    "shortlist": "tf-idf, k=10",
+    "tau": 0.5,
+    "extraction": null
+  },
+  "recommended_gears": [
+    {
+      "gear_id": "gears-rust/account-manager",
+      "name": "Account Manager",
+      "confidence": 0.5,
+      "in_code": false,
+      "requirement_ids": [
+        "cpt-examples-todo-app-fr-delete-task"
+      ]
+    }
+  ],
+  "also_possible": [],
+  "future_parts": [
+    {
+      "gear_id": "gears-rust/account-manager",
+      "name": "Account Manager",
+      "confidence": 0.5,
+      "in_code": false,
+      "requirement_ids": [
+        "cpt-examples-todo-app-fr-delete-task"
+      ]
+    }
+  ],
+  "requirements": [
+    {
+      "requirement_id": "cpt-examples-todo-app-fr-create-task",
+      "kind": "fr",
+      "planned": false,
+      "extracted": false,
+      "coverage": "gap",
+      "confidence": null,
+      "low_confidence": false,
+      "reason": "every candidate judged none",
+      "gear_provides": "",
+      "remaining_work": "",
+      "gears": [
+        {
+          "gear_id": "gears-rust/account-manager",
+          "verdict": "none",
+          "confidence": 0.21428571428571427,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.21 of the requirement's 14 content words are in the card",
+          "problem": null,
+          "role": "other"
+        }
+      ]
+    },
+    {
+      "requirement_id": "cpt-examples-todo-app-fr-complete-task",
+      "kind": "fr",
+      "planned": false,
+      "extracted": false,
+      "coverage": "gap",
+      "confidence": null,
+      "low_confidence": false,
+      "reason": "every candidate judged none",
+      "gear_provides": "",
+      "remaining_work": "",
+      "gears": [
+        {
+          "gear_id": "gears-rust/account-manager",
+          "verdict": "none",
+          "confidence": 0.2,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.20 of the requirement's 10 content words are in the card",
+          "problem": null,
+          "role": "other"
+        }
+      ]
+    },
+    {
+      "requirement_id": "cpt-examples-todo-app-fr-delete-task",
+      "kind": "fr",
+      "planned": false,
+      "extracted": false,
+      "coverage": "covered",
+      "confidence": 0.5,
+      "low_confidence": false,
+      "reason": "covered by gears-rust/account-manager",
+      "gear_provides": "Core platform service managing accounts and tenant relationships (system of record when Gears runs standalone).",
+      "remaining_work": "",
+      "gears": [
+        {
+          "gear_id": "gears-rust/account-manager",
+          "verdict": "covered",
+          "confidence": 0.5,
+          "evidence": "Core platform service managing accounts and tenant relationships (system of record when Gears runs standalone).",
+          "covers": "Core platform service managing accounts and tenant relationships (system of record when Gears runs standalone).",
+          "missing": "",
+          "rationale": "0.50 of the requirement's 6 content words are in the card",
+          "problem": null,
+          "role": "chosen"
+        }
+      ]
+    },
+    {
+      "requirement_id": "cpt-examples-todo-app-fr-changes-feed",
+      "kind": "fr",
+      "planned": false,
+      "extracted": false,
+      "coverage": "gap",
+      "confidence": null,
+      "low_confidence": false,
+      "reason": "every candidate judged none",
+      "gear_provides": "",
+      "remaining_work": "",
+      "gears": [
+        {
+          "gear_id": "gears-rust/account-manager",
+          "verdict": "none",
+          "confidence": 0.1,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.10 of the requirement's 10 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/authn-resolver",
+          "verdict": "none",
+          "confidence": 0.1,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.10 of the requirement's 10 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/oagw",
+          "verdict": "none",
+          "confidence": 0.1,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.10 of the requirement's 10 content words are in the card",
+          "problem": null,
+          "role": "other"
+        }
+      ]
+    },
+    {
+      "requirement_id": "cpt-examples-todo-app-fr-filter-tasks",
+      "kind": "fr",
+      "planned": false,
+      "extracted": false,
+      "coverage": "gap",
+      "confidence": null,
+      "low_confidence": false,
+      "reason": "every candidate judged none",
+      "gear_provides": "",
+      "remaining_work": "",
+      "gears": [
+        {
+          "gear_id": "gears-rust/account-manager",
+          "verdict": "none",
+          "confidence": 0.2,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.20 of the requirement's 10 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/event-broker--core-platform-integration",
+          "verdict": "none",
+          "confidence": 0.1,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.10 of the requirement's 10 content words are in the card",
+          "problem": null,
+          "role": "other"
+        }
+      ]
+    },
+    {
+      "requirement_id": "cpt-examples-todo-app-nfr-response-time",
+      "kind": "nfr",
+      "planned": false,
+      "extracted": false,
+      "coverage": "gap",
+      "confidence": null,
+      "low_confidence": false,
+      "reason": "every candidate judged none",
+      "gear_provides": "",
+      "remaining_work": "",
+      "gears": [
+        {
+          "gear_id": "gears-rust/authn-resolver",
+          "verdict": "none",
+          "confidence": 0.07692307692307693,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.08 of the requirement's 13 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/credstore",
+          "verdict": "none",
+          "confidence": 0.07692307692307693,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.08 of the requirement's 13 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/event-broker--core-platform-integration",
+          "verdict": "none",
+          "confidence": 0.07692307692307693,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.08 of the requirement's 13 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/oagw",
+          "verdict": "none",
+          "confidence": 0.07692307692307693,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.08 of the requirement's 13 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/studio-backend",
+          "verdict": "none",
+          "confidence": 0.07692307692307693,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.08 of the requirement's 13 content words are in the card",
+          "problem": null,
+          "role": "other"
+        }
+      ]
+    },
+    {
+      "requirement_id": "cpt-examples-todo-app-nfr-data-persistence",
+      "kind": "nfr",
+      "planned": false,
+      "extracted": false,
+      "coverage": "gap",
+      "confidence": null,
+      "low_confidence": false,
+      "reason": "every candidate judged none",
+      "gear_provides": "",
+      "remaining_work": "",
+      "gears": [
+        {
+          "gear_id": "gears-rust/credstore",
+          "verdict": "none",
+          "confidence": 0.16666666666666666,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.17 of the requirement's 12 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/authn-resolver",
+          "verdict": "none",
+          "confidence": 0.08333333333333333,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.08 of the requirement's 12 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/event-broker",
+          "verdict": "none",
+          "confidence": 0.08333333333333333,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.08 of the requirement's 12 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/event-broker--core-platform-integration",
+          "verdict": "none",
+          "confidence": 0.08333333333333333,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.08 of the requirement's 12 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/oagw",
+          "verdict": "none",
+          "confidence": 0.08333333333333333,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.08 of the requirement's 12 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/studio-backend",
+          "verdict": "none",
+          "confidence": 0.08333333333333333,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.08 of the requirement's 12 content words are in the card",
+          "problem": null,
+          "role": "other"
+        }
+      ]
+    },
+    {
+      "requirement_id": "cpt-examples-todo-app-nfr-offline-support",
+      "kind": "nfr",
+      "planned": false,
+      "extracted": false,
+      "coverage": "gap",
+      "confidence": null,
+      "low_confidence": false,
+      "reason": "every candidate judged none",
+      "gear_provides": "",
+      "remaining_work": "",
+      "gears": [
+        {
+          "gear_id": "gears-rust/cluster-plane",
+          "verdict": "none",
+          "confidence": 0.16666666666666666,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.17 of the requirement's 12 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/event-broker",
+          "verdict": "none",
+          "confidence": 0.16666666666666666,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.17 of the requirement's 12 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/account-manager",
+          "verdict": "none",
+          "confidence": 0.08333333333333333,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.08 of the requirement's 12 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/event-broker--core-platform-integration",
+          "verdict": "none",
+          "confidence": 0.08333333333333333,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.08 of the requirement's 12 content words are in the card",
+          "problem": null,
+          "role": "other"
+        },
+        {
+          "gear_id": "gears-rust/credstore",
+          "verdict": "none",
+          "confidence": 0.0,
+          "evidence": "",
+          "covers": "",
+          "missing": "",
+          "rationale": "0.00 of the requirement's 12 content words are in the card",
+          "problem": null,
+          "role": "other"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "requirements": 8,
+    "fr": {
+      "covered": 1,
+      "partial": 0,
+      "gap": 4,
+      "clarification_needed": 0,
+      "not_assessed": 0
+    },
+    "nfr": {
+      "covered": 0,
+      "partial": 0,
+      "gap": 3,
+      "clarification_needed": 0,
+      "not_assessed": 0
+    }
+  },
+  "inputs": [
+    {
+      "path": "tests/fixtures/spec/todo-app/PRD.md",
+      "status": "read",
+      "requirements": 8,
+      "reason": "defines 8 CF requirements",
+      "extraction": null
+    }
+  ],
+  "clarifications": []
+}

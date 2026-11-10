@@ -1,0 +1,73 @@
+{
+  "case": "ids-and-tables",
+  "shape": "messy",
+  "origin": "an invented requirements list that uses other ID schemes (FR-1, REQ-10, NFR-1) in headings, a table and bullets, to try the spec's own ID rule (D5) on a real model",
+  "variant": {
+    "written_by_model": "claude-sonnet-5-5",
+    "prompt": "../variant-prompt.md",
+    "reviewed_by": []
+  },
+  "requirements": [
+    {
+      "id": "fr1",
+      "kind": "fr",
+      "start": "A recipient collects a parcel by typing the six-digit code",
+      "spec_id": "FR-1"
+    },
+    {
+      "id": "fr2",
+      "kind": "fr",
+      "start": "If a parcel is not collected within 72 hours",
+      "spec_id": "FR-2"
+    },
+    {
+      "id": "req10",
+      "kind": "fr",
+      "start": "The locker shows its own address and opening hours",
+      "spec_id": "REQ-10"
+    },
+    {
+      "id": "req11",
+      "kind": "fr",
+      "start": "A carrier opens every compartment of a locker with one scan",
+      "spec_id": "REQ-11"
+    },
+    {
+      "id": "req12",
+      "kind": "fr",
+      "start": "Lockers keep working for 48 hours without a network connection",
+      "spec_id": "REQ-12"
+    },
+    {
+      "id": "nfr1",
+      "kind": "nfr",
+      "start": "NFR-1: a recipient completes collection in under 20 seconds",
+      "spec_id": "NFR-1"
+    },
+    {
+      "id": "nfr2",
+      "kind": "nfr",
+      "start": "NFR-2: the notification message reaches the recipient within 60 seconds",
+      "end": "in 99% of cases.",
+      "spec_id": "NFR-2"
+    }
+  ],
+  "not_requirements": [
+    "The pilot starts in three cities.",
+    "Version 0.3, owner: Anja."
+  ],
+  "clarifications": [
+    {
+      "topic": "what 'highly available' means",
+      "anchor": "NFR-3 (draft): the network should be"
+    },
+    {
+      "topic": "FR-3 oversize notice: required for the pilot or not",
+      "anchor": "The system should tell the carrier before they travel"
+    },
+    {
+      "topic": "keeping phone numbers for 30 days",
+      "anchor": "Anja will ask legal whether we may keep recipients' phone numbers for 30 days."
+    }
+  ]
+}

@@ -1,0 +1,579 @@
+{
+  "$defs": {
+    "Clarification": {
+      "description": "A topic to ask the spec's author about (#65, T8 note D11): too vague, or missing.\n\nThe model's words: bounded, and shown escaped. `quote` is a passage of the spec, verified in\nthe document when given; None means an absence (\"nothing says how users sign in\").",
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Quote"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "topic": {
+          "title": "Topic",
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic",
+        "reason",
+        "quote",
+        "path"
+      ],
+      "title": "Clarification",
+      "type": "object"
+    },
+    "CoverageCounts": {
+      "properties": {
+        "clarification_needed": {
+          "default": 0,
+          "title": "Clarification Needed",
+          "type": "integer"
+        },
+        "covered": {
+          "default": 0,
+          "title": "Covered",
+          "type": "integer"
+        },
+        "gap": {
+          "default": 0,
+          "title": "Gap",
+          "type": "integer"
+        },
+        "not_assessed": {
+          "default": 0,
+          "title": "Not Assessed",
+          "type": "integer"
+        },
+        "partial": {
+          "default": 0,
+          "title": "Partial",
+          "type": "integer"
+        }
+      },
+      "title": "CoverageCounts",
+      "type": "object"
+    },
+    "DocumentExtraction": {
+      "description": "What T8 did with a document it was handed (T8 note D12): counted, so nothing is lost\nsilently. `incomplete` means a chunk could not be read, nothing came out of a document that\nholds requirement-like text, or too many blocks with MUST/SHALL/SHOULD/MAY were left (D10).",
+      "properties": {
+        "chunks": {
+          "title": "Chunks",
+          "type": "integer"
+        },
+        "chunks_failed": {
+          "title": "Chunks Failed",
+          "type": "integer"
+        },
+        "dropped": {
+          "title": "Dropped",
+          "type": "integer"
+        },
+        "incomplete": {
+          "title": "Incomplete",
+          "type": "boolean"
+        },
+        "kept": {
+          "title": "Kept",
+          "type": "integer"
+        },
+        "merged": {
+          "title": "Merged",
+          "type": "integer"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "shaped_blocks": {
+          "title": "Shaped Blocks",
+          "type": "integer"
+        },
+        "strong_blocks": {
+          "title": "Strong Blocks",
+          "type": "integer"
+        },
+        "unclaimed_blocks": {
+          "title": "Unclaimed Blocks",
+          "type": "integer"
+        },
+        "unclaimed_strong": {
+          "title": "Unclaimed Strong",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kept",
+        "dropped",
+        "merged",
+        "shaped_blocks",
+        "unclaimed_blocks",
+        "strong_blocks",
+        "unclaimed_strong",
+        "chunks",
+        "chunks_failed",
+        "incomplete",
+        "reason"
+      ],
+      "title": "DocumentExtraction",
+      "type": "object"
+    },
+    "GearMatch": {
+      "description": "One gear's verdict for one requirement, as the report shows it.",
+      "properties": {
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "covers": {
+          "title": "Covers",
+          "type": "string"
+        },
+        "evidence": {
+          "title": "Evidence",
+          "type": "string"
+        },
+        "gear_id": {
+          "title": "Gear Id",
+          "type": "string"
+        },
+        "missing": {
+          "title": "Missing",
+          "type": "string"
+        },
+        "problem": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JudgeProblem"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rationale": {
+          "title": "Rationale",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "chosen",
+            "alternative",
+            "other"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "verdict": {
+          "enum": [
+            "covered",
+            "partial",
+            "none",
+            "unjudgeable"
+          ],
+          "title": "Verdict",
+          "type": "string"
+        }
+      },
+      "required": [
+        "gear_id",
+        "verdict",
+        "confidence",
+        "evidence",
+        "covers",
+        "missing",
+        "rationale",
+        "role"
+      ],
+      "title": "GearMatch",
+      "type": "object"
+    },
+    "GearUse": {
+      "properties": {
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "gear_id": {
+          "title": "Gear Id",
+          "type": "string"
+        },
+        "in_code": {
+          "title": "In Code",
+          "type": "boolean"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "requirement_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Requirement Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "gear_id",
+        "name",
+        "confidence",
+        "in_code",
+        "requirement_ids"
+      ],
+      "title": "GearUse",
+      "type": "object"
+    },
+    "InputDoc": {
+      "description": "One document of the bundle, and what T2 (and T8, if it was handed over) did with it.",
+      "properties": {
+        "extraction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentExtraction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "requirements": {
+          "title": "Requirements",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "read",
+            "handed-to-t8",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "status",
+        "requirements",
+        "reason"
+      ],
+      "title": "InputDoc",
+      "type": "object"
+    },
+    "JudgeProblem": {
+      "description": "Why the seam, not the judge, decided a verdict (T4 note, D1).",
+      "properties": {
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "evidence_not_found",
+            "invalid_reply",
+            "no_reply",
+            "judge_error",
+            "judge_timeout",
+            "budget_exceeded"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "detail"
+      ],
+      "title": "JudgeProblem",
+      "type": "object"
+    },
+    "Provenance": {
+      "properties": {
+        "extraction": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Extraction"
+        },
+        "gear_gdl_commit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Gear Gdl Commit"
+        },
+        "gears_md_commit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Gears Md Commit"
+        },
+        "judge": {
+          "title": "Judge",
+          "type": "string"
+        },
+        "product_id": {
+          "title": "Product Id",
+          "type": "string"
+        },
+        "shortlist": {
+          "title": "Shortlist",
+          "type": "string"
+        },
+        "spec_commit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Spec Commit"
+        },
+        "spec_repository": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Spec Repository"
+        },
+        "tau": {
+          "title": "Tau",
+          "type": "number"
+        }
+      },
+      "required": [
+        "product_id",
+        "spec_repository",
+        "spec_commit",
+        "gears_md_commit",
+        "gear_gdl_commit",
+        "judge",
+        "shortlist",
+        "tau"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "RequirementCoverage": {
+      "properties": {
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Confidence"
+        },
+        "coverage": {
+          "enum": [
+            "covered",
+            "partial",
+            "gap",
+            "clarification_needed",
+            "not_assessed"
+          ],
+          "title": "Coverage",
+          "type": "string"
+        },
+        "extracted": {
+          "default": false,
+          "title": "Extracted",
+          "type": "boolean"
+        },
+        "gear_provides": {
+          "title": "Gear Provides",
+          "type": "string"
+        },
+        "gears": {
+          "items": {
+            "$ref": "#/$defs/GearMatch"
+          },
+          "title": "Gears",
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "fr",
+            "nfr"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "low_confidence": {
+          "title": "Low Confidence",
+          "type": "boolean"
+        },
+        "planned": {
+          "title": "Planned",
+          "type": "boolean"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "remaining_work": {
+          "title": "Remaining Work",
+          "type": "string"
+        },
+        "requirement_id": {
+          "title": "Requirement Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requirement_id",
+        "kind",
+        "planned",
+        "coverage",
+        "confidence",
+        "low_confidence",
+        "reason",
+        "gear_provides",
+        "remaining_work",
+        "gears"
+      ],
+      "title": "RequirementCoverage",
+      "type": "object"
+    },
+    "Totals": {
+      "description": "D8: every requirement is counted once, FR and NFR apart.",
+      "properties": {
+        "fr": {
+          "$ref": "#/$defs/CoverageCounts"
+        },
+        "nfr": {
+          "$ref": "#/$defs/CoverageCounts"
+        },
+        "requirements": {
+          "title": "Requirements",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "requirements",
+        "fr",
+        "nfr"
+      ],
+      "title": "Totals",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "also_possible": {
+      "items": {
+        "$ref": "#/$defs/GearUse"
+      },
+      "title": "Also Possible",
+      "type": "array"
+    },
+    "clarifications": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Clarification"
+      },
+      "title": "Clarifications",
+      "type": "array"
+    },
+    "future_parts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/GearUse"
+      },
+      "title": "Future Parts",
+      "type": "array"
+    },
+    "inputs": {
+      "items": {
+        "$ref": "#/$defs/InputDoc"
+      },
+      "title": "Inputs",
+      "type": "array"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "recommended_gears": {
+      "items": {
+        "$ref": "#/$defs/GearUse"
+      },
+      "title": "Recommended Gears",
+      "type": "array"
+    },
+    "requirements": {
+      "items": {
+        "$ref": "#/$defs/RequirementCoverage"
+      },
+      "title": "Requirements",
+      "type": "array"
+    },
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "totals": {
+      "$ref": "#/$defs/Totals"
+    }
+  },
+  "required": [
+    "schema_version",
+    "provenance",
+    "recommended_gears",
+    "also_possible",
+    "requirements",
+    "totals",
+    "inputs"
+  ],
+  "title": "CoverageReport",
+  "type": "object"
+}

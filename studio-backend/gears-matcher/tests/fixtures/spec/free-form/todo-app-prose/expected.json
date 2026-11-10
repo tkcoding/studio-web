@@ -1,0 +1,67 @@
+{
+  "case": "todo-app-prose",
+  "shape": "messy",
+  "origin": "a prose rewrite of the todo-app PRD (tests/fixtures/spec/todo-app/PRD.md): the same 8 requirements, no IDs, no MUST. 'complete' shares a paragraph with 'create', as a real author would write it: one block (D3), so known_limit",
+  "variant": {
+    "derived_from": "todo-app/template",
+    "written_by_model": "claude-sonnet-5-5",
+    "prompt": "../variant-prompt.md",
+    "reviewed_by": []
+  },
+  "requirements": [
+    {
+      "id": "create",
+      "kind": "fr",
+      "start": "People should be able to add a task by typing a title",
+      "gold_id": "cpt-examples-todo-app-fr-create-task"
+    },
+    {
+      "id": "complete",
+      "kind": "fr",
+      "start": "A task they have finished can be ticked off",
+      "known_limit": true,
+      "gold_id": "cpt-examples-todo-app-fr-complete-task"
+    },
+    {
+      "id": "delete",
+      "kind": "fr",
+      "start": "Deleting a task has to really remove it",
+      "gold_id": "cpt-examples-todo-app-fr-delete-task"
+    },
+    {
+      "id": "feed",
+      "kind": "fr",
+      "start": "Whatever changes on one device should show up on the others",
+      "gold_id": "cpt-examples-todo-app-fr-changes-feed"
+    },
+    {
+      "id": "filter",
+      "kind": "fr",
+      "start": "The list needs a filter.",
+      "gold_id": "cpt-examples-todo-app-fr-filter-tasks"
+    },
+    {
+      "id": "speed",
+      "kind": "nfr",
+      "start": "It has to feel instant: every tap or click should finish within 200 milliseconds",
+      "gold_id": "cpt-examples-todo-app-nfr-response-time"
+    },
+    {
+      "id": "sync",
+      "kind": "nfr",
+      "start": "Nothing may be lost if the connection drops.",
+      "gold_id": "cpt-examples-todo-app-nfr-data-persistence"
+    },
+    {
+      "id": "offline",
+      "kind": "fr",
+      "start": "Working with no network at all matters too.",
+      "gold_id": "cpt-examples-todo-app-nfr-offline-support"
+    }
+  ],
+  "not_requirements": [
+    "Sharing a list with other people is out of scope for the first release.",
+    "Our team keeps losing track of small jobs"
+  ],
+  "clarifications": []
+}

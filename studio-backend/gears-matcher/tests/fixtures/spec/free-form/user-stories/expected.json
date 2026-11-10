@@ -1,0 +1,60 @@
+{
+  "case": "user-stories",
+  "shape": "messy",
+  "origin": "invented user stories with acceptance bullets for a library app: a statement spans a sentence and its bullets",
+  "variant": {
+    "written_by_model": "claude-sonnet-5-5",
+    "prompt": "../variant-prompt.md",
+    "reviewed_by": []
+  },
+  "requirements": [
+    {
+      "id": "search",
+      "kind": "fr",
+      "start": "As a member, I want to search the catalogue by title",
+      "end": "offers to suggest an acquisition."
+    },
+    {
+      "id": "reserve",
+      "kind": "fr",
+      "start": "As a member, I want to reserve a book that is out",
+      "end": "if I do not collect the book."
+    },
+    {
+      "id": "loans",
+      "kind": "fr",
+      "start": "As a member, I want to see my loans and due dates in one place"
+    },
+    {
+      "id": "checkout",
+      "kind": "fr",
+      "start": "As a librarian, I want to scan a book's barcode",
+      "end": "cannot borrow until they pay."
+    },
+    {
+      "id": "export",
+      "kind": "fr",
+      "start": "As a librarian, I want to export a monthly loans report as CSV"
+    },
+    {
+      "id": "search-speed",
+      "kind": "nfr",
+      "start": "The catalogue search returns in under 1 second"
+    },
+    {
+      "id": "eu",
+      "kind": "nfr",
+      "start": "Member data is stored in the EU"
+    },
+    {
+      "id": "browser",
+      "kind": "nfr",
+      "start": "The app has to work on the desk computers",
+      "end": "from two years ago."
+    }
+  ],
+  "not_requirements": [
+    "As a member, I want recommendations so that I discover new books. Not planned."
+  ],
+  "clarifications": []
+}

@@ -1,0 +1,57 @@
+{
+  "case": "plain-lines",
+  "shape": "lines",
+  "origin": "an invented email with plain-text requirement lines: no markdown, a quoted older figure that was corrected, a nice-to-have and a signature. The six plain lines with no blank line between them are ONE block (D3): only the first can be found alone, the rest are known_limit",
+  "variant": {
+    "written_by_model": "claude-sonnet-5-5",
+    "prompt": "../variant-prompt.md",
+    "reviewed_by": []
+  },
+  "requirements": [
+    {
+      "id": "print",
+      "kind": "fr",
+      "start": "must print the packing slip and the label with one click"
+    },
+    {
+      "id": "shelf",
+      "kind": "fr",
+      "start": "must show stock per shelf",
+      "known_limit": true
+    },
+    {
+      "id": "handheld",
+      "kind": "nfr",
+      "start": "needs to work on the handheld scanners",
+      "known_limit": true
+    },
+    {
+      "id": "audit",
+      "kind": "fr",
+      "start": "every order needs an audit trail",
+      "known_limit": true
+    },
+    {
+      "id": "load",
+      "kind": "nfr",
+      "start": "fast. picking a list of 50 lines",
+      "known_limit": true
+    },
+    {
+      "id": "volume",
+      "kind": "nfr",
+      "start": "No, that was last year.",
+      "end": "and it has to cope with"
+    },
+    {
+      "id": "offline",
+      "kind": "fr",
+      "start": "The scanner app must keep working when the wifi drops"
+    }
+  ],
+  "not_requirements": [
+    "nice to have: dark mode",
+    "the tool should cope with 10 orders an hour"
+  ],
+  "clarifications": []
+}

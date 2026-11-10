@@ -1,0 +1,57 @@
+{
+  "case": "meeting-notes",
+  "shape": "messy",
+  "origin": "invented meeting notes for an invoice-reminder service: bullets, chatter, decisions, action items and ideas mixed with requirements",
+  "variant": {
+    "written_by_model": "claude-sonnet-5-5",
+    "prompt": "../variant-prompt.md",
+    "reviewed_by": []
+  },
+  "requirements": [
+    {
+      "id": "schedule",
+      "kind": "fr",
+      "start": "Reminder emails: send one 3 days before the due date",
+      "end": "the days must be settable per customer."
+    },
+    {
+      "id": "paid",
+      "kind": "fr",
+      "start": "Dana: a customer who has paid must never get a reminder.",
+      "end": "not when the reminder was planned."
+    },
+    {
+      "id": "report",
+      "kind": "fr",
+      "start": "Finance needs a screen listing every invoice that got a reminder",
+      "end": "whether it was opened."
+    },
+    {
+      "id": "sender",
+      "kind": "fr",
+      "start": "Reminder emails come from finance@"
+    },
+    {
+      "id": "nightly",
+      "kind": "nfr",
+      "start": "Ravi worried about volume",
+      "end": "even at 100k."
+    },
+    {
+      "id": "retention",
+      "kind": "nfr",
+      "start": "Anything we send must be kept for 7 years"
+    }
+  ],
+  "not_requirements": [
+    "maybe SMS later? not for v1",
+    "Tomas to ask legal about the wording of the 2nd email (action, not a requirement)",
+    "Lunch spot for the team day: Mei to poll"
+  ],
+  "clarifications": [
+    {
+      "topic": "who receives the weekly summary",
+      "anchor": "Who gets the weekly summary? unclear, Dana will find out"
+    }
+  ]
+}
