@@ -36,6 +36,29 @@ servers:
 security:
   - sharedSecret: []
 paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Liveness probe
+      description: |
+        Answers 200 while the process is up. It needs no secret, so a cluster's probes can call it.
+      security: []
+      responses:
+        '200':
+          description: The process is up.
+  /readyz:
+    get:
+      operationId: getReady
+      summary: Readiness probe
+      description: |
+        Answers 200 when the service can take a run (its run store can be read), 503 when it cannot.
+        It needs no secret, so a cluster's probes can call it.
+      security: []
+      responses:
+        '200':
+          description: Ready to take a run.
+        '503':
+          description: Not ready; do not send runs here yet.
   /v1/runs:
     post:
       operationId: submitRun
@@ -462,7 +485,7 @@ components:
           description: |
             Stable, for programs. One of: `unauthorized`, `bad_request`, `idempotency_conflict`,
             `too_large`, `hash_mismatch`, `bad_path`, `unknown_own_gear`, `over_cap`,
-            `not_a_template`, `unreadable_spec`, `not_found`, `no_report`, `busy`, `internal`, `unavailable`.
+            `not_a_template`, `unreadable_spec`, `bundle_unavailable`, `not_found`, `no_report`, `busy`, `internal`, `unavailable`.
         detail:
           type: string
           description: One line; never a key, header or document text.

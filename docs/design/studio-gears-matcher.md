@@ -102,9 +102,10 @@ secret between the backend and this service. The backend calls it inside the clu
 
 ## 4. Additional context
 
-Not built yet: the service itself (the contract and the library entry exist), the image, the chart and the
-delivery workflow, the backend's client, the compare view and the pilot tracking. Each is a later pull
-request (ADR-0069, phases).
+The service runs: `gears-service` serves the contract on top of the library entry point, with SQLite for
+runs, and has been called over HTTP with the real catalogue and the real models. Not built yet: the image,
+the chart and the delivery workflow, the backend's client, the compare view and the pilot tracking. Each is
+a later pull request (ADR-0069, phases).
 
 ## 5. Traceability
 
