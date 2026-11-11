@@ -7,8 +7,9 @@ clients; for a local run `GEARS_MATCHER_ENV_FILE` may name a file that holds the
 
 Optional: `GEARS_MATCHER_DATA` (the run store, the reply cache and scratch space; default
 `/var/lib/gears-matcher`), `GEARS_MATCHER_HOST`, `GEARS_MATCHER_PORT`, `GEARS_MATCHER_WORKERS`,
-`GEARS_MATCHER_MAX_CONCURRENT_RUNS` (unset: no cap), `GEARS_MD_REF`, `GEARS_GDL_REF`,
-`GEARS_BUNDLE`.
+`GEARS_MATCHER_MAX_CONCURRENT_RUNS` (unset: no cap), `GEARS_MATCHER_MAX_CALLS` (the per-run call
+bound a request may lower but not raise, and the default when it sets none; 200) and
+`GEARS_MATCHER_MAX_EXTRACT_CALLS` (100), `GEARS_MD_REF`, `GEARS_GDL_REF`, `GEARS_BUNDLE`.
 """
 
 import logging
@@ -75,7 +76,13 @@ class Settings:
             host=env.get("GEARS_MATCHER_HOST", "0.0.0.0"),  # noqa: S104 -- a container's own port
             port=_number(env, "GEARS_MATCHER_PORT", 8080),
             workers=_number(env, "GEARS_MATCHER_WORKERS", 4),
-            limits=Limits(max_concurrent_runs=int(cap) if cap else None),
+            limits=Limits(
+                max_calls=_number(env, "GEARS_MATCHER_MAX_CALLS", Limits.max_calls),
+                max_extract_calls=_number(
+                    env, "GEARS_MATCHER_MAX_EXTRACT_CALLS", Limits.max_extract_calls
+                ),
+                max_concurrent_runs=int(cap) if cap else None,
+            ),
             md_ref=env.get("GEARS_MD_REF", PINNED_MD_COMMIT),
             gdl_ref=env.get("GEARS_GDL_REF", PINNED_GDL_COMMIT),
             bundle=Path(bundle) if bundle else None,

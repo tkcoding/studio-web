@@ -37,8 +37,10 @@ uv run gears-service                            # http://0.0.0.0:8080
 The service refuses to start, and says which variable, if the secret, the checkout or a model client
 cannot be set up. `GEARS_MATCHER_ENV_FILE` may name a file holding the connector settings, for a
 local run. The others, all optional: `GEARS_MATCHER_HOST`, `GEARS_MATCHER_PORT`, `GEARS_MATCHER_WORKERS`
-(default 4), `GEARS_MATCHER_MAX_CONCURRENT_RUNS` (unset: no cap), `GEARS_MD_REF`, `GEARS_GDL_REF`,
-`GEARS_BUNDLE` (a gears bundle for `options.use_gears_bundle`).
+(default 4), `GEARS_MATCHER_MAX_CONCURRENT_RUNS` (unset: no cap), `GEARS_MATCHER_MAX_CALLS` (the per-run
+call bound: a request may lower it, never raise it, and it is the default when a request sets none;
+200) and `GEARS_MATCHER_MAX_EXTRACT_CALLS` (100), `GEARS_MD_REF`, `GEARS_GDL_REF`, `GEARS_BUNDLE` (a
+gears bundle for `options.use_gears_bundle`).
 
 The connector's settings are `LLM_CONNECTORS_ACCESS_KEY`, `CONSTRUCTOR_STAND`, `CONSTRUCTOR_CMODEL_ID`
 and `CONSTRUCTOR_PUBLIC_CONNECTOR_ID`; the matcher uses three models through it (see

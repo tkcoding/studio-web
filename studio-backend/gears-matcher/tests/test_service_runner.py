@@ -145,6 +145,17 @@ def test_settings_need_a_secret_and_a_checkout(tmp_path: Path) -> None:
     assert good.limits == Limits()
 
 
+def test_the_per_run_call_bound_is_a_setting(tmp_path: Path) -> None:
+    env = {"GEARS_MATCHER_SECRET": "s", "GEARS_RUST_REPO": str(tmp_path)}
+    assert Settings.from_env(env).limits.max_calls == 200
+    got = Settings.from_env(
+        {**env, "GEARS_MATCHER_MAX_CALLS": "600", "GEARS_MATCHER_MAX_EXTRACT_CALLS": "40"}
+    )
+    assert (got.limits.max_calls, got.limits.max_extract_calls) == (600, 40)
+    with pytest.raises(SettingsError, match="GEARS_MATCHER_MAX_CALLS"):
+        Settings.from_env({**env, "GEARS_MATCHER_MAX_CALLS": "0"})
+
+
 def test_settings_read_numbers_and_refuse_bad_ones(tmp_path: Path) -> None:
     env = {"GEARS_MATCHER_SECRET": "s", "GEARS_RUST_REPO": str(tmp_path)}
     got = Settings.from_env(
