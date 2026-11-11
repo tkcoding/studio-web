@@ -6,6 +6,7 @@ what comes back to what the service reports. Tests use a fake runner with the sa
 """
 
 import json
+import logging
 import tempfile
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 from gears_matcher.catalogue.models import Catalogue
+from gears_matcher.judge.llm import CacheError, ResponseCache
 from gears_matcher.report import SCHEMA_VERSION
 from gears_matcher.run import (
     VERIFIED_MODELS,
@@ -27,6 +29,8 @@ from gears_matcher.run import (
 )
 from gears_matcher.service.errors import ProblemError, unprocessable
 from gears_matcher.service.request import RunRequest
+
+log = logging.getLogger("gears_matcher.service")
 
 
 class Cancelled(Exception):  # noqa: N818 -- reads as the event, like KeyboardInterrupt
@@ -68,6 +72,9 @@ class Runner(Protocol):
 
     def info(self) -> dict[str, Any]:
         """What `GET /v1/info` says about the matcher, apart from the limits."""
+
+    def ready(self) -> None:
+        """Raise if the runner cannot do its work (for `GET /readyz`)."""
 
 
 def service_version() -> str:
@@ -151,9 +158,21 @@ class RealRunner:
             except RunCancelled as exc:
                 raise Cancelled from exc
             except InputProblem as problem:
+                if problem.code == "cache":  # the service's own setup, not the caller's request
+                    log.error("the reply cache is not usable: %s", problem.message)
+                    raise RunFailed(
+                        "internal", "the reply cache is not usable; see the service log"
+                    ) from problem
                 raise RunFailed("input", f"{problem.code}: {problem.message}") from problem
         on_usage(result.usage)
         return Outcome(result.report.model_dump_json(), result.requirements, result.not_assessed)
+
+    def ready(self) -> None:
+        """The reply cache can be written; a wrong mount is found here, not by the first run."""
+        try:
+            ResponseCache(self.cache_dir)
+        except CacheError as exc:
+            raise RuntimeError(f"the reply cache is not usable: {exc}") from exc
 
     def info(self) -> dict[str, Any]:
         catalogue = self.catalogues[False]

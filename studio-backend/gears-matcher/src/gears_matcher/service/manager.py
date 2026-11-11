@@ -171,8 +171,9 @@ class RunManager:
         return again
 
     def ready(self) -> None:
-        """Raises if the store cannot be read."""
+        """Raises if the store cannot be read or the runner cannot do its work."""
         self.store.ping()
+        self.runner.ready()
 
     def shutdown(self) -> None:
         self._pool.shutdown(wait=False, cancel_futures=True)

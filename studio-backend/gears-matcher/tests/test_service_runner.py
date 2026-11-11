@@ -165,3 +165,27 @@ def test_settings_read_numbers_and_refuse_bad_ones(tmp_path: Path) -> None:
     for bad in ("x", "0"):
         with pytest.raises(SettingsError, match="GEARS_MATCHER_WORKERS"):
             Settings.from_env({**env, "GEARS_MATCHER_WORKERS": bad})
+
+
+def test_a_reply_cache_that_cannot_be_written_is_not_ready_and_fails_a_run_as_internal(
+    fixture_catalogue: Catalogue, tmp_path: Path
+) -> None:
+    blocked = tmp_path / "cache"
+    blocked.write_text("a file where the cache folder should be")
+    model = FakeModel(coded(fixture_catalogue))
+    real = RealRunner(
+        fixture_catalogue, lambda name: (f"fake:{name}", model), blocked, tmp_path / "work"
+    )
+    with pytest.raises(RuntimeError, match="reply cache is not usable"):
+        real.ready()
+    with pytest.raises(RunFailed) as failed:
+        real.run(request(max_calls=100), Meter())
+    assert failed.value.kind == "internal", (
+        "a broken mount is the service's problem, not the caller's"
+    )
+    assert str(blocked) not in failed.value.message, "and the caller is not told where"
+    assert model.calls == 0
+
+
+def test_a_usable_cache_is_ready(fixture_catalogue: Catalogue, tmp_path: Path) -> None:
+    runner(tmp_path, fixture_catalogue, FakeModel(coded(fixture_catalogue))).ready()

@@ -171,3 +171,17 @@ def test_an_unexpected_error_is_a_problem_with_no_detail(
     assert got["code"] == "internal"
     assert "secret" not in str(got)
     m.shutdown()
+
+
+def test_the_readiness_probe_asks_the_runner_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    m, _ = manager(tmp_path)
+
+    def broken() -> None:
+        raise RuntimeError("the reply cache is not usable")
+
+    monkeypatch.setattr(m.runner, "ready", broken)
+    with serve_app(create_app(m, "s", FakeRunner().info(), Limits())) as base:
+        assert get(f"{base}/readyz") == (503, {"status": "unavailable"})
+    m.shutdown()

@@ -70,6 +70,9 @@ class FakeRunner:
             raise RuntimeError("secret document text must never reach a caller")
         return Outcome(json.dumps(self.report), self.total, self.total - cut)
 
+    def ready(self) -> None:
+        return None
+
     def info(self) -> dict[str, Any]:
         return {
             "service_version": "0.0.0-test",
