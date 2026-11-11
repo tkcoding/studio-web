@@ -1,0 +1,26 @@
+{{- if .Values.matcher.enabled }}
+{{- /*
+  The gears-matcher's run store (SQLite), its model-reply cache and its gears-rust checkout.
+
+  Kept with the release (helm.sh/resource-policy: keep): the cached replies were paid for, and the run
+  store holds the idempotency keys, so deleting the claim would let a retried request start a second
+  paid run. One Pod mounts it (ReadWriteOnce), which is why the Deployment is Recreate.
+*/}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "studio-web.fullname" . }}-gears-matcher
+  labels: {{- include "studio-web.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gears-matcher
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.matcher.persistence.size | quote }}
+  {{- with .Values.matcher.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+{{- end }}

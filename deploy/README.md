@@ -14,6 +14,7 @@ Service images are published by the **Build Images** workflow on a `v*` tag:
 
 - `ghcr.io/constructorfabric/studio-web/studio-backend:<tag>`
 - `ghcr.io/constructorfabric/studio-web/studio-frontend:<tag>`
+- `ghcr.io/constructorfabric/studio-web/gears-matcher:<tag>` (only when `matcher.enabled`)
 
 Infrastructure images are published only on an `infra-v*` tag:
 
@@ -23,6 +24,26 @@ Infrastructure images are published only on an `infra-v*` tag:
 Both run non-root (backend: `studio` system user; frontend:
 nginx-unprivileged, uid 101, port 8080). Chart requires explicit immutable
 tags — no `latest`.
+
+## The gears-matcher service
+
+`matcher.enabled` (off by default) deploys the gears-matcher: a Python service the backend calls, inside
+the cluster, to run the verified matcher on a specification (ADR-0069,
+[`studio-backend/gears-matcher/`](../studio-backend/gears-matcher/README.md)). It is **one replica**
+(the chart refuses more): its runs are in SQLite on a ReadWriteOnce claim that is kept with the release.
+An init container clones `gears-rust` onto that claim, at the commits the matcher pins.
+
+The operator creates one Secret, named by `matcher.secrets.existingSecret`, with these keys:
+
+| Key | What |
+|---|---|
+| `shared-secret` | the bearer token the backend sends to the service |
+| `llm-connectors-access-key`, `constructor-stand`, `constructor-cmodel-id`, `constructor-public-connector-id` | the LLM connector's settings; the key must cover every model the matcher uses |
+| `gears-rust-token` | optional: a token for cloning a private `gears-rust` |
+
+`/readyz` says 503 until the run store and the reply cache can be used, so a wrong mount shows at deploy
+time. The per-run call bound (`matcher.limits.maxCalls`, 200) is the one cost limit there is; there is no
+daily or concurrency cap yet.
 
 ## Configuration model
 

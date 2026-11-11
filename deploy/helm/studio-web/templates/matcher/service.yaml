@@ -1,0 +1,13 @@
+{{- if .Values.matcher.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "studio-web.fullname" . }}-gears-matcher
+  labels: {{- include "studio-web.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gears-matcher
+spec:
+  selector: {{- include "studio-web.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: gears-matcher
+  ports:
+    - { name: http, port: 80, targetPort: http }
+{{- end }}

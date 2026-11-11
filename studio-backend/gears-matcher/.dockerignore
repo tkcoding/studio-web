@@ -1,0 +1,15 @@
+# Only what the image needs goes into the build context: the project files, src and schemas.
+.venv
+.git
+**/__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.hypothesis
+.coverage
+coverage.xml
+data
+tests
+.gitignore
+.dockerignore
+Dockerfile

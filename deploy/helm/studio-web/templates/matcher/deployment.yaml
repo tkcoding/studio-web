@@ -1,0 +1,119 @@
+{{- if .Values.matcher.enabled }}
+{{- if ne (int .Values.matcher.replicas) 1 }}
+{{- fail "matcher.replicas must be 1: the run store is SQLite on a ReadWriteOnce claim, so a second Pod could not read the first one's runs (ADR-0069)" }}
+{{- end }}
+{{- /*
+  The gears-matcher service. One replica, and `Recreate`: the claim is ReadWriteOnce, so the old Pod has
+  to let go of it before the new one starts. A run the restart interrupts is queued again when the new
+  Pod starts, and its model replies are cached, so a rollout costs little.
+
+  The init container clones (or fetches) gears-rust onto the claim: the catalogue is read from it, at
+  pinned commits, with `git show`. The same image runs it (it has git).
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "studio-web.fullname" . }}-gears-matcher
+  labels: {{- include "studio-web.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gears-matcher
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "studio-web.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: gears-matcher
+  template:
+    metadata:
+      labels: {{- include "studio-web.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: gears-matcher
+    spec:
+      serviceAccountName: {{ include "studio-web.serviceAccountName" . }}
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        # The image runs as uid 10001; the claim is made writable for it.
+        fsGroup: 10001
+      initContainers:
+        - name: clone-gears-rust
+          image: "{{ .Values.matcher.image.repository }}:{{ required "matcher.image.tag is required (immutable, fixed at chart publication)" .Values.matcher.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          command: ["sh", "-eu", "-c"]
+          args:
+            - |
+              repo=/var/lib/gears-matcher/gears-rust
+              if [ -n "${GEARS_RUST_TOKEN:-}" ]; then
+                auth=$(printf 'x-access-token:%s' "$GEARS_RUST_TOKEN" | base64 -w0)
+                export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraheader
+                export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
+              fi
+              if [ -d "$repo/.git" ]; then
+                git -C "$repo" fetch --quiet --tags origin
+              else
+                git clone --quiet "$GEARS_RUST_URL" "$repo"
+              fi
+              git -C "$repo" log -1 --format='gears-rust at %h'
+          env:
+            - name: GEARS_RUST_URL
+              value: {{ .Values.matcher.catalogue.gearsRustUrl | quote }}
+            - name: GEARS_RUST_TOKEN
+              valueFrom: { secretKeyRef: { name: {{ .Values.matcher.secrets.existingSecret }}, key: gears-rust-token, optional: true } }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/gears-matcher }
+      containers:
+        - name: gears-matcher
+          image: "{{ .Values.matcher.image.repository }}:{{ required "matcher.image.tag is required (immutable, fixed at chart publication)" .Values.matcher.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports: [{ name: http, containerPort: {{ .Values.matcher.port }} }]
+          env:
+            - name: GEARS_MATCHER_PORT
+              value: {{ .Values.matcher.port | quote }}
+            - name: GEARS_MATCHER_WORKERS
+              value: {{ .Values.matcher.limits.workers | quote }}
+            - name: GEARS_MATCHER_MAX_CALLS
+              value: {{ .Values.matcher.limits.maxCalls | quote }}
+            - name: GEARS_MATCHER_MAX_EXTRACT_CALLS
+              value: {{ .Values.matcher.limits.maxExtractCalls | quote }}
+            {{- with .Values.matcher.limits.maxConcurrentRuns }}
+            - name: GEARS_MATCHER_MAX_CONCURRENT_RUNS
+              value: {{ . | quote }}
+            {{- end }}
+            - name: GEARS_MATCHER_SECRET
+              valueFrom: { secretKeyRef: { name: {{ .Values.matcher.secrets.existingSecret }}, key: shared-secret } }
+            - name: LLM_CONNECTORS_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: {{ .Values.matcher.secrets.existingSecret }}, key: llm-connectors-access-key } }
+            - name: CONSTRUCTOR_STAND
+              valueFrom: { secretKeyRef: { name: {{ .Values.matcher.secrets.existingSecret }}, key: constructor-stand } }
+            - name: CONSTRUCTOR_CMODEL_ID
+              valueFrom: { secretKeyRef: { name: {{ .Values.matcher.secrets.existingSecret }}, key: constructor-cmodel-id } }
+            - name: CONSTRUCTOR_PUBLIC_CONNECTOR_ID
+              valueFrom: { secretKeyRef: { name: {{ .Values.matcher.secrets.existingSecret }}, key: constructor-public-connector-id } }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/gears-matcher }
+          # Starting reads the catalogue and builds the model clients: seconds, but the first start after a
+          # clone is slower, so the budget is generous. Only a failure past it is a crash loop.
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+            failureThreshold: 36
+          # Alive while the process answers; not ready (no traffic) when the reply cache or the run store
+          # cannot be used, so a wrong mount is found at deploy time and not by the first run.
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources: {{- toYaml .Values.matcher.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "studio-web.fullname" . }}-gears-matcher
+{{- end }}
