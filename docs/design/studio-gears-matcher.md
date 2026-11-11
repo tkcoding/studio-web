@@ -95,17 +95,27 @@ should live is an open question in the ADR.
 
 ### 3.2 Deployment
 
-An image `gears-matcher`, published with the others, and chart templates beside `backend/` and
-`frontend/`: a deployment (one replica), a service, a volume for the run store and the model-reply cache,
-and references to pre-created Secrets: the LLM connector key, the catalogue clone token, and the shared
-secret between the backend and this service. The backend calls it inside the cluster.
+An image `gears-matcher` (a Python image with `git`, a numeric non-root user and a healthcheck), built by its own
+workflow, `.github/workflows/gears-matcher.yml`, because Studio Delivery's component detection and snapshot
+copying are Rust- and portal-shaped (`gearbox-engine.yml` and `studio-cli.yml` are the precedent for an
+artifact with its own workflow). Every pull request that touches the component runs its gates and builds the
+image; a push to `main` of the upstream repository publishes `gears-matcher:sha-<commit>` and `edge`.
+
+Chart templates in `deploy/helm/studio-web/templates/matcher/`, off unless `matcher.enabled`: a Deployment of
+one replica (Recreate, because the claim is ReadWriteOnce) whose init container clones `gears-rust` onto the
+claim, a Service, a kept PersistentVolumeClaim for the run store, the reply cache and the checkout, and a
+NetworkPolicy that lets only the backend call it. The Pod reads pre-created Secrets: the LLM connector's
+settings, the catalogue clone token (optional) and the shared secret between the backend and this service.
+`/healthz` is the liveness and startup probe; `/readyz` is the readiness probe and says 503 when the run store
+or the reply cache cannot be used, so a wrong mount is found at deploy time.
 
 ## 4. Additional context
 
 The service runs: `gears-service` serves the contract on top of the library entry point, with SQLite for
-runs, and has been called over HTTP with the real catalogue and the real models. Not built yet: the image,
-the chart and the delivery workflow, the backend's client, the compare view and the pilot tracking. Each is
-a later pull request (ADR-0069, phases).
+runs, and has been called over HTTP with the real catalogue and the real models. The image builds and runs,
+and the chart renders and validates. Not built yet: the backend's client, the compare view and the pilot
+tracking; and nothing is deployed to a cluster, so the chart has not run on one. Each is a later pull
+request (ADR-0069, phases).
 
 ## 5. Traceability
 

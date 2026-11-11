@@ -1,0 +1,107 @@
+name: gears-matcher
+
+# The gears-matcher service (T9, ADR-0069; studio-backend/gears-matcher/): a Python component, so it is
+# tested and built here and not in Studio Delivery, whose component detection, test jobs and snapshot copying
+# are Rust- and portal-shaped. gearbox-engine.yml and studio-cli.yml are the precedent for an artifact that
+# has its own workflow.
+#
+# - every pull request that touches the component runs its gates (lint, format, types, tests) and builds
+#   the image without pushing it, so a broken Dockerfile is found before merge;
+# - a push to main of the upstream repository publishes the image as
+#   ghcr.io/constructorfabric/studio-web/gears-matcher:sha-<full commit> (immutable, what the chart's
+#   matcher.image.tag takes) and moves `edge`. A fork runs the gates and the build, and never publishes.
+#
+# Deploying it is not done here: the chart deploys it when `matcher.enabled` is set, with the tag chosen
+# in the environment's values.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - studio-backend/gears-matcher/**
+      - .github/workflows/gears-matcher.yml
+  push:
+    branches: [main]
+    paths:
+      - studio-backend/gears-matcher/**
+      - .github/workflows/gears-matcher.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gears-matcher-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/gears-matcher
+
+jobs:
+  gates:
+    name: Gates (lint, format, types, tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: studio-backend/gears-matcher
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+      # Each gate on its own line, so a failure names the gate and none is hidden by a pipe.
+      - name: Install the locked dependencies
+        run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check .
+      - name: Format
+        run: uv run ruff format --check .
+      - name: Types
+        run: uv run mypy
+      - name: Tests
+        run: uv run pytest -q
+
+  image:
+    name: Image
+    needs: gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build the image
+        run: docker build --tag "$IMAGE:build" studio-backend/gears-matcher
+      # The image starts and answers its probe, so a broken entry point or a missing file is found here.
+      # Without a Gear catalogue it cannot become ready, which is the point: it fails loudly, naming why.
+      - name: The image refuses to start without its settings, and says why
+        run: |
+          set +e
+          out=$(docker run --rm "$IMAGE:build" 2>&1)
+          status=$?
+          set -e
+          echo "$out"
+          test "$status" -eq 2
+          echo "$out" | grep -q "GEARS_MATCHER_SECRET is required"
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request' && github.repository == 'constructorfabric/studio-web' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish
+        if: github.event_name != 'pull_request' && github.repository == 'constructorfabric/studio-web' && github.ref == 'refs/heads/main'
+        run: |
+          docker tag "$IMAGE:build" "$IMAGE:sha-$GITHUB_SHA"
+          docker tag "$IMAGE:build" "$IMAGE:edge"
+          docker push "$IMAGE:sha-$GITHUB_SHA"
+          docker push "$IMAGE:edge"
+          {
+            echo "### gears-matcher image"
+            echo "- \`$IMAGE:sha-$GITHUB_SHA\` (immutable; the value for \`matcher.image.tag\`)"
+            echo "- \`$IMAGE:edge\`"
+          } >> "$GITHUB_STEP_SUMMARY"

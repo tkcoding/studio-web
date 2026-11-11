@@ -57,6 +57,24 @@ curl -s localhost:8080/v1/runs/<id>/report -H "Authorization: Bearer $GEARS_MATC
 
 `/healthz` and `/readyz` need no secret. Everything else is in the contract.
 
+## The image
+
+```bash
+docker build -t gears-matcher studio-backend/gears-matcher
+docker run --rm -p 8080:8080 \
+  -e GEARS_MATCHER_SECRET=... \
+  -e GEARS_MATCHER_ENV_FILE=/run/llm.env -v ./llm.env:/run/llm.env:ro \
+  -v /path/to/gears-rust:/var/lib/gears-matcher/gears-rust:ro \
+  -v ./cache:/var/lib/gears-matcher/cache \
+  gears-matcher
+```
+
+The image needs a `gears-rust` checkout and a writable reply cache; `/readyz` says 503 until the cache can
+be written. In a cluster the chart (`deploy/helm/studio-web/templates/matcher/`) clones the checkout onto a
+claim and wires the Secrets; see `deploy/README.md`. A mounted checkout owned by another user needs
+`-e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*'` (git refuses it
+otherwise), which a checkout cloned by the Pod itself does not.
+
 ## Work on it
 
 ```bash
