@@ -56,12 +56,12 @@ keyword result when it is not available. A run is unlike the backend's other wor
 
 Option 3.
 
-1. **Where it lives.** `studio-backend/gears-matcher/` holds the service: its own `pyproject.toml`,
-   Dockerfile, tests and README, beside `studio-backend/docker/graph-postgres/`, which is the
-   precedent for a component with its own image under `studio-backend`. The delivery workflow gets a
-   filter for it, and the backend filter excludes it, so a change to one does not rebuild the other.
-   The image is published as `ghcr.io/constructorfabric/studio-web/gears-matcher` and deployed by the
-   same chart and pipeline.
+1. **Where it lives.** `gears-matcher/`, a top-level folder beside `studio-backend/`, holds the service: its
+   own `pyproject.toml`, Dockerfile, tests and README. It is not under `studio-backend/`: it is not part of the
+   Rust workspace, and the backend's CI filter is `studio-backend/**`, so a change to the matcher must not
+   rebuild or retest the Rust backend, and the other way round. It is built and tested by a workflow of its
+   own. The image is published as `ghcr.io/constructorfabric/studio-web/gears-matcher` and deployed by the
+   same chart.
 2. **The code.** The matching code is a copy of gears-matcher's core (`SOURCE` names the commit and what
    was left out: the command line and the evaluation, which stay in gears-matcher). The copy is
    restructured as a library: `gears_matcher.run` takes a specification and returns a report, with hooks
@@ -90,8 +90,8 @@ Option 3.
 
 ## Consequences
 
-- A Python project sits inside a Rust workspace's folder. It is not part of the Cargo workspace, and CI
-  gets a Python job (lint, types, tests).
+- A Python project sits beside the Rust backend and is not part of its Cargo workspace, so CI gets a Python
+  job (lint, types, tests).
 - There are two copies of the matching code. The copy can drift from gears-matcher; `SOURCE` and a
   named-commit rule for carrying changes are the only guard.
 - One replica and SQLite means one failure domain, and a restart re-queues unfinished runs (their
@@ -117,7 +117,7 @@ chart (a volume or a database) and the store behind the interface; it does not c
 
 ## Confirmation
 
-- The contract tests in `studio-backend/gears-matcher/tests` run against the service and its mock;
+- The contract tests in `gears-matcher/tests` run against the service and its mock;
   the same tests must pass on the real service.
 - The image builds in the delivery workflow and the chart deploys it to `dev`.
 

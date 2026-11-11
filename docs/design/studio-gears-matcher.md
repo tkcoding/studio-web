@@ -10,8 +10,8 @@ owner: studio-team
 
 The design of the gears-matcher service. The decision to build it this way is
 [ADR-0069](../adr/0069-the-gears-matcher-runs-as-a-python-service-beside-the-backend.md). The code is
-[`studio-backend/gears-matcher/`](../../studio-backend/gears-matcher/), and its contract is
-[`matcher-service.openapi.yaml`](../../studio-backend/gears-matcher/schemas/service/matcher-service.openapi.yaml).
+[`gears-matcher/`](../../gears-matcher/), and its contract is
+[`matcher-service.openapi.yaml`](../../gears-matcher/schemas/service/matcher-service.openapi.yaml).
 It sits beside `studio-spec-mapping` ([design](studio-spec-mapping.md)), which matches by words and stays
 the baseline and the fallback. This is a Python service with its own image, not a Rust gear: it is built
 and deployed with studio-web but is not part of the Cargo workspace.
