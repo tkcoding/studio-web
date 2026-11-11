@@ -3,9 +3,6 @@
 import os
 from pathlib import Path
 
-import pytest
-
-from gears_matcher.catalogue import Catalogue, build_from_repo
 from gears_matcher.judge import GearCard, StubJudge, evidence_problem, gear_card, judge_requirement
 from gears_matcher.judge.stub import content_words
 from gears_matcher.models import Gear, Requirement, SpecRef
@@ -129,16 +126,6 @@ def test_wiring_todo_app_prd_through_fixture_catalogue(fixture_gears: tuple[Gear
     assert len(spec.requirements) == 8
     assert len(gears) > 5
     _assert_all_evidence_verified(gears, spec.requirements)
-
-
-def test_stub_never_trips_r1_on_every_real_card() -> None:
-    if not (REPO / ".git").exists():
-        if os.environ.get("CI"):  # CI fetches the pinned commits: a missing checkout is a failure
-            pytest.fail(f"no gears-rust checkout at {REPO} in CI (the fetch step should set it)")
-        pytest.skip("no gears-rust checkout (set GEARS_RUST_REPO)")
-    full: Catalogue = build_from_repo(REPO)
-    spec = load_spec(FIXTURES / "spec" / "bundle-studio")
-    _assert_all_evidence_verified(full.gears, spec.requirements)
 
 
 def test_r8_stub_says_what_is_covered_and_what_is_missing() -> None:

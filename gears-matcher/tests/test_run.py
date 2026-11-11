@@ -96,6 +96,10 @@ class FakeModel:
 
 @pytest.fixture(autouse=True)
 def _no_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The matcher refuses a catalogue model when CI is set (it would call a paid model). These tests
+    # run it on a fake model with the network shut, so CI is cleared, as the upstream tests do.
+    monkeypatch.delenv("CI", raising=False)
+
     def refuse(self: socket.socket, address: object) -> None:
         raise AssertionError(f"a test tried to connect to {address!r}")
 

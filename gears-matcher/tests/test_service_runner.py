@@ -6,6 +6,7 @@ disk, T2 reads it, the matcher runs, and what comes back is what the service rep
 
 import hashlib
 import json
+import socket
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,18 @@ class Meter:
 
     def usage(self, calls: int, cache_hits: int, input_tokens: int, output_tokens: int) -> None:
         self.usage_seen.append((calls, cache_hits, input_tokens, output_tokens))
+
+
+@pytest.fixture(autouse=True)
+def _fake_model_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear CI (the matcher refuses a catalogue model there: it would call a paid model) and shut
+    the network, so these tests run the real runner on a fake model and cannot reach a real one."""
+    monkeypatch.delenv("CI", raising=False)
+
+    def refuse(self: socket.socket, address: object) -> None:
+        raise AssertionError(f"a test tried to connect to {address!r}")
+
+    monkeypatch.setattr(socket.socket, "connect", refuse)
 
 
 def doc(path: str, text: str) -> Document:

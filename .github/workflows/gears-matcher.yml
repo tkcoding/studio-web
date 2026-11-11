@@ -58,6 +58,17 @@ jobs:
         run: uv run ruff format --check .
       - name: Types
         run: uv run mypy
+      # The full-catalogue tests read gears-rust at its two pinned commits (a public repository, no token, a few
+      # seconds). The commits come from the code, so a re-pin needs no edit here. In CI a missing checkout
+      # fails those tests instead of skipping them, so they cannot go unrun by accident.
+      - name: Fetch the pinned gears-rust commits
+        run: |
+          pins="$(uv run python -c 'from gears_matcher.catalogue.build import PINNED_MD_COMMIT as m, PINNED_GDL_COMMIT as g; print(m, g)')"
+          read -r md gdl <<< "${pins}"
+          git init -q "${RUNNER_TEMP}/gears-rust"
+          git -C "${RUNNER_TEMP}/gears-rust" fetch -q --depth 1 \
+            https://github.com/constructorfabric/gears-rust.git "${md}" "${gdl}"
+          echo "GEARS_RUST_REPO=${RUNNER_TEMP}/gears-rust" >> "${GITHUB_ENV}"
       - name: Tests
         run: uv run pytest -q
 
