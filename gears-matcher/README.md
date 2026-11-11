@@ -26,7 +26,7 @@ design: [studio-gears-matcher](../docs/design/studio-gears-matcher.md).
 ## Run the service
 
 ```bash
-cd studio-backend/gears-matcher
+cd gears-matcher
 export GEARS_MATCHER_SECRET=...                 # callers send it as a bearer token
 export GEARS_RUST_REPO=/path/to/gears-rust      # the catalogue, read at the pinned commits
 export GEARS_MATCHER_DATA=./data                # the run store (SQLite), reply cache, scratch space
