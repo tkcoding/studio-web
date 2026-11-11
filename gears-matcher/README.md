@@ -4,7 +4,7 @@ The gears-matcher service for studio-web: run the **verified** matcher on a spec
 and get back a coverage report (what each requirement needs, which Gears cover it, with a confidence).
 T9 / HYP-3172; the API contract is [`schemas/service/matcher-service.openapi.yaml`](schemas/service/matcher-service.openapi.yaml).
 
-It is Python, unlike the rest of `studio-backend`, and ships as its own image beside the backend.
+It is Python, unlike `studio-backend` beside it, and ships as its own image.
 
 ## Layout
 
@@ -20,13 +20,13 @@ It is Python, unlike the rest of `studio-backend`, and ships as its own image be
   (`schemas/service/matcher-service.openapi.yaml`).
 - `tests/` — the copied core's tests, and `test_run.py` for the library entry point, on a fake model.
 
-Decision: [ADR-0069](../../docs/adr/0069-the-gears-matcher-runs-as-a-python-service-beside-the-backend.md);
-design: [studio-gears-matcher](../../docs/design/studio-gears-matcher.md).
+Decision: [ADR-0069](../docs/adr/0069-the-gears-matcher-runs-as-a-python-service-beside-the-backend.md);
+design: [studio-gears-matcher](../docs/design/studio-gears-matcher.md).
 
 ## Run the service
 
 ```bash
-cd studio-backend/gears-matcher
+cd gears-matcher
 export GEARS_MATCHER_SECRET=...                 # callers send it as a bearer token
 export GEARS_RUST_REPO=/path/to/gears-rust      # the catalogue, read at the pinned commits
 export GEARS_MATCHER_DATA=./data                # the run store (SQLite), reply cache, scratch space
@@ -78,7 +78,7 @@ otherwise), which a checkout cloned by the Pod itself does not.
 ## Work on it
 
 ```bash
-cd studio-backend/gears-matcher
+cd gears-matcher
 uv sync
 uv run pytest
 uv run ruff check . && uv run ruff format --check .
