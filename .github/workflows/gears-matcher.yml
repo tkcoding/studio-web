@@ -1,6 +1,6 @@
 name: gears-matcher
 
-# The gears-matcher service (T9, ADR-0069; studio-backend/gears-matcher/): a Python component, so it is
+# The gears-matcher service (T9, ADR-0069; gears-matcher/): a Python component, so it is
 # tested and built here and not in Studio Delivery, whose component detection, test jobs and snapshot copying
 # are Rust- and portal-shaped. gearbox-engine.yml and studio-cli.yml are the precedent for an artifact that
 # has its own workflow.
@@ -18,12 +18,12 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - studio-backend/gears-matcher/**
+      - gears-matcher/**
       - .github/workflows/gears-matcher.yml
   push:
     branches: [main]
     paths:
-      - studio-backend/gears-matcher/**
+      - gears-matcher/**
       - .github/workflows/gears-matcher.yml
 
 permissions:
@@ -43,7 +43,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: studio-backend/gears-matcher
+        working-directory: gears-matcher
     steps:
       - uses: actions/checkout@v6
         with:
@@ -74,7 +74,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Build the image
-        run: docker build --tag "$IMAGE:build" studio-backend/gears-matcher
+        run: docker build --tag "$IMAGE:build" gears-matcher
       # The image starts and answers its probe, so a broken entry point or a missing file is found here.
       # Without a Gear catalogue it cannot become ready, which is the point: it fails loudly, naming why.
       - name: The image refuses to start without its settings, and says why

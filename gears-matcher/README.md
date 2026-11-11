@@ -60,7 +60,7 @@ curl -s localhost:8080/v1/runs/<id>/report -H "Authorization: Bearer $GEARS_MATC
 ## The image
 
 ```bash
-docker build -t gears-matcher studio-backend/gears-matcher
+docker build -t gears-matcher gears-matcher
 docker run --rm -p 8080:8080 \
   -e GEARS_MATCHER_SECRET=... \
   -e GEARS_MATCHER_ENV_FILE=/run/llm.env -v ./llm.env:/run/llm.env:ro \

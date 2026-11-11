@@ -29,7 +29,7 @@ tags — no `latest`.
 
 `matcher.enabled` (off by default) deploys the gears-matcher: a Python service the backend calls, inside
 the cluster, to run the verified matcher on a specification (ADR-0069,
-[`studio-backend/gears-matcher/`](../studio-backend/gears-matcher/README.md)). It is **one replica**
+[`gears-matcher/`](../gears-matcher/README.md)). It is **one replica**
 (the chart refuses more): its runs are in SQLite on a ReadWriteOnce claim that is kept with the release.
 An init container clones `gears-rust` onto that claim, at the commits the matcher pins.
 

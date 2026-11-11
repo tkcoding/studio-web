@@ -1,6 +1,6 @@
 # The gears-matcher service (T9, ADR-0069): `gears-service` on port 8080.
 #
-# Build context is this folder:  docker build -t gears-matcher studio-backend/gears-matcher
+# Build context is this folder:  docker build -t gears-matcher gears-matcher
 #
 # Two stages: the first installs the locked dependencies and the project into a virtualenv, the
 # second copies only that virtualenv. Python images are multi-arch, so this builds natively on
