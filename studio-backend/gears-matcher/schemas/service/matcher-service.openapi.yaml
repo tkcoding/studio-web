@@ -143,11 +143,13 @@ paths:
         Poll this. `state` is terminal when it is `succeeded`, `partial`, `failed` or `cancelled`.
         A state the caller does not know is **not** terminal: keep polling. A caller also ignores
         response fields it does not know (a minor version may add fields and states).
-        Suggested pause between polls: 2 s, backing off to 10 s. A run can take minutes: the
-        matcher allows each call up to 3 requests and a 100 s budget, so the caller's task lease
-        must outlast the run (see `limits.max_run_seconds` in `GET /v1/info`). If the lease
-        expires anyway and the task is retried, it submits again with the same `Idempotency-Key`
-        and gets the same run back: nothing is paid twice, and polling carries on.
+        Suggested pause between polls: 2 s, backing off to 10 s. A run can take many minutes: a
+        model call times out at 120 s (reading the catalogue) or 300 s (the checks), each with up to
+        3 requests, so one call can take about 15 minutes in the worst case, and a run makes many
+        calls in a row. The caller's task lease must outlast the run (see `limits.max_run_seconds`
+        in `GET /v1/info`). If the lease expires anyway and the task is retried, it submits again
+        with the same `Idempotency-Key` and gets the same run back: nothing is paid twice, and
+        polling carries on.
       parameters:
         - $ref: '#/components/parameters/RunId'
       responses:
@@ -469,7 +471,9 @@ components:
               type: integer
             max_run_seconds:
               type: integer
-              description: The longest a run may take; a caller's lease must be longer.
+              description: |
+                The longest a run may take; a caller's lease must be longer. A placeholder until it
+                is set from a measured run, and not enforced by the service yet.
     Problem:
       type: object
       required: [type, title, status, code]
