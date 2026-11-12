@@ -1,0 +1,329 @@
+{
+ "schema_version": "1.2.0",
+ "provenance": {
+  "product_id": "todo-app",
+  "spec_repository": null,
+  "spec_commit": null,
+  "gears_md_commit": "62d89b0ca1e507bd33cb6345eeaab23da2776198",
+  "gear_gdl_commit": "70a5354d83ed95b84361386f7190b46c5e49c668",
+  "judge": "verified: candidates claude-sonnet-4-6 + claude-opus-5 (prompt direct-v1); checks claude-sonnet-4-6 / gpt-5.4 (prompt 28da910e060e6177); report check gpt-5.4 (prompt 8563f06bf0934a8d); main-job check claude-opus-5 (prompt 76a19c329fd52ac0)",
+  "shortlist": "whole catalogue (no shortlist)",
+  "tau": 0.5,
+  "extraction": null
+ },
+ "recommended_gears": [
+  {
+   "gear_id": "gears-rust/event-broker",
+   "name": "Events Broker",
+   "confidence": 0.9,
+   "in_code": true,
+   "requirement_ids": [
+    "cpt-examples-todo-app-fr-changes-feed"
+   ]
+  }
+ ],
+ "also_possible": [],
+ "future_parts": [
+  {
+   "gear_id": "gears-rust/user-tasks-manager",
+   "name": "User Tasks Manager",
+   "confidence": 0.4,
+   "in_code": false,
+   "requirement_ids": [
+    "cpt-examples-todo-app-fr-create-task",
+    "cpt-examples-todo-app-fr-complete-task",
+    "cpt-examples-todo-app-fr-filter-tasks"
+   ]
+  },
+  {
+   "gear_id": "gears-rust/simple-resource-registry",
+   "name": "Durable Objects",
+   "confidence": 0.4,
+   "in_code": false,
+   "requirement_ids": [
+    "cpt-examples-todo-app-fr-create-task",
+    "cpt-examples-todo-app-fr-complete-task"
+   ]
+  },
+  {
+   "gear_id": "gears-rust/event-broker--core-platform-integration",
+   "name": "Event Broker",
+   "confidence": 0.4,
+   "in_code": false,
+   "requirement_ids": [
+    "cpt-examples-todo-app-fr-changes-feed"
+   ]
+  }
+ ],
+ "requirements": [
+  {
+   "requirement_id": "cpt-examples-todo-app-fr-create-task",
+   "kind": "fr",
+   "planned": false,
+   "extracted": false,
+   "coverage": "gap",
+   "confidence": null,
+   "low_confidence": false,
+   "reason": "future part: only Gears with no code yet fit (gears-rust/simple-resource-registry, gears-rust/user-tasks-manager)",
+   "gear_provides": "",
+   "remaining_work": "",
+   "gears": [
+    {
+     "gear_id": "gears-rust/simple-resource-registry",
+     "verdict": "unjudgeable",
+     "confidence": 0.4,
+     "evidence": "",
+     "covers": "",
+     "missing": "",
+     "rationale": "future part (no code yet); report check: partial: This Gear can create and store typed resources, which covers the creation/storage part, but it is generic resource CRUD rather than a task-specific task creation capability.",
+     "problem": null,
+     "role": "other"
+    },
+    {
+     "gear_id": "gears-rust/user-tasks-manager",
+     "verdict": "unjudgeable",
+     "confidence": 0.4,
+     "evidence": "",
+     "covers": "",
+     "missing": "",
+     "rationale": "future part (no code yet); report check: covered: This Gear directly creates tasks, which matches the requirement's main outcome on the same object type; the listed task lifecycle and due dates indicate task-domain support, leaving only configuration or wiring.",
+     "problem": null,
+     "role": "other"
+    }
+   ]
+  },
+  {
+   "requirement_id": "cpt-examples-todo-app-fr-complete-task",
+   "kind": "fr",
+   "planned": false,
+   "extracted": false,
+   "coverage": "gap",
+   "confidence": null,
+   "low_confidence": false,
+   "reason": "future part: only Gears with no code yet fit (gears-rust/simple-resource-registry, gears-rust/user-tasks-manager)",
+   "gear_provides": "",
+   "remaining_work": "",
+   "gears": [
+    {
+     "gear_id": "gears-rust/simple-resource-registry",
+     "verdict": "unjudgeable",
+     "confidence": 0.4,
+     "evidence": "",
+     "covers": "",
+     "missing": "",
+     "rationale": "future part (no code yet); report check: partial: This Gear provides generic resource update capability, but it does not itself define task completion or incomplete-status behavior.",
+     "problem": null,
+     "role": "other"
+    },
+    {
+     "gear_id": "gears-rust/user-tasks-manager",
+     "verdict": "unjudgeable",
+     "confidence": 0.4,
+     "evidence": "",
+     "covers": "",
+     "missing": "",
+     "rationale": "future part (no code yet); report check: covered: Managing task lifecycle and status tracking directly matches marking a task completed or reverting it to incomplete.",
+     "problem": null,
+     "role": "other"
+    }
+   ]
+  },
+  {
+   "requirement_id": "cpt-examples-todo-app-fr-delete-task",
+   "kind": "fr",
+   "planned": false,
+   "extracted": false,
+   "coverage": "gap",
+   "confidence": null,
+   "low_confidence": false,
+   "reason": "every candidate judged none",
+   "gear_provides": "",
+   "remaining_work": "",
+   "gears": [
+    {
+     "gear_id": "gears-rust/simple-resource-registry",
+     "verdict": "none",
+     "confidence": 0.5,
+     "evidence": "",
+     "covers": "",
+     "missing": "",
+     "rationale": "report check: none: This Gear provides generic resource CRUD and explicitly uses soft-delete retention, which does not match permanent deletion of tasks. (broad-Gear check: input_only)",
+     "problem": null,
+     "role": "other"
+    },
+    {
+     "gear_id": "gears-rust/user-tasks-manager",
+     "verdict": "none",
+     "confidence": 0.5,
+     "evidence": "",
+     "covers": "",
+     "missing": "",
+     "rationale": "report check: none: It is about managing tasks, but the text only mentions creating, assigning, lifecycle, due dates, and status tracking, with no explicit delete capability or permanent deletion behavior.",
+     "problem": null,
+     "role": "other"
+    }
+   ]
+  },
+  {
+   "requirement_id": "cpt-examples-todo-app-fr-changes-feed",
+   "kind": "fr",
+   "planned": false,
+   "extracted": false,
+   "coverage": "partial",
+   "confidence": 0.9,
+   "low_confidence": false,
+   "reason": "partly covered by gears-rust/event-broker",
+   "gear_provides": "A durable publish/subscribe event stream with long-poll consumption and subscription mechanics that could carry task change events to consumers.",
+   "remaining_work": "Implement the task-specific changes feed, connect task change production to the broker, and ensure delivery to all connected devices as the product's real-time feed.",
+   "gears": [
+    {
+     "gear_id": "gears-rust/event-broker",
+     "verdict": "partial",
+     "confidence": 0.9,
+     "evidence": "Durable event streaming with typed topics, pluggable storage, and consumer groups.",
+     "covers": "A durable publish/subscribe event stream with long-poll consumption and subscription mechanics that could carry task change events to consumers.",
+     "missing": "Implement the task-specific changes feed, connect task change production to the broker, and ensure delivery to all connected devices as the product's real-time feed.",
+     "rationale": "picked by both models; strict check: outcome; report check: This Gear provides the event-streaming mechanism needed for real-time propagation, but it is a general broker and does not itself define or deliver a task changes feed to connected devices.",
+     "problem": null,
+     "role": "chosen"
+    },
+    {
+     "gear_id": "gears-rust/simple-resource-registry",
+     "verdict": "none",
+     "confidence": 0.5,
+     "evidence": "",
+     "covers": "",
+     "missing": "",
+     "rationale": "report check: none: This Gear is generic CRUD storage for typed resources and explicitly does not provide real-time streaming or SSE for resource changes; it also is not specifically about propagating task changes to con (broad-Gear check: input_only)",
+     "problem": null,
+     "role": "other"
+    },
+    {
+     "gear_id": "gears-rust/event-broker--core-platform-integration",
+     "verdict": "unjudgeable",
+     "confidence": 0.4,
+     "evidence": "",
+     "covers": "",
+     "missing": "",
+     "rationale": "future part (no code yet); report check: partial: This Gear text shows real-time streaming delivery support, but it is still a generic event broker integration rather than a complete task changes feed for all connected devices.",
+     "problem": null,
+     "role": "other"
+    }
+   ]
+  },
+  {
+   "requirement_id": "cpt-examples-todo-app-fr-filter-tasks",
+   "kind": "fr",
+   "planned": false,
+   "extracted": false,
+   "coverage": "gap",
+   "confidence": null,
+   "low_confidence": false,
+   "reason": "future part: only Gears with no code yet fit (gears-rust/user-tasks-manager)",
+   "gear_provides": "",
+   "remaining_work": "",
+   "gears": [
+    {
+     "gear_id": "gears-rust/simple-resource-registry",
+     "verdict": "none",
+     "confidence": 0.5,
+     "evidence": "",
+     "covers": "",
+     "missing": "",
+     "rationale": "report check: none: This Gear provides generic resource storage and filtering on schema fields, not task filtering by task status, category, and priority. (broad-Gear check: input_only)",
+     "problem": null,
+     "role": "other"
+    },
+    {
+     "gear_id": "gears-rust/user-tasks-manager",
+     "verdict": "unjudgeable",
+     "confidence": 0.4,
+     "evidence": "",
+     "covers": "",
+     "missing": "",
+     "rationale": "future part (no code yet); report check: partial: This Gear is about tasks and explicitly includes status tracking, which supports part of the requirement, but it does not state filtering by status, category, or priority.",
+     "problem": null,
+     "role": "other"
+    }
+   ]
+  },
+  {
+   "requirement_id": "cpt-examples-todo-app-nfr-response-time",
+   "kind": "nfr",
+   "planned": false,
+   "extracted": false,
+   "coverage": "gap",
+   "confidence": null,
+   "low_confidence": false,
+   "reason": "no candidate gear",
+   "gear_provides": "",
+   "remaining_work": "",
+   "gears": []
+  },
+  {
+   "requirement_id": "cpt-examples-todo-app-nfr-data-persistence",
+   "kind": "nfr",
+   "planned": false,
+   "extracted": false,
+   "coverage": "gap",
+   "confidence": null,
+   "low_confidence": false,
+   "reason": "every candidate judged none",
+   "gear_provides": "",
+   "remaining_work": "",
+   "gears": [
+    {
+     "gear_id": "gears-rust/simple-resource-registry",
+     "verdict": "none",
+     "confidence": 0.5,
+     "evidence": "",
+     "covers": "",
+     "missing": "",
+     "rationale": "report check: none: This Gear provides generic CRUD storage for typed resources in a backend, but the requirement is specifically about immediate local persistence plus cloud sync within 5 seconds after changes; no local (broad-Gear check: input_only)",
+     "problem": null,
+     "role": "other"
+    }
+   ]
+  },
+  {
+   "requirement_id": "cpt-examples-todo-app-nfr-offline-support",
+   "kind": "nfr",
+   "planned": false,
+   "extracted": false,
+   "coverage": "gap",
+   "confidence": null,
+   "low_confidence": false,
+   "reason": "no candidate gear",
+   "gear_provides": "",
+   "remaining_work": "",
+   "gears": []
+  }
+ ],
+ "totals": {
+  "requirements": 8,
+  "fr": {
+   "covered": 0,
+   "partial": 1,
+   "gap": 4,
+   "clarification_needed": 0,
+   "not_assessed": 0
+  },
+  "nfr": {
+   "covered": 0,
+   "partial": 0,
+   "gap": 3,
+   "clarification_needed": 0,
+   "not_assessed": 0
+  }
+ },
+ "inputs": [
+  {
+   "path": "specs/prd.md",
+   "status": "read",
+   "requirements": 8,
+   "reason": "defines 8 CF requirements",
+   "extraction": null
+  }
+ ],
+ "clarifications": []
+}
