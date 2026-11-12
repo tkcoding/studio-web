@@ -1,4 +1,4 @@
-"""Runs, their idempotency keys and their reports, in SQLite (ADR-0069 §5).
+"""Runs, their idempotency keys and their reports, in SQLite (ADR-0071 §5).
 
 A run row keeps what a caller can read (state, progress, usage, outcome, error), the report, and,
 only while the run is not finished, the request itself, so a restart can run it again. Document
@@ -6,7 +6,7 @@ text is dropped the moment a run ends.
 
 Each call opens its own short connection (WAL mode), so worker threads and request threads never
 share one. This is the whole of the storage the service needs; where it lives for good is the open
-question in ADR-0069, and this class is what would be replaced.
+question in ADR-0071, and this class is what would be replaced.
 """
 
 import json

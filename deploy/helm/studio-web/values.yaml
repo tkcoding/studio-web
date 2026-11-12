@@ -568,13 +568,13 @@ ingress:
   annotations: {}
   tls: []
 
-# The gears-matcher service (T9, ADR-0069): runs the verified matcher on a specification by API.
+# The gears-matcher service (T9, ADR-0071): runs the verified matcher on a specification by API.
 # Off by default; an environment turns it on (matcher.enabled) and names the Secret that holds its
 # keys. The service is called by the backend, inside the cluster only (no ingress).
 #
 # ONE replica, always: it keeps its runs in SQLite on a ReadWriteOnce claim, so a second Pod
 # would have nowhere to read them. The chart refuses more than one. Where the run store should
-# live is an open question in ADR-0069.
+# live is an open question in ADR-0071.
 #
 # The Secret `matcher.secrets.existingSecret` is created by the operator, not by this chart. Keys:
 #   shared-secret                      the bearer token the backend sends to this service
@@ -606,7 +606,7 @@ matcher:
     workers: 4             # runs executed at the same time on this Pod
     maxCalls: 200          # the per-run model-call bound: a request may lower it, never raise it
     maxExtractCalls: 100   # the same, for reading free-form documents
-    maxConcurrentRuns: ""  # empty: no cap (ADR-0069 §7)
+    maxConcurrentRuns: ""  # empty: no cap (ADR-0071 §7)
   resources:
     requests: { cpu: 250m, memory: 512Mi }
     limits: { memory: 2Gi }

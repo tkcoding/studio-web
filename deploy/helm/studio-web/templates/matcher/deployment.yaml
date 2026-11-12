@@ -1,6 +1,6 @@
 {{- if .Values.matcher.enabled }}
 {{- if ne (int .Values.matcher.replicas) 1 }}
-{{- fail "matcher.replicas must be 1: the run store is SQLite on a ReadWriteOnce claim, so a second Pod could not read the first one's runs (ADR-0069)" }}
+{{- fail "matcher.replicas must be 1: the run store is SQLite on a ReadWriteOnce claim, so a second Pod could not read the first one's runs (ADR-0071)" }}
 {{- end }}
 {{- /*
   The gears-matcher service. One replica, and `Recreate`: the claim is ReadWriteOnce, so the old Pod has

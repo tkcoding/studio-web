@@ -1,6 +1,6 @@
 name: gears-matcher
 
-# The gears-matcher service (T9, ADR-0069; gears-matcher/): a Python component, so it is
+# The gears-matcher service (T9, ADR-0071; gears-matcher/): a Python component, so it is
 # tested and built here and not in Studio Delivery, whose component detection, test jobs and snapshot copying
 # are Rust- and portal-shaped. gearbox-engine.yml and studio-cli.yml are the precedent for an artifact that
 # has its own workflow.
