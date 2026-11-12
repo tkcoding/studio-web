@@ -1,0 +1,6 @@
+apiVersion: v2
+name: gears-matcher
+description: The gears-matcher service (ADR-0071), a release of its own beside Studio's, deployed by .github/workflows/gears-matcher.yml. It reads the Studio PostgreSQL cluster's operator-managed Secrets and its own pre-created config Secret.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

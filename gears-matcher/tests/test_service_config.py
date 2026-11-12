@@ -1,11 +1,13 @@
 """The config file holds the service's keys; the environment wins over it; nothing is printed."""
 
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from gears_matcher.service.config import ConfigError, load_config
-from gears_matcher.service.prepare import git_env, prepare_database
+from gears_matcher.service.prepare import git_env, prepare_checkout, prepare_database
 from gears_matcher.service.store import RunStore
 
 FULL = """
@@ -111,3 +113,73 @@ def test_prepare_creates_the_database_once_and_the_store_makes_its_table(
 def test_an_unsafe_database_name_is_refused() -> None:
     with pytest.raises(ValueError, match="unsafe database name"):
         prepare_database({"GEARS_MATCHER_DATABASE": 'x"; DROP'})
+
+
+def _git(cwd: Path, *args: str) -> str:
+    done = subprocess.run(  # noqa: S603
+        ["git", "-C", str(cwd), *args],  # noqa: S607
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, **_AUTHOR},
+    )
+    return done.stdout.strip()
+
+
+_AUTHOR = {
+    "GIT_AUTHOR_NAME": "t",
+    "GIT_AUTHOR_EMAIL": "t@example.invalid",
+    "GIT_COMMITTER_NAME": "t",
+    "GIT_COMMITTER_EMAIL": "t@example.invalid",
+}
+
+
+def _commit(src: Path, text: str) -> str:
+    (src / "docs").mkdir(exist_ok=True)
+    (src / "docs" / "GEARS.md").write_text(text, encoding="utf-8")
+    _git(src, "add", "-A")
+    _git(src, "commit", "--quiet", "-m", text)
+    return _git(src, "rev-parse", "HEAD")
+
+
+def test_checkout_of_a_branch_is_shallow_and_follows_its_tip(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    src.mkdir()
+    _git(src, "init", "--quiet", "--initial-branch", "corpus")
+    _commit(src, "one")
+    first = _commit(src, "two")
+    env = {
+        **os.environ,
+        "GEARS_RUST_URL": src.as_uri(),
+        "GEARS_RUST_BRANCH": "corpus",
+        "GEARS_RUST_REPO": str(tmp_path / "clone"),
+    }
+    clone = tmp_path / "clone"
+
+    assert prepare_checkout(env) == f"gears-rust ready corpus at {first[:9]}"
+    assert _git(clone, "rev-parse", "HEAD") == first
+    assert _git(clone, "rev-parse", "--is-shallow-repository") == "true"
+    assert not (clone / "docs").exists(), "the service reads git objects, not a working tree"
+
+    second = _commit(src, "three")
+    assert prepare_checkout(env) == f"gears-rust ready corpus at {second[:9]}"
+    assert _git(clone, "show", "HEAD:docs/GEARS.md") == "three"
+
+
+def test_checkout_without_a_branch_fetches_the_named_commits(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    src.mkdir()
+    _git(src, "init", "--quiet", "--initial-branch", "main")
+    md = _commit(src, "md")
+    gdl = _commit(src, "gdl")
+    env = {
+        **os.environ,
+        "GEARS_RUST_URL": src.as_uri(),
+        "GEARS_RUST_REPO": str(tmp_path / "clone"),
+        "GEARS_MD_REF": md,
+        "GEARS_GDL_REF": gdl,
+    }
+    assert prepare_checkout(env) == f"gears-rust ready at {md[:9]}, {gdl[:9]}"
+    assert prepare_checkout(env) == f"gears-rust ready at {md[:9]}, {gdl[:9]}", (
+        "a fetch the second time"
+    )

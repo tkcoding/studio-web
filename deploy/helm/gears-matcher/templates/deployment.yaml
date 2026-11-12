@@ -1,0 +1,176 @@
+{{- $db := .Values.database }}
+{{- /*
+  One replica, and `Recreate`: the claim is ReadWriteOnce, so the old Pod has to let go of it before
+  the new one starts. A run a restart interrupts is queued again when the new Pod starts (the runs are
+  in PostgreSQL), and its model replies are cached on the claim, so a rollout costs little. A second
+  replica would need runs claimed in the database and a cache that is not on this claim (ADR-0071).
+
+  Init containers, all the same image:
+  - `claim-owner` hands the claim's mount point to uid 10001: a Cinder claim ignores fsGroup (#854).
+  - `database` (database.create) creates the database as the bootstrap role, owned by the runtime role.
+  - `checkout` clones or fetches the catalogue (catalogue.url, .branch) onto the claim.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gears-matcher.fullname" . }}
+  labels: {{- include "gears-matcher.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "gears-matcher.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "gears-matcher.labels" . | nindent 8 }}
+      {{- with .Values.config.revision }}
+      annotations:
+        # A changed config Secret rolls the Pod when the environment bumps this digest.
+        checksum/config: {{ . | quote }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+        fsGroup: 10001
+      initContainers:
+        - name: claim-owner
+          image: {{ include "gears-matcher.image" . | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"], add: ["CHOWN"] }
+            runAsNonRoot: false
+            runAsUser: 0
+            seccompProfile: { type: RuntimeDefault }
+          command: ["chown", "10001:10001", "/var/lib/gears-matcher"]
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/gears-matcher }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+        {{- if $db.create }}
+        - name: database
+          image: {{ include "gears-matcher.image" . | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          command: ["gears-service-prepare"]
+          args: ["database"]
+          env:
+            - name: GEARS_MATCHER_DATABASE
+              value: {{ $db.name | quote }}
+            - name: GEARS_MATCHER_DATABASE_OWNER
+              valueFrom: { secretKeyRef: { name: {{ $db.existingSecret }}, key: {{ $db.keys.user }} } }
+            - name: PGHOST
+              valueFrom: { secretKeyRef: { name: {{ $db.bootstrapSecret }}, key: {{ $db.bootstrapKeys.host }} } }
+            - name: PGPORT
+              valueFrom: { secretKeyRef: { name: {{ $db.bootstrapSecret }}, key: {{ $db.bootstrapKeys.port }} } }
+            - name: PGUSER
+              valueFrom: { secretKeyRef: { name: {{ $db.bootstrapSecret }}, key: {{ $db.bootstrapKeys.user }} } }
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: {{ $db.bootstrapSecret }}, key: {{ $db.bootstrapKeys.password }} } }
+            - name: PGDATABASE
+              valueFrom: { secretKeyRef: { name: {{ $db.bootstrapSecret }}, key: {{ $db.bootstrapKeys.dbname }} } }
+          resources: {{- toYaml .Values.initResources | nindent 12 }}
+        {{- end }}
+        - name: checkout
+          image: {{ include "gears-matcher.image" . | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          command: ["gears-service-prepare"]
+          args: ["checkout"]
+          env:
+            - name: GEARS_MATCHER_CONFIG
+              value: /etc/gears-matcher/config.toml
+            - name: GEARS_RUST_URL
+              value: {{ required "catalogue.url is required" .Values.catalogue.url | quote }}
+            {{- with .Values.catalogue.branch }}
+            - name: GEARS_RUST_BRANCH
+              value: {{ . | quote }}
+            {{- end }}
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/gears-matcher }
+            - { name: config, mountPath: /etc/gears-matcher, readOnly: true }
+          resources: {{- toYaml .Values.initResources | nindent 12 }}
+      containers:
+        - name: gears-matcher
+          image: {{ include "gears-matcher.image" . | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          ports: [{ name: http, containerPort: {{ .Values.port }} }]
+          env:
+            - name: GEARS_MATCHER_PORT
+              value: {{ .Values.port | quote }}
+            - name: GEARS_MATCHER_WORKERS
+              value: {{ .Values.limits.workers | quote }}
+            - name: GEARS_MATCHER_MAX_CALLS
+              value: {{ .Values.limits.maxCalls | quote }}
+            - name: GEARS_MATCHER_MAX_EXTRACT_CALLS
+              value: {{ .Values.limits.maxExtractCalls | quote }}
+            {{- with .Values.limits.maxConcurrentRuns }}
+            - name: GEARS_MATCHER_MAX_CONCURRENT_RUNS
+              value: {{ . | quote }}
+            {{- end }}
+            - name: GEARS_MATCHER_DB_POOL
+              value: {{ $db.pool | quote }}
+            - name: GEARS_MATCHER_CONFIG
+              value: /etc/gears-matcher/config.toml
+            {{- if .Values.catalogue.branch }}
+            # The branch's tip, which the checkout has as HEAD; the pinned commits otherwise.
+            - name: GEARS_MD_REF
+              value: HEAD
+            - name: GEARS_GDL_REF
+              value: HEAD
+            {{- end }}
+            # The run store: the matcher's own database, as the runtime role (the operator-managed
+            # Secret, so a password rotation needs no edit here).
+            - name: PGHOST
+              valueFrom: { secretKeyRef: { name: {{ $db.existingSecret }}, key: {{ $db.keys.host }} } }
+            - name: PGPORT
+              valueFrom: { secretKeyRef: { name: {{ $db.existingSecret }}, key: {{ $db.keys.port }} } }
+            - name: PGUSER
+              valueFrom: { secretKeyRef: { name: {{ $db.existingSecret }}, key: {{ $db.keys.user }} } }
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: {{ $db.existingSecret }}, key: {{ $db.keys.password }} } }
+            - name: PGDATABASE
+              value: {{ $db.name | quote }}
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/gears-matcher }
+            - { name: config, mountPath: /etc/gears-matcher, readOnly: true }
+          # Starting reads the catalogue and builds the model clients: seconds.
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+            failureThreshold: 36
+          # Not ready (no traffic) when the reply cache or the run store cannot be used, so a wrong
+          # mount or database is found at deploy time and not by the first run.
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "gears-matcher.fullname" . }}
+        - name: config
+          secret:
+            secretName: {{ required "config.existingSecret is required" .Values.config.existingSecret }}
+            items: [{ key: config.toml, path: config.toml }]
+            defaultMode: 0440

@@ -1,0 +1,6 @@
+# Test (namespace studio-test), deployed by .github/workflows/gears-matcher.yml with `-f` this file and
+# the image tag.
+#
+# The Studio release on Test keeps no gear corpus (backend.gearbox is off there), so the matcher reads
+# the catalogue at the commits it pins: the chart's defaults.
+{}

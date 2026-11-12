@@ -1,0 +1,92 @@
+# The gears-matcher service (ADR-0071): runs the verified matcher on a specification by API. Called by
+# the Studio backend, inside the cluster only (no ingress). A release of its own, beside Studio's
+# (`studio`), so Studio's deployments neither need nor touch it: .github/workflows/gears-matcher.yml
+# builds, publishes and deploys it.
+#
+# What it reads and does not create:
+# - its keys, in the Secret `config.existingSecret`, made by the operator, with one key, `config.toml`:
+#
+#     shared_secret = "..."            # the bearer token the backend sends to this service
+#     [llm]                            # the Constructor LLM connector; one key for now
+#     access_key = "..."
+#     stand = "..."
+#     cmodel_id = "..."
+#     public_connector_id = "..."
+#     [gears_rust]
+#     token = "..."                    # optional: only for a private catalogue repository
+#
+#   The key must cover every model the matcher uses (gears_matcher.run.VERIFIED_MODELS). A changed
+#   Secret is read on the next Pod start: bump `config.revision` (any digest) to roll it.
+# - its database, `database.name`, on the Studio PostgreSQL cluster, made by hand once and owned by the
+#   runtime role (the service makes its table at start, as that role):
+#     CREATE DATABASE gears_matcher OWNER studio;
+#   or by an init container (`database.create`), as the bootstrap role.
+
+image:
+  repository: ghcr.io/constructorfabric/studio-web/gears-matcher
+  tag: ""                  # REQUIRED: immutable sha-<commit>, set by the workflow
+
+port: 8080
+
+config:
+  existingSecret: studio-gears-matcher
+  revision: ""
+
+database:
+  name: gears_matcher
+  # The connections this service holds: counted once in deploy/k8s/cloudnative-pg/README.md.
+  pool: 3
+  # The runtime role (the backend's): host, port, user, password. CloudNativePG names the user key
+  # `username`.
+  existingSecret: studio-postgres-app
+  keys: { host: host, port: port, user: username, password: password }
+  # Off: the database is made by hand. On: an init container creates it if it is missing, as the
+  # bootstrap role (CREATEDB), owned by the runtime role.
+  create: false
+  bootstrapSecret: studio-postgres-bootstrap
+  bootstrapKeys: { host: host, port: port, user: username, password: password, dbname: dbname }
+
+# The Gear catalogue (docs/GEARS.md + gear.gdl). An init container clones `url` onto the claim (a
+# restart fetches). It is read once, at start.
+# - `branch` set: a shallow clone of that branch, read at its tip. Give the backend's own corpus
+#   (backend.gearbox.corpusUrl/corpusRef of the Studio release) and the matcher reads the catalogue
+#   Studio shows; each report names the commit.
+# - `branch` empty: a full clone, read at the commits the matcher pins (gears_matcher.catalogue).
+catalogue:
+  url: https://github.com/constructorfabric/gears-rust.git
+  branch: ""
+
+# The model-reply cache and the catalogue clone. Kept when the release is uninstalled: the cached
+# replies were paid for.
+persistence:
+  size: 10Gi
+  storageClass: ""         # empty leaves it to the cluster default
+
+limits:
+  workers: 4               # runs executed at the same time on this Pod
+  maxCalls: 400            # the per-run model-call bound: a request may lower it, never raise it
+  maxExtractCalls: 100     # the same, for reading free-form documents
+  maxConcurrentRuns: ""    # empty: no cap (ADR-0071 §7)
+
+resources:
+  requests: { cpu: 250m, memory: 512Mi }
+  limits: { memory: 2Gi }
+# The init containers that clone the catalogue and create the database. Explicit, so they do not take
+# the namespace LimitRange default.
+initResources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits: { cpu: 500m, memory: 512Mi }
+
+# Only the Studio backend's Pods may call it: the labels of the backend Pods of the Studio release.
+# A NetworkPolicy adds to the others that select the Pod: a namespace that allows all traffic from
+# within itself (allow-same-namespace on the webstudio cluster) still does, and the shared secret is
+# then the gate.
+networkPolicy:
+  enabled: true
+  backendPodLabels:
+    app.kubernetes.io/name: studio-web
+    app.kubernetes.io/instance: studio
+    app.kubernetes.io/component: backend
+
+# ghcr packages published by GITHUB_TOKEN start private: a pull Secret, or a public package.
+imagePullSecrets: []

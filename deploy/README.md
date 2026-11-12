@@ -14,7 +14,6 @@ Service images are published by the **Build Images** workflow on a `v*` tag:
 
 - `ghcr.io/constructorfabric/studio-web/studio-backend:<tag>`
 - `ghcr.io/constructorfabric/studio-web/studio-frontend:<tag>`
-- `ghcr.io/constructorfabric/studio-web/gears-matcher:<tag>` (only when `matcher.enabled`)
 
 Infrastructure images are published only on an `infra-v*` tag:
 
@@ -27,25 +26,30 @@ tags — no `latest`.
 
 ## The gears-matcher service
 
-`matcher.enabled` (off by default) deploys the gears-matcher: a Python service the backend calls, inside
-the cluster, to run the verified matcher on a specification (ADR-0071,
-[`gears-matcher/`](../gears-matcher/README.md)).
+The gears-matcher (ADR-0071, [`gears-matcher/`](../gears-matcher/README.md)) is a Python service the
+backend calls inside the cluster. It is a Helm release of its own, `gears-matcher`, from
+[`helm/gears-matcher`](helm/gears-matcher/values.yaml), built, published and deployed by
+`.github/workflows/gears-matcher.yml`, never by Studio Delivery:
 
-- **Runs** are in PostgreSQL, in a database of its own (`matcher.database.name`, `gears_matcher`) on the
-  Studio cluster, as the backend's runtime role (`backend.database.existingSecret`). The database is
-  made by hand once, owned by the runtime role, which cannot create one itself; the service creates its
-  table at start:
+```bash
+gh workflow run gears-matcher.yml -R constructorfabric/studio-web --ref <branch> -f deploy=dev
+gh workflow run gears-matcher.yml -R constructorfabric/studio-web --ref <branch> -f deploy=dev -f image_tag=sha-<40 hex>
+```
+
+The first builds the branch, publishes `gears-matcher:sha-<commit>` and deploys it; the second deploys an
+image already published. The cluster pulls without credentials, so the `gears-matcher` package must be
+public, as Studio's are (a package `GITHUB_TOKEN` creates starts private).
+
+Made by hand once per environment, before the first deploy:
+
+- **The database**, owned by the runtime role (the service creates its table at start):
 
   ```bash
-  kubectl -n studio-dev exec studio-postgres-1 -c postgres -- \
-    psql -c 'CREATE DATABASE gears_matcher OWNER studio;'
+  kubectl -n studio-dev exec studio-postgres-1 -c postgres --     psql -c 'CREATE DATABASE gears_matcher OWNER studio;'
   ```
 
-  `matcher.database.create: true` has an init container do it instead, as the bootstrap role
-  (`backend.bootstrap.existingSecret`). Its pool (`matcher.database.pool`, 3) is counted once in
-  [the connection budget](k8s/cloudnative-pg/README.md).
-- **Keys** are in its config file: the operator creates one Secret, named by
-  `matcher.config.existingSecret`, with one key, `config.toml`:
+  Its pool (3) is counted once in [the connection budget](k8s/cloudnative-pg/README.md).
+- **The Secret `studio-gears-matcher`**, one key, `config.toml`, the service's keys:
 
   ```toml
   shared_secret = "..."          # the bearer token the backend sends to the service
@@ -55,30 +59,22 @@ the cluster, to run the verified matcher on a specification (ADR-0071,
   stand = "..."
   cmodel_id = "..."
   public_connector_id = "..."
-
-  [gears_rust]
-  token = "..."                  # optional, catalogue.source=clone: for cloning a private gears-rust
   ```
 
   ```bash
   kubectl -n studio-dev create secret generic studio-gears-matcher --from-file=config.toml
   ```
 
-  A changed Secret is read on the next start; bump `matcher.config.revision` to roll the Pod.
-- **The Gear catalogue** is the backend's own: with `matcher.catalogue.source: backend` (the default)
-  the Pod mounts the backend's Gearbox claim read-only and reads the corpus checkout there
-  (`backend.gearbox.corpusUrl` at `corpusRef`), at the commit the backend has checked out, once at
-  start: the catalogue Studio shows, no clone and no token. It needs `backend.gearbox.persistence`. The
-  claim is ReadWriteOnce, so the matcher is scheduled on the backend's node and the backend prefers the
-  matcher's node in turn; if a backend Pod still lands elsewhere it waits on "Multi-Attach" until the
-  matcher Pod is deleted (it is then scheduled beside the new backend). `source: clone` clones
-  `matcher.catalogue.gearsRustUrl` onto the matcher's own claim instead, read at the pinned commits.
-- **One replica** (the chart refuses more): a run executes in the Pod that accepted it, and the reply
-  cache is on a ReadWriteOnce claim kept with the release.
+  A changed Secret is read on the next start: restart the Pod, or bump `config.revision`.
 
+The Gear catalogue is cloned by an init container onto the release's claim and read once at start. On Dev
+it is the corpus Studio shows (`backend.gearbox.corpusUrl` and `corpusRef` of the Studio release, a
+shallow clone of the branch's tip; `helm/gears-matcher/values-dev.yaml` names the same two, move them
+together); on Test, which keeps no corpus, the commits the matcher pins. One replica: a run executes in
+the Pod that accepted it, and the reply cache is on a ReadWriteOnce claim kept when the release goes.
 `/readyz` says 503 until the run store and the reply cache can be used, so a wrong database or mount
-shows at deploy time. The per-run call bound (`matcher.limits.maxCalls`, 400) is the one cost limit
-there is; there is no daily or concurrency cap yet.
+fails the deploy, which rolls back. The per-run call bound (`limits.maxCalls`, 400) is the one cost limit
+there is.
 
 ## Configuration model
 

@@ -1,0 +1,9 @@
+# Dev (namespace studio-dev), deployed by .github/workflows/gears-matcher.yml with `-f` this file and
+# the image tag.
+#
+# The catalogue is the one Studio shows on Dev: the corpus of the Studio release
+# (deploy/helm/values-dev.example.yaml, backend.gearbox.corpusUrl and corpusRef), read at the branch's
+# tip. Move the two together.
+catalogue:
+  url: https://github.com/MikeFalcon77/gears-rust.git
+  branch: feature/gearbox

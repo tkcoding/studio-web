@@ -1,0 +1,22 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- /*
+  Only the Studio backend may call the matcher: it holds a paid key and runs paid work for whoever
+  holds the shared secret. Egress is not restricted: it reaches the LLM connector, GitHub and
+  PostgreSQL. NetworkPolicies add up, so one that admits the whole namespace still does.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "gears-matcher.fullname" . }}
+  labels: {{- include "gears-matcher.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "gears-matcher.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {{- toYaml (required "networkPolicy.backendPodLabels is required" .Values.networkPolicy.backendPodLabels) | nindent 14 }}
+      ports:
+        - { protocol: TCP, port: {{ .Values.port }} }
+{{- end }}

@@ -60,8 +60,10 @@ Option 3.
    own `pyproject.toml`, Dockerfile, tests and README. It is not under `studio-backend/`: it is not part of the
    Rust workspace, and the backend's CI filter is `studio-backend/**`, so a change to the matcher must not
    rebuild or retest the Rust backend, and the other way round. It is built and tested by a workflow of its
-   own. The image is published as `ghcr.io/constructorfabric/studio-web/gears-matcher` and deployed by the
-   same chart.
+   own, which also deploys it: the image is published as `ghcr.io/constructorfabric/studio-web/gears-matcher`
+   and installed as a Helm release of its own, `gears-matcher` (`deploy/helm/gears-matcher`), beside
+   Studio's (decided in review, 2026-11-12). Studio Delivery upgrades Studio's release with its own values
+   only, so a service inside that chart would be removed by the next Studio deployment.
 2. **The code.** The matching code is a copy of gears-matcher's core (`SOURCE` names the commit and what
    was left out: the command line and the evaluation, which stay in gears-matcher). The copy is
    restructured as a library: `gears_matcher.run` takes a specification and returns a report, with hooks
@@ -82,12 +84,12 @@ Option 3.
    service creates its one table at start. Its pool (3) is counted in the connection budget. It is still
    one replica: a run executes in the Pod that accepted it, and the model-reply cache is on a
    ReadWriteOnce claim.
-   **The catalogue is the backend's checkout** (decided in review, 2026-11-12): the matcher mounts the
-   backend's Gearbox claim read-only and reads the corpus there at the commit the backend has checked
-   out, so it matches against the catalogue Studio shows and clones nothing. That commit moves with the
-   backend's corpus branch, not with a pin; each report names the commits it was read at. The claim is
-   ReadWriteOnce, so the two Pods share a node. Cloning `gears-rust` at the pinned commits remains a
-   chart option.
+   **The catalogue is the one Studio shows** (decided in review, 2026-11-12): an init container makes a
+   shallow clone of the backend's corpus branch (on Dev, `backend.gearbox.corpusUrl` at `corpusRef`) onto
+   the matcher's claim and the service reads its tip, once at start; each report names the commits. The
+   backend's own checkout is not shared: its claim is ReadWriteOnce, and mounting it would tie the two
+   Pods to one node, a backend rescheduled elsewhere waiting on the matcher. Where Studio keeps no corpus,
+   the matcher reads the commits it pins.
 6. **LLM access and keys.** A dedicated key owned by the studio team, used through the LLM connector, not
    through `studio-llm-proxy`. **The keys are in the service's config file** (`config.toml`, decided in
    review, 2026-11-12): the shared secret between the two services, the connector's settings and the
@@ -128,7 +130,7 @@ cluster's PostgreSQL. The options that were weighed:
 
 - The contract tests in `gears-matcher/tests` run against the service and its mock;
   the same tests must pass on the real service.
-- The image builds in the delivery workflow and the chart deploys it to `dev`.
+- The image builds in `.github/workflows/gears-matcher.yml`, which deploys its release to `dev`.
 
 ## More Information
 

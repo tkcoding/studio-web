@@ -1,44 +1,63 @@
 name: gears-matcher
 
-# The gears-matcher service (T9, ADR-0071; gears-matcher/): a Python component, so it is
-# tested and built here and not in Studio Delivery, whose component detection, test jobs and snapshot copying
-# are Rust- and portal-shaped. gearbox-engine.yml and studio-cli.yml are the precedent for an artifact that
-# has its own workflow.
+# The gears-matcher service (T9, ADR-0071; gears-matcher/, chart deploy/helm/gears-matcher/): a Python
+# component with a Helm release of its own, so it is tested, built and deployed here and not in Studio
+# Delivery, whose component detection, test jobs and releases are Rust- and portal-shaped. A Studio
+# deployment never touches it, and this workflow never touches Studio's release.
 #
-# - every pull request that touches the component runs its gates (lint, format, types, tests) and builds
-#   the image without pushing it, so a broken Dockerfile is found before merge;
-# - a push to main of the upstream repository publishes the image as
-#   ghcr.io/constructorfabric/studio-web/gears-matcher:sha-<full commit> (immutable, what the chart's
-#   matcher.image.tag takes) and moves `edge`. A fork runs the gates and the build, and never publishes.
+# - every pull request that touches the component runs its gates (lint, format, types, tests), lints
+#   and renders its chart, and builds the image without pushing it;
+# - a push to main of the upstream repository publishes
+#   ghcr.io/constructorfabric/studio-web/gears-matcher:sha-<full commit> (immutable) and moves `edge`;
+# - "Run workflow" (workflow_dispatch) on any branch of the upstream repository runs the gates,
+#   publishes sha-<that commit>, and with `deploy` set installs or upgrades the release `gears-matcher`
+#   in studio-<environment>. With `image_tag` it deploys that published image instead and builds nothing.
+#   The deploy uses the GitHub Environment's KUBE_CONFIG_B64, the namespace-scoped credential Studio
+#   Delivery uses.
 #
-# Deploying it is not done here: the chart deploys it when `matcher.enabled` is set, with the tag chosen
-# in the environment's values.
+# A fork runs the gates and the build, and never publishes or deploys.
 
 on:
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy to (none = build and publish only)
+        type: choice
+        default: none
+        options: [none, dev, test]
+      image_tag:
+        description: Deploy this published sha-<40 hex> image instead of building the selected branch
+        required: false
+        type: string
   pull_request:
     paths:
       - gears-matcher/**
+      - deploy/helm/gears-matcher/**
       - .github/workflows/gears-matcher.yml
   push:
     branches: [main]
     paths:
       - gears-matcher/**
+      - deploy/helm/gears-matcher/**
       - .github/workflows/gears-matcher.yml
 
 permissions:
   contents: read
 
 concurrency:
-  group: gears-matcher-${{ github.ref }}
+  # One deployment per environment at a time; a newer push or pull-request run cancels the older one.
+  group: gears-matcher-${{ inputs.deploy && inputs.deploy != 'none' && format('deploy-{0}', inputs.deploy) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   IMAGE: ghcr.io/${{ github.repository }}/gears-matcher
+  # Publishing and deploying happen in the upstream repository only.
+  UPSTREAM: ${{ github.repository == 'constructorfabric/studio-web' }}
 
 jobs:
   gates:
     name: Gates (lint, format, types, tests)
+    if: github.event_name != 'workflow_dispatch' || inputs.image_tag == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     # The run store's tests need PostgreSQL (one dialect, no SQLite stand-in). Each test creates a
@@ -85,14 +104,43 @@ jobs:
       - name: Tests
         run: uv run pytest -q
 
+  chart:
+    name: Chart (lint, render)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.2.3
+      - name: Lint and render each environment
+        run: |
+          set -euo pipefail
+          chart=deploy/helm/gears-matcher
+          for env in dev test; do
+            helm lint "$chart" -f "$chart/values-$env.yaml" --set-string image.tag=sha-ci
+            helm template gears-matcher "$chart" -f "$chart/values-$env.yaml" --set-string image.tag=sha-ci >/dev/null
+          done
+          # The guards: no image tag is refused, and a branch makes the service read the branch's tip.
+          if helm template gears-matcher "$chart" >/dev/null 2>&1; then
+            echo "the chart rendered without image.tag" >&2; exit 1
+          fi
+          helm template gears-matcher "$chart" -f "$chart/values-dev.yaml" --set-string image.tag=sha-ci \
+            | grep -q 'name: GEARS_RUST_BRANCH'
+
   image:
     name: Image
     needs: gates
+    if: github.event_name != 'workflow_dispatch' || inputs.image_tag == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
       packages: write
+    outputs:
+      tag: ${{ steps.publish.outputs.tag }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -100,7 +148,7 @@ jobs:
       - name: Build the image
         run: docker build --tag "$IMAGE:build" gears-matcher
       # The image starts and answers its probe, so a broken entry point or a missing file is found here.
-      # Without a Gear catalogue it cannot become ready, which is the point: it fails loudly, naming why.
+      # Without its settings it cannot become ready, which is the point: it fails loudly, naming why.
       - name: The image refuses to start without its settings, and says why
         run: |
           set +e
@@ -111,21 +159,121 @@ jobs:
           test "$status" -eq 2
           echo "$out" | grep -q "GEARS_MATCHER_SECRET is required"
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request' && github.repository == 'constructorfabric/studio-web' && github.ref == 'refs/heads/main'
+        if: env.UPSTREAM == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # sha-<commit> names one commit for ever, so a branch's snapshot is as safe to publish as main's;
+      # only main moves `edge`.
       - name: Publish
-        if: github.event_name != 'pull_request' && github.repository == 'constructorfabric/studio-web' && github.ref == 'refs/heads/main'
+        id: publish
+        if: env.UPSTREAM == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         run: |
-          docker tag "$IMAGE:build" "$IMAGE:sha-$GITHUB_SHA"
-          docker tag "$IMAGE:build" "$IMAGE:edge"
-          docker push "$IMAGE:sha-$GITHUB_SHA"
-          docker push "$IMAGE:edge"
+          set -euo pipefail
+          tag="sha-$GITHUB_SHA"
+          docker tag "$IMAGE:build" "$IMAGE:$tag"
+          docker push "$IMAGE:$tag"
+          if [ "$GITHUB_REF" = refs/heads/main ]; then
+            docker tag "$IMAGE:build" "$IMAGE:edge"
+            docker push "$IMAGE:edge"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
           {
             echo "### gears-matcher image"
-            echo "- \`$IMAGE:sha-$GITHUB_SHA\` (immutable; the value for \`matcher.image.tag\`)"
-            echo "- \`$IMAGE:edge\`"
+            echo "- \`$IMAGE:$tag\` (immutable; what a deploy takes)"
+            if [ "$GITHUB_REF" = refs/heads/main ]; then echo "- \`$IMAGE:edge\`"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy to ${{ inputs.deploy }}
+    needs: [chart, image]
+    # `always()` because `image` is skipped when an existing image is deployed; then the chart gate is
+    # the one that must have passed, and otherwise the image must have been published by this run.
+    if: >-
+      always() &&
+      github.event_name == 'workflow_dispatch' && inputs.deploy != 'none' &&
+      github.repository == 'constructorfabric/studio-web' &&
+      needs.chart.result == 'success' &&
+      (inputs.image_tag != '' || needs.image.result == 'success')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: ${{ inputs.deploy }}
+    env:
+      NAMESPACE: studio-${{ inputs.deploy }}
+      KUBECONFIG: /tmp/gears-matcher-kubeconfig
+      TAG: ${{ inputs.image_tag || needs.image.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: The image tag is immutable and published
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^sha-[0-9a-f]{40}$ ]]; then
+            echo "image_tag must be sha-<40 hex>, got '$TAG'" >&2; exit 1
+          fi
+          # Anonymously, as the cluster pulls it: a package GITHUB_TOKEN published starts private.
+          for _ in $(seq 1 12); do
+            docker manifest inspect "$IMAGE:$TAG" >/dev/null 2>&1 && exit 0
+            sleep 10
+          done
+          echo "$IMAGE:$TAG cannot be pulled without credentials: it is not published, or the" >&2
+          echo "gears-matcher package is private (make it public, as Studio's packages are)." >&2
+          exit 1
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.35.3
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.2.3
+      - name: Configure namespace-scoped cluster access
+        env:
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$KUBE_CONFIG_B64"
+          printf '%s' "$KUBE_CONFIG_B64" | base64 --decode > "$KUBECONFIG"
+          chmod 600 "$KUBECONFIG"
+          unset KUBE_CONFIG_B64
+          kubectl auth can-i create deployments -n "$NAMESPACE" | grep -qx yes
+          if kubectl auth can-i '*' '*' --all-namespaces | grep -qx yes; then
+            echo "Refusing to deploy with a cluster-admin credential" >&2
+            exit 1
+          fi
+      # What the chart reads and does not create (deploy/helm/gears-matcher/values.yaml): its config
+      # Secret and the database's. The database itself is made by hand; a missing one shows as a Pod
+      # that never becomes ready, and the upgrade rolls back.
+      - name: The Secrets the release reads exist
+        run: |
+          set -euo pipefail
+          for secret in studio-gears-matcher studio-postgres-app; do
+            kubectl get secret "$secret" -n "$NAMESPACE" -o name >/dev/null || {
+              echo "Secret $secret is missing in $NAMESPACE (see deploy/README.md, gears-matcher)" >&2
+              exit 1
+            }
+          done
+      - name: Deploy with automatic rollback
+        run: |
+          set -euo pipefail
+          chart=deploy/helm/gears-matcher
+          helm upgrade --install gears-matcher "$chart" \
+            -n "$NAMESPACE" \
+            -f "$chart/values-${{ inputs.deploy }}.yaml" \
+            --set-string "image.tag=$TAG" \
+            --rollback-on-failure \
+            --wait \
+            --timeout 10m \
+            --history-max 10
+      - name: Report
+        if: always()
+        run: |
+          set -uo pipefail
+          kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/instance=gears-matcher -o wide || true
+          {
+            echo "### gears-matcher → ${{ inputs.deploy }}"
+            echo "- image \`$IMAGE:$TAG\`"
+            echo "- source \`${{ github.ref_name }}\` at \`${{ github.sha }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

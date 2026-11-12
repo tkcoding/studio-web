@@ -1,0 +1,20 @@
+{{- /*
+  The model-reply cache and the catalogue clone. The runs and their idempotency keys are in
+  PostgreSQL, not here. Kept when the release goes (helm.sh/resource-policy: keep): the cached replies
+  were paid for, and a run a restart re-queues reads them back instead of paying again.
+*/}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "gears-matcher.fullname" . }}
+  labels: {{- include "gears-matcher.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size | quote }}
+  {{- with .Values.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}

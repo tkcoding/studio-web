@@ -101,19 +101,18 @@ copying are Rust- and portal-shaped (`gearbox-engine.yml` and `studio-cli.yml` a
 artifact with its own workflow). Every pull request that touches the component runs its gates and builds the
 image; a push to `main` of the upstream repository publishes `gears-matcher:sha-<commit>` and `edge`.
 
-Chart templates in `deploy/helm/studio-web/templates/matcher/`, off unless `matcher.enabled`: a Deployment of
-one replica (Recreate, because the claim is ReadWriteOnce) that reads the Gear catalogue from the backend's
-Gearbox claim, mounted read-only, at the commit the backend has checked out (on the backend's node: that
-claim is ReadWriteOnce too), a Service, a kept PersistentVolumeClaim for the reply cache, and a
-NetworkPolicy that lets only the backend call it. The `gears_matcher` database is made by hand, owned by the
-runtime role. Two init containers are options: `gears-service-prepare database` creates the database as the
-bootstrap role, and `gears-service-prepare checkout` clones `gears-rust` at the pinned commits instead of
-reading the backend's. The keys are in
-the service's config file, `config.toml` in one pre-created Secret: the shared secret between the backend and
-this service, the LLM connector's settings and the catalogue clone token (only when it clones). The database connection
-is the backend's operator-managed Secret. `/healthz` is the liveness and startup probe; `/readyz` is the
-readiness probe and says 503 when the run store or the reply cache cannot be used, so a wrong database or
-mount is found at deploy time.
+The same workflow deploys it on demand ("Run workflow" with `deploy`): a Helm release of its own,
+`gears-matcher`, from `deploy/helm/gears-matcher/`, beside Studio's, so a Studio deployment neither needs nor
+removes it. A Deployment of one replica (Recreate, because the claim is ReadWriteOnce), a Service, a kept
+PersistentVolumeClaim for the reply cache and the catalogue clone, and a NetworkPolicy that admits only the
+backend. Init containers: `claim-owner` hands the claim to the service's uid (a Cinder claim ignores
+fsGroup); `gears-service-prepare checkout` makes a shallow clone of the corpus branch Studio shows (Dev) or
+fetches the pinned commits; `gears-service-prepare database` (optional) creates the database as the
+bootstrap role, which is otherwise made by hand, owned by the runtime role. The keys are in the service's
+config file, `config.toml` in one pre-created Secret: the shared secret between the backend and this
+service and the LLM connector's settings. The database connection is the backend's operator-managed
+Secret. `/healthz` is the liveness and startup probe; `/readyz` is the readiness probe and says 503 when the
+run store or the reply cache cannot be used, so a wrong database or mount fails the deploy.
 
 ## 4. Additional context
 

@@ -8,11 +8,13 @@ backend's bootstrap role) and creates `GEARS_MATCHER_DATABASE` owned by
 `GEARS_MATCHER_DATABASE_OWNER`, the runtime role, which cannot create one itself. The table is
 made by the service at start.
 
-`checkout` reads `GEARS_RUST_URL` and, for a private repository, `GEARS_RUST_TOKEN`, into
-`GEARS_RUST_REPO`, and then fetches the commits the catalogue is read at (`GEARS_MD_REF` and
-`GEARS_GDL_REF`, the pinned ones by default) by name: they need not be on any branch a clone
-brings. The URL and the token may come from the config file (`GEARS_MATCHER_CONFIG`). The token is
-passed to git in its environment, never on a command line or in the checkout's own config.
+`checkout` clones `GEARS_RUST_URL` (a private repository with `GEARS_RUST_TOKEN`) into
+`GEARS_RUST_REPO`, or fetches if the clone is there. With `GEARS_RUST_BRANCH` the clone is shallow
+and its HEAD is the branch's tip, which the service then reads (`GEARS_MD_REF=HEAD`); without, it
+fetches the commits the catalogue is read at (`GEARS_MD_REF` and `GEARS_GDL_REF`, the pinned ones
+by default) by name: they need not be on any branch a clone brings. The URL and the token may come
+from the config file (`GEARS_MATCHER_CONFIG`). The token is passed to git in its environment, never
+on a command line or in the checkout's own config.
 """
 
 import base64
@@ -54,31 +56,54 @@ def git_env(env: Mapping[str, str]) -> dict[str, str]:
 
 
 def prepare_checkout(env: Mapping[str, str]) -> str:
+    """Clone or fetch the catalogue repository; the service reads it with git, never its files.
+
+    With `GEARS_RUST_BRANCH`, a shallow clone of that branch whose HEAD is the branch's tip (the
+    service then reads `HEAD`). Without, a full clone and the commits it is read at
+    (`GEARS_MD_REF`/`GEARS_GDL_REF`, the pinned ones by default), fetched by name.
+    """
     repo = Path(env.get("GEARS_RUST_REPO", "/var/lib/gears-matcher/gears-rust"))
     url = env.get("GEARS_RUST_URL", "").strip() or DEFAULT_GEARS_RUST
+    branch = env.get("GEARS_RUST_BRANCH", "").strip()
     run_env = git_env(env)
-    if (repo / ".git").is_dir():
-        command = ["git", "-C", str(repo), "fetch", "--quiet", "--tags", "origin"]
-    else:
-        repo.parent.mkdir(parents=True, exist_ok=True)
-        command = ["git", "clone", "--quiet", url, str(repo)]
-    subprocess.run(command, env=run_env, check=True)  # noqa: S603 -- fixed git command
-    refs = [
-        env.get("GEARS_MD_REF") or PINNED_MD_COMMIT,
-        env.get("GEARS_GDL_REF") or PINNED_GDL_COMMIT,
-    ]
-    subprocess.run(  # noqa: S603
-        ["git", "-C", str(repo), "fetch", "--quiet", "origin", *dict.fromkeys(refs)],  # noqa: S607
-        env=run_env,
-        check=True,
-    )
-    for ref in refs:  # each one is there now, or this fails here and not at the service's start
-        subprocess.run(  # noqa: S603
-            ["git", "-C", str(repo), "cat-file", "-e", f"{ref}^{{commit}}"],  # noqa: S607
+
+    def git(*args: str) -> str:
+        return subprocess.run(  # noqa: S603 -- fixed git command, values are arguments
+            ["git", "-C", str(repo), *args],  # noqa: S607
             env=run_env,
             check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    if (repo / ".git").is_dir():
+        git("remote", "set-url", "origin", url)  # the environment may name another repository now
+    else:
+        repo.parent.mkdir(parents=True, exist_ok=True)
+        clone = ["git", "clone", "--quiet", "--no-checkout"]
+        if branch:
+            clone += ["--depth", "1", "--single-branch", "--branch", branch]
+        subprocess.run([*clone, url, str(repo)], env=run_env, check=True)  # noqa: S603
+    if branch:
+        git("fetch", "--quiet", "--depth", "1", "--update-head-ok", "origin",
+            f"+refs/heads/{branch}:refs/heads/{branch}")  # fmt: skip
+        git("symbolic-ref", "HEAD", f"refs/heads/{branch}")
+        refs = ["HEAD"]
+    else:
+        refs = list(
+            dict.fromkeys(
+                [
+                    env.get("GEARS_MD_REF") or PINNED_MD_COMMIT,
+                    env.get("GEARS_GDL_REF") or PINNED_GDL_COMMIT,
+                ]
+            )
         )
-    return f"gears-rust ready at {', '.join(r[:9] for r in dict.fromkeys(refs))}"
+        git("fetch", "--quiet", "--tags", "origin")
+        git("fetch", "--quiet", "origin", *refs)
+    # Each one is there now, or this fails here and not at the service's start.
+    commits = [git("rev-parse", "--verify", f"{ref}^{{commit}}") for ref in refs]
+    at = f"{branch} at {commits[0][:9]}" if branch else f"at {', '.join(c[:9] for c in commits)}"
+    return f"gears-rust ready {at}"
 
 
 STEPS = {"database": prepare_database, "checkout": prepare_checkout}
