@@ -573,10 +573,9 @@ ingress:
 # backend, inside the cluster only (no ingress).
 #
 # Its runs are in PostgreSQL: a database of its own (`database.name`) on the Studio cluster, reached
-# with the backend's runtime role (backend.database.existingSecret). The database is created by an
-# init container as the bootstrap role (backend.bootstrap.existingSecret, the CREATEDB one), owned by
-# the runtime role. ONE replica still: a run executes in the Pod that accepted it, and the reply cache
-# and the gears-rust checkout are on a ReadWriteOnce claim. The chart refuses more than one.
+# with the backend's runtime role (backend.database.existingSecret). The database is made by hand once,
+# owned by the runtime role (see `database.create`). ONE replica still: a run executes in the Pod that
+# accepted it, and the reply cache is on a ReadWriteOnce claim. The chart refuses more than one.
 #
 # Its keys are in its config file: the Secret `config.existingSecret`, created by the operator,
 # with one key, `config.toml`:
@@ -588,7 +587,7 @@ ingress:
 #   cmodel_id = "..."
 #   public_connector_id = "..."
 #   [gears_rust]
-#   token = "..."                    # optional: for a private gears-rust
+#   token = "..."                    # optional, catalogue.source=clone: for a private gears-rust
 #
 # The key must cover every model the matcher uses (see `gears_matcher.run.VERIFIED_MODELS`).
 # A changed Secret is read on the next Pod start: bump `config.revision` (any digest) to roll it.
@@ -607,14 +606,25 @@ matcher:
     # The connections this service holds on pg_main: counted in the budget in
     # deploy/k8s/cloudnative-pg/README.md (once, it is one replica).
     pool: 3
+    # Off: the database is made by hand once, as a role that may create one, owned by the runtime role
+    # (the service makes its table at start, as that role):
+    #   CREATE DATABASE gears_matcher OWNER studio;
+    # On: an init container does it, as the bootstrap role (`bootstrapSecret`).
+    create: false
     # Empty: backend.bootstrap.existingSecret, else backend.database.existingSecret.
     bootstrapSecret: ""
-  # The Gear catalogue is read from a gears-rust checkout at pinned commits. An init container clones
-  # it onto the claim (and fetches on a restart), with the token from the config file if it has one.
+  # Where the Gear catalogue (docs/GEARS.md + gear.gdl) is read from, once, at start:
+  # - `backend`: the backend's own Gearbox corpus checkout (backend.gearbox.corpusUrl/corpusRef), its
+  #   claim mounted read-only, at the commit the backend has checked out: the catalogue Studio shows.
+  #   Needs backend.gearbox.enabled and .persistence.enabled. The claim is ReadWriteOnce, so the Pod
+  #   runs on the backend's node. No clone, no token.
+  # - `clone`: an init container clones `gearsRustUrl` onto this Pod's claim and reads it at the
+  #   commits the matcher pins (gears_matcher.catalogue), with the token from the config file if any.
   catalogue:
+    source: backend
     gearsRustUrl: "https://github.com/constructorfabric/gears-rust.git"
-  # The model-reply cache and the checkout. Kept with the release: the cached replies are paid
-  # for. `size` is generous for replies; the checkout is a few hundred MiB.
+  # The model-reply cache (and, with catalogue.source=clone, the checkout). Kept with the release: the
+  # cached replies are paid for.
   persistence:
     size: 10Gi
     storageClass: ""       # empty leaves it to the cluster default
@@ -626,8 +636,8 @@ matcher:
   resources:
     requests: { cpu: 250m, memory: 512Mi }
     limits: { memory: 2Gi }
-  # The two init containers (create the database, clone gears-rust). Explicit, so they do not take
-  # the namespace LimitRange default.
+  # The init containers that create the database and clone gears-rust, when they run. Explicit, so
+  # they do not take the namespace LimitRange default.
   initResources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 500m, memory: 512Mi }

@@ -32,10 +32,18 @@ the cluster, to run the verified matcher on a specification (ADR-0071,
 [`gears-matcher/`](../gears-matcher/README.md)).
 
 - **Runs** are in PostgreSQL, in a database of its own (`matcher.database.name`, `gears_matcher`) on the
-  Studio cluster, as the backend's runtime role (`backend.database.existingSecret`). An init container
-  creates the database if it is missing, as the bootstrap role (`backend.bootstrap.existingSecret`),
-  owned by the runtime role; the service creates its table at start. Its pool (`matcher.database.pool`,
-  3) is counted once in [the connection budget](k8s/cloudnative-pg/README.md).
+  Studio cluster, as the backend's runtime role (`backend.database.existingSecret`). The database is
+  made by hand once, owned by the runtime role, which cannot create one itself; the service creates its
+  table at start:
+
+  ```bash
+  kubectl -n studio-dev exec studio-postgres-1 -c postgres -- \
+    psql -c 'CREATE DATABASE gears_matcher OWNER studio;'
+  ```
+
+  `matcher.database.create: true` has an init container do it instead, as the bootstrap role
+  (`backend.bootstrap.existingSecret`). Its pool (`matcher.database.pool`, 3) is counted once in
+  [the connection budget](k8s/cloudnative-pg/README.md).
 - **Keys** are in its config file: the operator creates one Secret, named by
   `matcher.config.existingSecret`, with one key, `config.toml`:
 
@@ -49,7 +57,7 @@ the cluster, to run the verified matcher on a specification (ADR-0071,
   public_connector_id = "..."
 
   [gears_rust]
-  token = "..."                  # optional: a token for cloning a private gears-rust
+  token = "..."                  # optional, catalogue.source=clone: for cloning a private gears-rust
   ```
 
   ```bash
@@ -57,9 +65,16 @@ the cluster, to run the verified matcher on a specification (ADR-0071,
   ```
 
   A changed Secret is read on the next start; bump `matcher.config.revision` to roll the Pod.
+- **The Gear catalogue** is the backend's own: with `matcher.catalogue.source: backend` (the default)
+  the Pod mounts the backend's Gearbox claim read-only and reads the corpus checkout there
+  (`backend.gearbox.corpusUrl` at `corpusRef`), at the commit the backend has checked out, once at
+  start: the catalogue Studio shows, no clone and no token. It needs `backend.gearbox.persistence`. The
+  claim is ReadWriteOnce, so the matcher is scheduled on the backend's node and the backend prefers the
+  matcher's node in turn; if a backend Pod still lands elsewhere it waits on "Multi-Attach" until the
+  matcher Pod is deleted (it is then scheduled beside the new backend). `source: clone` clones
+  `matcher.catalogue.gearsRustUrl` onto the matcher's own claim instead, read at the pinned commits.
 - **One replica** (the chart refuses more): a run executes in the Pod that accepted it, and the reply
-  cache and the `gears-rust` checkout are on a ReadWriteOnce claim kept with the release. A second init
-  container clones `gears-rust` onto it, at the commits the matcher pins.
+  cache is on a ReadWriteOnce claim kept with the release.
 
 `/readyz` says 503 until the run store and the reply cache can be used, so a wrong database or mount
 shows at deploy time. The per-run call bound (`matcher.limits.maxCalls`, 400) is the one cost limit

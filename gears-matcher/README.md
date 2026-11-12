@@ -97,8 +97,9 @@ docker run --rm -p 8080:8080 \
 ```
 
 The image needs a `gears-rust` checkout and a writable reply cache; `/readyz` says 503 until the cache can
-be written. In a cluster the chart (`deploy/helm/studio-web/templates/matcher/`) clones the checkout onto a
-claim, creates the database and mounts the config file from one Secret; see `deploy/README.md`. A mounted checkout owned by another user needs
+be written. In a cluster the chart (`deploy/helm/studio-web/templates/matcher/`) mounts the backend's own
+corpus checkout read-only (or clones one onto the matcher's claim) and mounts the config file from one
+Secret; see `deploy/README.md`. A mounted checkout owned by another user needs
 `-e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*'` (git refuses it
 otherwise), which a checkout cloned by the Pod itself does not.
 

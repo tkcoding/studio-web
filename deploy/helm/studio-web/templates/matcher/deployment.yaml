@@ -1,11 +1,22 @@
 {{- if .Values.matcher.enabled }}
 {{- if ne (int .Values.matcher.replicas) 1 }}
-{{- fail "matcher.replicas must be 1: runs execute inside the Pod that accepted them, and the reply cache and the gears-rust checkout are on a ReadWriteOnce claim (ADR-0071)" }}
+{{- fail "matcher.replicas must be 1: runs execute inside the Pod that accepted them, and the reply cache is on a ReadWriteOnce claim (ADR-0071)" }}
 {{- end }}
 {{- $db := .Values.backend.database }}
 {{- $boot := .Values.backend.bootstrap }}
 {{- $bootSecret := .Values.matcher.database.bootstrapSecret | default $boot.existingSecret | default $db.existingSecret }}
 {{- $bootKeys := ternary $db.keys $boot.keys (eq $bootSecret $db.existingSecret) }}
+{{- $source := .Values.matcher.catalogue.source }}
+{{- if not (has $source (list "backend" "clone")) }}
+{{- fail (printf "matcher.catalogue.source must be backend or clone, not %q" $source) }}
+{{- end }}
+{{- $gb := .Values.backend.gearbox }}
+{{- $fromBackend := eq $source "backend" }}
+{{- if and $fromBackend (not (and $gb.enabled $gb.persistence.enabled)) }}
+{{- fail "matcher.catalogue.source=backend reads the backend's corpus checkout on its claim: it needs backend.gearbox.enabled and backend.gearbox.persistence.enabled (or set matcher.catalogue.source=clone)" }}
+{{- end }}
+{{- $corpusId := $gb.corpusId | default (base (trimSuffix ".git" $gb.corpusUrl)) }}
+{{- $corpusDir := printf "/var/lib/gears-corpus/gearbox-roots/gearbox/%s" $corpusId }}
 {{- /*
   The gears-matcher service. One replica, and `Recreate`: the claim is ReadWriteOnce, so the old Pod has
   to let go of it before the new one starts. A run the restart interrupts is queued again when the new
@@ -17,10 +28,19 @@
   PostgreSQL cluster, reached with the backend's runtime role (the `PG*` variables, from the
   operator-managed Secret, so a password rotation needs no edit here).
 
-  Two init containers, both the same image:
-  - `database` creates the database if it is missing, as the bootstrap role (CREATEDB), owned by the
-    runtime role, which cannot create one itself. The table is made by the service at start.
-  - `checkout` clones (or fetches) gears-rust onto the claim, with the token from the config file.
+  The Gear catalogue (`matcher.catalogue.source`):
+  - `backend`: the backend's own Gearbox corpus checkout, its claim mounted read-only, read at the
+    commit the backend has checked out (HEAD), so the matcher sees the catalogue Studio shows. The claim
+    is ReadWriteOnce, so this Pod is scheduled on the backend's node, and the backend prefers this
+    Pod's node in turn (backend/deployment.yaml). The catalogue is read once, at start.
+  - `clone`: an init container clones gears-rust onto this Pod's own claim, read at the pinned commits.
+
+  Init containers, all the same image:
+  - `claim-owner` hands the claim's mount point to uid 10001: a Cinder claim ignores fsGroup (#854).
+  - `database` (matcher.database.create) creates the database if it is missing, as the bootstrap role
+    (CREATEDB), owned by the runtime role, which cannot create one itself. Off, it is made by hand.
+    The table is made by the service at start.
+  - `checkout` (source `clone`) clones (or fetches) gears-rust, with the token from the config file.
 */}}
 apiVersion: apps/v1
 kind: Deployment
@@ -47,6 +67,16 @@ spec:
     spec:
       serviceAccountName: {{ include "studio-web.serviceAccountName" . }}
       automountServiceAccountToken: false
+      {{- if $fromBackend }}
+      # The backend's corpus claim is ReadWriteOnce: it can be mounted by Pods on one node only.
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels: {{- include "studio-web.selectorLabels" . | nindent 18 }}
+                  app.kubernetes.io/component: backend
+      {{- end }}
       terminationGracePeriodSeconds: 30
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
@@ -56,6 +86,22 @@ spec:
         # The image runs as uid 10001; the claim is made writable for it.
         fsGroup: 10001
       initContainers:
+        - name: claim-owner
+          image: "{{ .Values.matcher.image.repository }}:{{ required "matcher.image.tag is required (immutable, fixed at chart publication)" .Values.matcher.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"], add: ["CHOWN"] }
+            runAsNonRoot: false
+            runAsUser: 0
+            seccompProfile: { type: RuntimeDefault }
+          command: ["chown", "10001:10001", "/var/lib/gears-matcher"]
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/gears-matcher }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+        {{- if .Values.matcher.database.create }}
         - name: database
           image: "{{ .Values.matcher.image.repository }}:{{ required "matcher.image.tag is required (immutable, fixed at chart publication)" .Values.matcher.image.tag }}"
           imagePullPolicy: IfNotPresent
@@ -78,6 +124,8 @@ spec:
             - name: PGDATABASE
               valueFrom: { secretKeyRef: { name: {{ $bootSecret }}, key: {{ $bootKeys.dbname }} } }
           resources: {{- toYaml .Values.matcher.initResources | nindent 12 }}
+        {{- end }}
+        {{- if not $fromBackend }}
         - name: checkout
           image: "{{ .Values.matcher.image.repository }}:{{ .Values.matcher.image.tag }}"
           imagePullPolicy: IfNotPresent
@@ -93,6 +141,7 @@ spec:
             - { name: data, mountPath: /var/lib/gears-matcher }
             - { name: config, mountPath: /etc/gears-matcher, readOnly: true }
           resources: {{- toYaml .Values.matcher.initResources | nindent 12 }}
+        {{- end }}
       containers:
         - name: gears-matcher
           image: "{{ .Values.matcher.image.repository }}:{{ required "matcher.image.tag is required (immutable, fixed at chart publication)" .Values.matcher.image.tag }}"
@@ -127,9 +176,29 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ $db.existingSecret }}, key: {{ $db.keys.password }} } }
             - name: PGDATABASE
               value: {{ .Values.matcher.database.name | quote }}
+            {{- if $fromBackend }}
+            # The backend's checkout, at the commit it has checked out. It is shallow, so the pinned
+            # commits are not in it. The files are the backend's (uid 1000): git reads them only when
+            # told the directory is safe.
+            - name: GEARS_RUST_REPO
+              value: {{ $corpusDir | quote }}
+            - name: GEARS_MD_REF
+              value: HEAD
+            - name: GEARS_GDL_REF
+              value: HEAD
+            - name: GIT_CONFIG_COUNT
+              value: "1"
+            - name: GIT_CONFIG_KEY_0
+              value: safe.directory
+            - name: GIT_CONFIG_VALUE_0
+              value: {{ $corpusDir | quote }}
+            {{- end }}
           volumeMounts:
             - { name: data, mountPath: /var/lib/gears-matcher }
             - { name: config, mountPath: /etc/gears-matcher, readOnly: true }
+            {{- if $fromBackend }}
+            - { name: corpus, mountPath: /var/lib/gears-corpus, readOnly: true }
+            {{- end }}
           # Starting reads the catalogue and builds the model clients: seconds, but the first start after a
           # clone is slower, so the budget is generous. Only a failure past it is a crash loop.
           startupProbe:
@@ -156,4 +225,10 @@ spec:
             secretName: {{ required "matcher.config.existingSecret is required" .Values.matcher.config.existingSecret }}
             items: [{ key: config.toml, path: config.toml }]
             defaultMode: 0440
+        {{- if $fromBackend }}
+        - name: corpus
+          persistentVolumeClaim:
+            claimName: {{ include "studio-web.fullname" . }}-gearbox
+            readOnly: true
+        {{- end }}
 {{- end }}

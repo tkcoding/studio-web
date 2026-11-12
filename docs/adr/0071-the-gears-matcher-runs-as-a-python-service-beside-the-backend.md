@@ -77,15 +77,22 @@ Option 3.
 5. **Run storage: the cluster's PostgreSQL** (decided in review, 2026-11-12). Runs, their idempotency keys
    and their reports are kept in a database of the service's own, `gears_matcher`, on the Studio PostgreSQL
    cluster, as the backend's runtime role, following `studio-backend/AGENTS.md` ("PostgreSQL only"; no
-   SQLite and no SQLite-backed tests). The runtime role cannot create databases, so an init container
-   creates it as the bootstrap role, as the backend's bootstrap hook does for the gears; the service
-   creates its one table at start. Its pool (3) is counted in the connection budget. It is still one
-   replica: a run executes in the Pod that accepted it, and the model-reply cache and the `gears-rust`
-   checkout are on a ReadWriteOnce claim.
+   SQLite and no SQLite-backed tests). The runtime role cannot create databases, so the database is
+   made by hand once, owned by it (an init container can do it as the bootstrap role instead); the
+   service creates its one table at start. Its pool (3) is counted in the connection budget. It is still
+   one replica: a run executes in the Pod that accepted it, and the model-reply cache is on a
+   ReadWriteOnce claim.
+   **The catalogue is the backend's checkout** (decided in review, 2026-11-12): the matcher mounts the
+   backend's Gearbox claim read-only and reads the corpus there at the commit the backend has checked
+   out, so it matches against the catalogue Studio shows and clones nothing. That commit moves with the
+   backend's corpus branch, not with a pin; each report names the commits it was read at. The claim is
+   ReadWriteOnce, so the two Pods share a node. Cloning `gears-rust` at the pinned commits remains a
+   chart option.
 6. **LLM access and keys.** A dedicated key owned by the studio team, used through the LLM connector, not
    through `studio-llm-proxy`. **The keys are in the service's config file** (`config.toml`, decided in
    review, 2026-11-12): the shared secret between the two services, the connector's settings and the
-   catalogue clone token, in one pre-created Secret mounted read-only. The database connection is not in
+   catalogue clone token (only when it clones), in one pre-created Secret mounted read-only. For now
+   there is one key, and it is the operator's Secret. The database connection is not in
    it: it comes from the operator-managed Secret the backend uses, so a password rotation needs no edit.
    The service never writes document text to an error, and keeps the text of a document only until its
    run ends.

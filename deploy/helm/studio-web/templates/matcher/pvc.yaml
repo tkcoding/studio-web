@@ -1,6 +1,6 @@
 {{- if .Values.matcher.enabled }}
 {{- /*
-  The gears-matcher's model-reply cache and its gears-rust checkout. The runs and their idempotency
+  The gears-matcher's model-reply cache (and its gears-rust clone, with catalogue.source=clone). The runs and their idempotency
   keys are in PostgreSQL, not here.
 
   Kept with the release (helm.sh/resource-policy: keep): the cached replies were paid for, and a run

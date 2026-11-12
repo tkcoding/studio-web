@@ -50,6 +50,19 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "studio-web.serviceAccountName" . }}
+      {{- if and .Values.matcher.enabled (eq .Values.matcher.catalogue.source "backend") }}
+      # The gears-matcher mounts this Pod's Gearbox claim (ReadWriteOnce) and runs on its node. A new
+      # backend Pod on another node could not attach the claim while the matcher holds it there.
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: {{- include "studio-web.selectorLabels" . | nindent 20 }}
+                    app.kubernetes.io/component: gears-matcher
+      {{- end }}
       # Long enough for the drain below plus whatever is still in flight when
       # SIGTERM lands. It is NOT sized for the long-lived streams (SSE, the IDE
       # WebSocket): those are minutes to an hour, and holding a rollout for them
