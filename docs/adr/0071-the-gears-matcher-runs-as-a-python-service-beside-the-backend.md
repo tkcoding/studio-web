@@ -4,7 +4,7 @@ status: proposed
 date: 2026-11-10
 ---
 
-# ADR-0069: The gears-matcher runs as a Python service beside the backend, built and deployed with it
+# ADR-0071: The gears-matcher runs as a Python service beside the backend, built and deployed with it
 
 **ID**: `cpt-studio-adr-gears-matcher-service`
 

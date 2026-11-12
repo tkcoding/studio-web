@@ -9,7 +9,7 @@ owner: studio-team
 - [ ] `p1` - **ID**: `cpt-studio-design-gears-matcher`
 
 The design of the gears-matcher service. The decision to build it this way is
-[ADR-0069](../adr/0069-the-gears-matcher-runs-as-a-python-service-beside-the-backend.md). The code is
+[ADR-0071](../adr/0071-the-gears-matcher-runs-as-a-python-service-beside-the-backend.md). The code is
 [`gears-matcher/`](../../gears-matcher/), and its contract is
 [`matcher-service.openapi.yaml`](../../gears-matcher/schemas/service/matcher-service.openapi.yaml).
 It sits beside `studio-spec-mapping` ([design](studio-spec-mapping.md)), which matches by words and stays
@@ -77,7 +77,7 @@ resend with the same key.
 - [ ] `p2` - **ID**: `cpt-studio-constraint-gears-matcher-store`
 
 Runs, keys and reports are kept in SQLite on a persistent volume in the cluster, behind a store interface,
-for one replica (ADR-0069 section 5). This departs from the backend's PostgreSQL rule, and where the data
+for one replica (ADR-0071 section 5). This departs from the backend's PostgreSQL rule, and where the data
 should live is an open question in the ADR.
 
 ## 3. Technical Architecture
@@ -104,9 +104,9 @@ secret between the backend and this service. The backend calls it inside the clu
 
 Not built yet: the service itself (the contract and the library entry exist), the image, the chart and the
 delivery workflow, the backend's client, the compare view and the pilot tracking. Each is a later pull
-request (ADR-0069, phases).
+request (ADR-0071, phases).
 
 ## 5. Traceability
 
-- **ADRs**: [ADR-0069](../adr/0069-the-gears-matcher-runs-as-a-python-service-beside-the-backend.md)
+- **ADRs**: [ADR-0071](../adr/0071-the-gears-matcher-runs-as-a-python-service-beside-the-backend.md)
 - **Related design**: [studio-spec-mapping](studio-spec-mapping.md)
