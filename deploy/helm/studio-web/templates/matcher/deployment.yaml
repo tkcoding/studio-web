@@ -1,14 +1,26 @@
 {{- if .Values.matcher.enabled }}
 {{- if ne (int .Values.matcher.replicas) 1 }}
-{{- fail "matcher.replicas must be 1: the run store is SQLite on a ReadWriteOnce claim, so a second Pod could not read the first one's runs (ADR-0071)" }}
+{{- fail "matcher.replicas must be 1: runs execute inside the Pod that accepted them, and the reply cache and the gears-rust checkout are on a ReadWriteOnce claim (ADR-0071)" }}
 {{- end }}
+{{- $db := .Values.backend.database }}
+{{- $boot := .Values.backend.bootstrap }}
+{{- $bootSecret := .Values.matcher.database.bootstrapSecret | default $boot.existingSecret | default $db.existingSecret }}
+{{- $bootKeys := ternary $db.keys $boot.keys (eq $bootSecret $db.existingSecret) }}
 {{- /*
   The gears-matcher service. One replica, and `Recreate`: the claim is ReadWriteOnce, so the old Pod has
   to let go of it before the new one starts. A run the restart interrupts is queued again when the new
-  Pod starts, and its model replies are cached, so a rollout costs little.
+  Pod starts (the runs are in PostgreSQL), and its model replies are cached on the claim, so a rollout
+  costs little.
 
-  The init container clones (or fetches) gears-rust onto the claim: the catalogue is read from it, at
-  pinned commits, with `git show`. The same image runs it (it has git).
+  Its keys are in its config file: one Secret (`matcher.config.existingSecret`), key `config.toml`,
+  mounted read-only and named by GEARS_MATCHER_CONFIG. The runs are in its own database on the Studio
+  PostgreSQL cluster, reached with the backend's runtime role (the `PG*` variables, from the
+  operator-managed Secret, so a password rotation needs no edit here).
+
+  Two init containers, both the same image:
+  - `database` creates the database if it is missing, as the bootstrap role (CREATEDB), owned by the
+    runtime role, which cannot create one itself. The table is made by the service at start.
+  - `checkout` clones (or fetches) gears-rust onto the claim, with the token from the config file.
 */}}
 apiVersion: apps/v1
 kind: Deployment
@@ -27,8 +39,14 @@ spec:
     metadata:
       labels: {{- include "studio-web.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: gears-matcher
+      {{- with .Values.matcher.config.revision }}
+      annotations:
+        # A changed config Secret rolls the Pod when the environment bumps this digest.
+        checksum/config: {{ . | quote }}
+      {{- end }}
     spec:
       serviceAccountName: {{ include "studio-web.serviceAccountName" . }}
+      automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
@@ -38,32 +56,43 @@ spec:
         # The image runs as uid 10001; the claim is made writable for it.
         fsGroup: 10001
       initContainers:
-        - name: clone-gears-rust
+        - name: database
           image: "{{ .Values.matcher.image.repository }}:{{ required "matcher.image.tag is required (immutable, fixed at chart publication)" .Values.matcher.image.tag }}"
           imagePullPolicy: IfNotPresent
           securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
-          command: ["sh", "-eu", "-c"]
-          args:
-            - |
-              repo=/var/lib/gears-matcher/gears-rust
-              if [ -n "${GEARS_RUST_TOKEN:-}" ]; then
-                auth=$(printf 'x-access-token:%s' "$GEARS_RUST_TOKEN" | base64 -w0)
-                export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraheader
-                export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
-              fi
-              if [ -d "$repo/.git" ]; then
-                git -C "$repo" fetch --quiet --tags origin
-              else
-                git clone --quiet "$GEARS_RUST_URL" "$repo"
-              fi
-              git -C "$repo" log -1 --format='gears-rust at %h'
+          command: ["gears-service-prepare"]
+          args: ["database"]
           env:
+            - name: GEARS_MATCHER_DATABASE
+              value: {{ .Values.matcher.database.name | quote }}
+            - name: GEARS_MATCHER_DATABASE_OWNER
+              valueFrom: { secretKeyRef: { name: {{ $db.existingSecret }}, key: {{ $db.keys.user }} } }
+            - name: PGHOST
+              valueFrom: { secretKeyRef: { name: {{ $bootSecret }}, key: {{ $bootKeys.host }} } }
+            - name: PGPORT
+              valueFrom: { secretKeyRef: { name: {{ $bootSecret }}, key: {{ $bootKeys.port }} } }
+            - name: PGUSER
+              valueFrom: { secretKeyRef: { name: {{ $bootSecret }}, key: {{ $bootKeys.user }} } }
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: {{ $bootSecret }}, key: {{ $bootKeys.password }} } }
+            - name: PGDATABASE
+              valueFrom: { secretKeyRef: { name: {{ $bootSecret }}, key: {{ $bootKeys.dbname }} } }
+          resources: {{- toYaml .Values.matcher.initResources | nindent 12 }}
+        - name: checkout
+          image: "{{ .Values.matcher.image.repository }}:{{ .Values.matcher.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          command: ["gears-service-prepare"]
+          args: ["checkout"]
+          env:
+            - name: GEARS_MATCHER_CONFIG
+              value: /etc/gears-matcher/config.toml
             - name: GEARS_RUST_URL
               value: {{ .Values.matcher.catalogue.gearsRustUrl | quote }}
-            - name: GEARS_RUST_TOKEN
-              valueFrom: { secretKeyRef: { name: {{ .Values.matcher.secrets.existingSecret }}, key: gears-rust-token, optional: true } }
           volumeMounts:
             - { name: data, mountPath: /var/lib/gears-matcher }
+            - { name: config, mountPath: /etc/gears-matcher, readOnly: true }
+          resources: {{- toYaml .Values.matcher.initResources | nindent 12 }}
       containers:
         - name: gears-matcher
           image: "{{ .Values.matcher.image.repository }}:{{ required "matcher.image.tag is required (immutable, fixed at chart publication)" .Values.matcher.image.tag }}"
@@ -83,18 +112,24 @@ spec:
             - name: GEARS_MATCHER_MAX_CONCURRENT_RUNS
               value: {{ . | quote }}
             {{- end }}
-            - name: GEARS_MATCHER_SECRET
-              valueFrom: { secretKeyRef: { name: {{ .Values.matcher.secrets.existingSecret }}, key: shared-secret } }
-            - name: LLM_CONNECTORS_ACCESS_KEY
-              valueFrom: { secretKeyRef: { name: {{ .Values.matcher.secrets.existingSecret }}, key: llm-connectors-access-key } }
-            - name: CONSTRUCTOR_STAND
-              valueFrom: { secretKeyRef: { name: {{ .Values.matcher.secrets.existingSecret }}, key: constructor-stand } }
-            - name: CONSTRUCTOR_CMODEL_ID
-              valueFrom: { secretKeyRef: { name: {{ .Values.matcher.secrets.existingSecret }}, key: constructor-cmodel-id } }
-            - name: CONSTRUCTOR_PUBLIC_CONNECTOR_ID
-              valueFrom: { secretKeyRef: { name: {{ .Values.matcher.secrets.existingSecret }}, key: constructor-public-connector-id } }
+            - name: GEARS_MATCHER_DB_POOL
+              value: {{ .Values.matcher.database.pool | quote }}
+            - name: GEARS_MATCHER_CONFIG
+              value: /etc/gears-matcher/config.toml
+            # The run store: the matcher's own database, as the backend's runtime role.
+            - name: PGHOST
+              valueFrom: { secretKeyRef: { name: {{ $db.existingSecret }}, key: {{ $db.keys.host }} } }
+            - name: PGPORT
+              valueFrom: { secretKeyRef: { name: {{ $db.existingSecret }}, key: {{ $db.keys.port }} } }
+            - name: PGUSER
+              valueFrom: { secretKeyRef: { name: {{ $db.existingSecret }}, key: {{ $db.keys.user }} } }
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: {{ $db.existingSecret }}, key: {{ $db.keys.password }} } }
+            - name: PGDATABASE
+              value: {{ .Values.matcher.database.name | quote }}
           volumeMounts:
             - { name: data, mountPath: /var/lib/gears-matcher }
+            - { name: config, mountPath: /etc/gears-matcher, readOnly: true }
           # Starting reads the catalogue and builds the model clients: seconds, but the first start after a
           # clone is slower, so the budget is generous. Only a failure past it is a crash loop.
           startupProbe:
@@ -102,7 +137,7 @@ spec:
             periodSeconds: 5
             failureThreshold: 36
           # Alive while the process answers; not ready (no traffic) when the reply cache or the run store
-          # cannot be used, so a wrong mount is found at deploy time and not by the first run.
+          # cannot be used, so a wrong mount or database is found at deploy time and not by the first run.
           livenessProbe:
             httpGet: { path: /healthz, port: http }
             periodSeconds: 20
@@ -116,4 +151,9 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "studio-web.fullname" . }}-gears-matcher
+        - name: config
+          secret:
+            secretName: {{ required "matcher.config.existingSecret is required" .Values.matcher.config.existingSecret }}
+            items: [{ key: config.toml, path: config.toml }]
+            defaultMode: 0440
 {{- end }}

@@ -78,7 +78,7 @@ def gateway_failing(seen: list[httpx2.Request]) -> Callable[..., Any]:
 
 
 def run_through_the_service(
-    catalogue: Catalogue, tmp_path: Path, handler: Callable[..., Any]
+    catalogue: Catalogue, tmp_path: Path, pg_url: str, handler: Callable[..., Any]
 ) -> tuple[dict[str, Any], RunManager, RealRunner]:
     http = httpx2.Client(transport=httpx2.MockTransport(handler))
     runner = RealRunner(
@@ -88,7 +88,7 @@ def run_through_the_service(
         tmp_path / "data" / "work",
     )
     limits = Limits(max_concurrent_runs=2)
-    manager = RunManager(RunStore(tmp_path / "data" / "runs.sqlite"), runner, limits, workers=2)
+    manager = RunManager(RunStore(pg_url), runner, limits, workers=2)
     body = {
         "product": "todo-app",
         "documents": [doc("specs/PRD.md", PRD).__dict__],
@@ -106,6 +106,7 @@ def run_through_the_service(
 def everything_the_service_keeps_or_says(
     final: dict[str, Any], manager: RunManager, runner: RealRunner, tmp_path: Path, log: str
 ) -> dict[str, bytes | str]:
+    store = manager.store
     found: dict[str, bytes | str] = {
         "the run": json.dumps(final),
         "info": json.dumps(runner.info()),
@@ -116,6 +117,9 @@ def everything_the_service_keeps_or_says(
     for path in sorted((tmp_path / "data").rglob("*")):
         if path.is_file():
             found[f"the file {path.relative_to(tmp_path)}"] = path.read_bytes()
+    with store.pool.connection() as db:
+        rows = db.execute("SELECT * FROM runs").fetchall()
+    found["the run store"] = json.dumps(rows, default=str)
     return found
 
 
@@ -126,30 +130,30 @@ def assert_no_key(found: dict[str, bytes | str]) -> None:
 
 
 def test_a_run_uses_the_key_in_the_header_and_keeps_it_nowhere(
-    fixture_catalogue: Catalogue, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    fixture_catalogue: Catalogue, tmp_path: Path, pg_url: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     seen: list[httpx2.Request] = []
     model = FakeModel(coded(fixture_catalogue))
     with caplog.at_level(logging.DEBUG):
         final, manager, runner = run_through_the_service(
-            fixture_catalogue, tmp_path, gateway_answering(model, seen)
+            fixture_catalogue, tmp_path, pg_url, gateway_answering(model, seen)
         )
     assert final["state"] in ("succeeded", "partial")
     assert seen, "the gateway was called"
     assert all(r.headers["x-model-accesskey"] == KEY for r in seen)
     kept = everything_the_service_keeps_or_says(final, manager, runner, tmp_path, caplog.text)
     assert any(name.startswith("the file data/cache") for name in kept), "the cache was written"
-    assert any(name.endswith("runs.sqlite") for name in kept)
+    assert '"state"' in str(kept["the run store"]), "the run store was read"
     assert_no_key(kept)
 
 
 def test_a_gateway_that_echoes_the_key_in_an_error_leaves_it_nowhere(
-    fixture_catalogue: Catalogue, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    fixture_catalogue: Catalogue, tmp_path: Path, pg_url: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     seen: list[httpx2.Request] = []
     with caplog.at_level(logging.DEBUG):
         final, manager, runner = run_through_the_service(
-            fixture_catalogue, tmp_path, gateway_failing(seen)
+            fixture_catalogue, tmp_path, pg_url, gateway_failing(seen)
         )
     assert seen, "the gateway was called"
     assert final["state"] != "succeeded"

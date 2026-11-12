@@ -1,11 +1,11 @@
 """The service's own behaviour that the contract does not state: what is kept, what survives a
-restart, what a caller never sees. On the fake runner and a real SQLite file; no model is called."""
+restart, what a caller never sees. On the fake runner and a real PostgreSQL database; no model is
+called."""
 
-import sqlite3
 import time
-from pathlib import Path
 from typing import Any
 
+import psycopg
 import pytest
 from service_fakes import FakeRunner, get, serve_app
 
@@ -30,8 +30,8 @@ def body(product: str = "todo-app", **options: Any) -> dict[str, Any]:
     return out
 
 
-def manager(tmp_path: Path, step: float = 0.01, **limits: Any) -> tuple[RunManager, RunStore]:
-    store = RunStore(tmp_path / "runs.sqlite")
+def manager(pg_url: str, step: float = 0.01, **limits: Any) -> tuple[RunManager, RunStore]:
+    store = RunStore(pg_url)
     return RunManager(store, FakeRunner(step), Limits(**limits)), store
 
 
@@ -50,8 +50,8 @@ def wait(m: RunManager, run_id: str, timeout: float = 15) -> dict[str, Any]:
     pytest.fail(f"run {run_id} did not end")
 
 
-def test_document_text_is_kept_only_until_the_run_ends(tmp_path: Path) -> None:
-    m, store = manager(tmp_path, step=0.2)
+def test_document_text_is_kept_only_until_the_run_ends(pg_url: str) -> None:
+    m, store = manager(pg_url, step=0.2)
     run = submit(m, "k1")
     held = store.get(run["id"])
     assert held is not None
@@ -66,8 +66,8 @@ def test_document_text_is_kept_only_until_the_run_ends(tmp_path: Path) -> None:
     m.shutdown()
 
 
-def test_a_run_a_restart_interrupted_is_run_again(tmp_path: Path) -> None:
-    m1, store = manager(tmp_path)
+def test_a_run_a_restart_interrupted_is_run_again(pg_url: str) -> None:
+    m1, store = manager(pg_url)
     payload = body()
     request = parse_request(payload, Limits())
     store.create("interrupted", "k-restart", body_digest(payload), request.to_json(), time.time())
@@ -75,7 +75,7 @@ def test_a_run_a_restart_interrupted_is_run_again(tmp_path: Path) -> None:
         "interrupted", state="running", progress={"requirements_total": 8, "requirements_done": 3}
     )
     m1.shutdown()
-    m2 = RunManager(RunStore(tmp_path / "runs.sqlite"), FakeRunner(0.01), Limits())
+    m2 = RunManager(RunStore(pg_url), FakeRunner(0.01), Limits())
     assert m2.recover() == 1
     assert wait(m2, "interrupted")["state"] == "succeeded"
     again = submit(m2, "k-restart")
@@ -83,8 +83,8 @@ def test_a_run_a_restart_interrupted_is_run_again(tmp_path: Path) -> None:
     m2.shutdown()
 
 
-def test_a_cancelling_run_a_restart_interrupted_ends_cancelled(tmp_path: Path) -> None:
-    m, store = manager(tmp_path)
+def test_a_cancelling_run_a_restart_interrupted_ends_cancelled(pg_url: str) -> None:
+    m, store = manager(pg_url)
     request = parse_request(body(), Limits())
     store.create("c1", "k-c", "digest", request.to_json(), time.time())
     store.update("c1", state="cancelling")
@@ -97,8 +97,8 @@ def test_a_cancelling_run_a_restart_interrupted_ends_cancelled(tmp_path: Path) -
     m.shutdown()
 
 
-def test_a_bug_in_a_run_never_reaches_the_caller(tmp_path: Path) -> None:
-    m, _ = manager(tmp_path)
+def test_a_bug_in_a_run_never_reaches_the_caller(pg_url: str) -> None:
+    m, _ = manager(pg_url)
     payload = body("crash")
     crashed = m.submit("k-crash", body_digest(payload), payload)
     done = wait(m, crashed["id"])
@@ -108,8 +108,8 @@ def test_a_bug_in_a_run_never_reaches_the_caller(tmp_path: Path) -> None:
     m.shutdown()
 
 
-def test_cancelling_a_queued_run_ends_it_without_running(tmp_path: Path) -> None:
-    store = RunStore(tmp_path / "runs.sqlite")
+def test_cancelling_a_queued_run_ends_it_without_running(pg_url: str) -> None:
+    store = RunStore(pg_url)
     runner = FakeRunner(5.0)
     m = RunManager(store, runner, Limits(), workers=1)
     first = submit(m, "k-a")  # occupies the only worker
@@ -122,10 +122,10 @@ def test_cancelling_a_queued_run_ends_it_without_running(tmp_path: Path) -> None
     m.shutdown()
 
 
-def test_the_run_store_refuses_what_it_does_not_know(tmp_path: Path) -> None:
-    store = RunStore(tmp_path / "runs.sqlite")
+def test_the_run_store_refuses_what_it_does_not_know(pg_url: str) -> None:
+    store = RunStore(pg_url)
     store.create("r1", "key", "d", {"x": 1}, 1.0)
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(psycopg.errors.UniqueViolation):
         store.create("r2", "key", "d", {"x": 1}, 2.0)  # the key is unique
     with pytest.raises(ValueError, match="not a run column"):
         store.update("r1", idem_key="other")
@@ -141,25 +141,21 @@ def test_the_request_round_trips_through_the_store() -> None:
     assert RunRequest.from_json(request.to_json()) == request
 
 
-def test_the_readiness_probe_says_503_when_the_store_cannot_be_read(tmp_path: Path) -> None:
-    m, store = manager(tmp_path)
+def test_the_readiness_probe_says_503_when_the_store_cannot_be_read(pg_url: str) -> None:
+    m, store = manager(pg_url)
     app = create_app(m, "s", FakeRunner().info(), Limits())
     with serve_app(app) as base:
         assert get(f"{base}/readyz") == (200, {"status": "ready"})
-        store.path.unlink()
-        store.path.parent.chmod(0o500)
-        try:
-            status, got = get(f"{base}/readyz")
-        finally:
-            store.path.parent.chmod(0o700)
+        store.close()  # the store can no longer reach its database
+        status, got = get(f"{base}/readyz")
     assert (status, got) == (503, {"status": "unavailable"})
     m.shutdown()
 
 
 def test_an_unexpected_error_is_a_problem_with_no_detail(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    pg_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    m, _ = manager(tmp_path)
+    m, _ = manager(pg_url)
 
     def boom(_run_id: str) -> dict[str, Any]:
         raise RuntimeError("secret document text")
@@ -174,9 +170,9 @@ def test_an_unexpected_error_is_a_problem_with_no_detail(
 
 
 def test_the_readiness_probe_asks_the_runner_too(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    pg_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    m, _ = manager(tmp_path)
+    m, _ = manager(pg_url)
 
     def broken() -> None:
         raise RuntimeError("the reply cache is not usable")

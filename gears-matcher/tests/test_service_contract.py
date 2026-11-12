@@ -168,24 +168,27 @@ class Service:
         pytest.fail(f"run {run_id} did not end")
 
 
-def _serve(step: float, tmp_path: Path) -> Iterator[Service]:
+def _serve(step: float, pg_url: str) -> Iterator[Service]:
     runner = FakeRunner(step)
     limits = Limits(max_concurrent_runs=2)
-    manager = RunManager(RunStore(tmp_path / "runs.sqlite"), runner, limits, workers=4)
+    store = RunStore(pg_url)
+    manager = RunManager(store, runner, limits, workers=4)
     with serve_app(create_app(manager, SECRET, runner.info(), limits)) as base:
         yield Service(base)
+    manager.shutdown()
+    store.close()
 
 
 @pytest.fixture
-def service(tmp_path: Path) -> Iterator[Service]:
+def service(pg_url: str) -> Iterator[Service]:
     """The service under test. To test another implementation, return its `Service(address)`."""
-    yield from _serve(STEP, tmp_path)
+    yield from _serve(STEP, pg_url)
 
 
 @pytest.fixture
-def slow_service(tmp_path: Path) -> Iterator[Service]:
+def slow_service(pg_url: str) -> Iterator[Service]:
     """Runs stay in progress for seconds, to test cancel and the concurrency cap."""
-    yield from _serve(5.0, tmp_path)
+    yield from _serve(5.0, pg_url)
 
 
 def _doc(path: str = "specs/docs/prd/todo.md", text: str = "# Todo\n") -> dict[str, str]:

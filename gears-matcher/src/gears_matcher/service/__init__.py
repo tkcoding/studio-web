@@ -5,7 +5,7 @@ The contract is `schemas/service/matcher-service.openapi.yaml`; the design is
 alone:
 
 - `request`: the checks on a submitted run, before anything is paid for;
-- `store`: runs and their idempotency keys in SQLite;
+- `store`: runs and their idempotency keys in PostgreSQL;
 - `runner`: what a run needs from the matcher (a seam: the real one, and fakes in tests);
 - `manager`: submit, execute in the background, cancel, recover after a restart;
 - `app`: the FastAPI routes; `__main__`: the process that serves them.

@@ -8,8 +8,8 @@
 #
 # The service needs `git` at run time (the Gear catalogue is read from a `gears-rust` checkout with
 # `git show`, at the pinned commits), and a checkout to read: a volume, or an init container that
-# clones it (see the chart). The LLM connector's settings come from the environment, or from a file
-# named by GEARS_MATCHER_ENV_FILE.
+# clones it (`gears-service-prepare checkout`, see the chart). Its keys come from its config file
+# (GEARS_MATCHER_CONFIG), its runs go to PostgreSQL (GEARS_MATCHER_DATABASE_URL or the PG* variables).
 
 FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df AS build
 COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /usr/local/bin/uv

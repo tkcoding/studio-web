@@ -72,13 +72,13 @@ resend with the same key.
 
 ### 2.2 Constraints
 
-#### One replica, and the run store is a decision still open
+#### One replica, and the runs are in PostgreSQL
 
 - [ ] `p2` - **ID**: `cpt-studio-constraint-gears-matcher-store`
 
-Runs, keys and reports are kept in SQLite on a persistent volume in the cluster, behind a store interface,
-for one replica (ADR-0071 section 5). This departs from the backend's PostgreSQL rule, and where the data
-should live is an open question in the ADR.
+Runs, keys and reports are kept in PostgreSQL, in a database of the service's own (`gears_matcher`) on the
+Studio cluster, as the backend's runtime role (ADR-0071 section 5). It is still one replica: a run executes
+in the Pod that accepted it, and the reply cache and the checkout are on a ReadWriteOnce claim.
 
 ## 3. Technical Architecture
 
@@ -102,16 +102,19 @@ artifact with its own workflow). Every pull request that touches the component r
 image; a push to `main` of the upstream repository publishes `gears-matcher:sha-<commit>` and `edge`.
 
 Chart templates in `deploy/helm/studio-web/templates/matcher/`, off unless `matcher.enabled`: a Deployment of
-one replica (Recreate, because the claim is ReadWriteOnce) whose init container clones `gears-rust` onto the
-claim, a Service, a kept PersistentVolumeClaim for the run store, the reply cache and the checkout, and a
-NetworkPolicy that lets only the backend call it. The Pod reads pre-created Secrets: the LLM connector's
-settings, the catalogue clone token (optional) and the shared secret between the backend and this service.
-`/healthz` is the liveness and startup probe; `/readyz` is the readiness probe and says 503 when the run store
-or the reply cache cannot be used, so a wrong mount is found at deploy time.
+one replica (Recreate, because the claim is ReadWriteOnce) with two init containers (`gears-service-prepare
+database` creates the `gears_matcher` database as the bootstrap role, owned by the runtime role;
+`gears-service-prepare checkout` clones `gears-rust` onto the claim), a Service, a kept PersistentVolumeClaim
+for the reply cache and the checkout, and a NetworkPolicy that lets only the backend call it. The keys are in
+the service's config file, `config.toml` in one pre-created Secret: the shared secret between the backend and
+this service, the LLM connector's settings and the catalogue clone token (optional). The database connection
+is the backend's operator-managed Secret. `/healthz` is the liveness and startup probe; `/readyz` is the
+readiness probe and says 503 when the run store or the reply cache cannot be used, so a wrong database or
+mount is found at deploy time.
 
 ## 4. Additional context
 
-The service runs: `gears-service` serves the contract on top of the library entry point, with SQLite for
+The service runs: `gears-service` serves the contract on top of the library entry point, with PostgreSQL for
 runs, and has been called over HTTP with the real catalogue and the real models. The image builds and runs,
 and the chart renders and validates. Not built yet: the backend's client, the compare view and the pilot
 tracking; and nothing is deployed to a cluster, so the chart has not run on one. Each is a later pull

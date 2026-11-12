@@ -27,10 +27,11 @@ And once, whatever the number of replicas:
 | Consumer | Ceiling | Where it is set |
 |---|---|---|
 | Keycloak | 10 | `keycloak.dbPoolMaxSize`, `deploy/helm/studio-web/values.yaml` |
+| gears-matcher (when `matcher.enabled`) | 3 | `matcher.database.pool`, one replica only (ADR-0071) |
 | backend-bootstrap Job | ~2 | transient, one pass per upgrade |
 | CloudNativePG + exporter | ~5 | the operator |
 | `superuser_reserved_connections` | 3 | PostgreSQL default |
-| **Everyone else** | **~20** | |
+| **Everyone else** | **~23** | |
 
 The thing to know before changing any of it: toolkit-db caches one pool **per
 gear**, not per server, so the `max_conns` on `pg_main` is multiplied by the
@@ -43,9 +44,9 @@ The arithmetic for two replicas, which is the whole reason for the numbers:
 
 | shared `max_conns` | per replica | two replicas | with everyone else | fits 160? |
 |---|---|---|---|---|
-| 4 (until 2026-11) | 76 | 152 | 172 | no |
-| **3 (today)** | **62** | **124** | **144** | **yes, 16 spare** |
-| 2 | 48 | 96 | 116 | yes, but a queue |
+| 4 (until 2026-11) | 76 | 152 | 175 | no |
+| **3 (today)** | **62** | **124** | **147** | **yes, 13 spare** |
+| 2 | 48 | 96 | 119 | yes, but a queue |
 
 The shared pool was 4 until the domain read model (ADR-0066), the product
 descriptions (ADR-0053) and the environments gear (ADR-0062) each took their

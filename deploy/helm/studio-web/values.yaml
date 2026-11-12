@@ -569,21 +569,29 @@ ingress:
   tls: []
 
 # The gears-matcher service (T9, ADR-0071): runs the verified matcher on a specification by API.
-# Off by default; an environment turns it on (matcher.enabled) and names the Secret that holds its
-# keys. The service is called by the backend, inside the cluster only (no ingress).
+# Off by default; an environment turns it on (matcher.enabled). The service is called by the
+# backend, inside the cluster only (no ingress).
 #
-# ONE replica, always: it keeps its runs in SQLite on a ReadWriteOnce claim, so a second Pod
-# would have nowhere to read them. The chart refuses more than one. Where the run store should
-# live is an open question in ADR-0071.
+# Its runs are in PostgreSQL: a database of its own (`database.name`) on the Studio cluster, reached
+# with the backend's runtime role (backend.database.existingSecret). The database is created by an
+# init container as the bootstrap role (backend.bootstrap.existingSecret, the CREATEDB one), owned by
+# the runtime role. ONE replica still: a run executes in the Pod that accepted it, and the reply cache
+# and the gears-rust checkout are on a ReadWriteOnce claim. The chart refuses more than one.
 #
-# The Secret `matcher.secrets.existingSecret` is created by the operator, not by this chart. Keys:
-#   shared-secret                      the bearer token the backend sends to this service
-#   llm-connectors-access-key          the LLM connector's access key
-#   constructor-stand                  the connector's stand
-#   constructor-cmodel-id              the connector's model id
-#   constructor-public-connector-id    the connector's connector id
-#   gears-rust-token                   (optional) a token for cloning a private gears-rust
+# Its keys are in its config file: the Secret `config.existingSecret`, created by the operator,
+# with one key, `config.toml`:
+#
+#   shared_secret = "..."            # the bearer token the backend sends to this service
+#   [llm]                            # the Constructor LLM connector, the matcher's own key
+#   access_key = "..."
+#   stand = "..."
+#   cmodel_id = "..."
+#   public_connector_id = "..."
+#   [gears_rust]
+#   token = "..."                    # optional: for a private gears-rust
+#
 # The key must cover every model the matcher uses (see `gears_matcher.run.VERIFIED_MODELS`).
+# A changed Secret is read on the next Pod start: bump `config.revision` (any digest) to roll it.
 matcher:
   enabled: false
   image:
@@ -591,14 +599,22 @@ matcher:
     tag: ""                # REQUIRED once enabled: immutable, fixed at chart publication
   replicas: 1              # the chart refuses anything else
   port: 8080
-  secrets:
+  config:
     existingSecret: "studio-gears-matcher"
+    revision: ""
+  database:
+    name: "gears_matcher"
+    # The connections this service holds on pg_main: counted in the budget in
+    # deploy/k8s/cloudnative-pg/README.md (once, it is one replica).
+    pool: 3
+    # Empty: backend.bootstrap.existingSecret, else backend.database.existingSecret.
+    bootstrapSecret: ""
   # The Gear catalogue is read from a gears-rust checkout at pinned commits. An init container clones
-  # it onto the claim (and fetches on a restart), with `gears-rust-token` if the Secret has one.
+  # it onto the claim (and fetches on a restart), with the token from the config file if it has one.
   catalogue:
     gearsRustUrl: "https://github.com/constructorfabric/gears-rust.git"
-  # The run store, the model-reply cache and the checkout. Kept with the release: the cached replies
-  # are paid for. `size` is generous for runs and replies; the checkout is a few hundred MiB.
+  # The model-reply cache and the checkout. Kept with the release: the cached replies are paid
+  # for. `size` is generous for replies; the checkout is a few hundred MiB.
   persistence:
     size: 10Gi
     storageClass: ""       # empty leaves it to the cluster default
@@ -610,6 +626,11 @@ matcher:
   resources:
     requests: { cpu: 250m, memory: 512Mi }
     limits: { memory: 2Gi }
+  # The two init containers (create the database, clone gears-rust). Explicit, so they do not take
+  # the namespace LimitRange default.
+  initResources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
   # Only the backend's Pods may call it.
   networkPolicy:
     enabled: true

@@ -1,12 +1,19 @@
-"""`gears-service`: serve the matcher over HTTP. Everything is read from the environment.
+"""`gears-service`: serve the matcher over HTTP.
 
-Required: `GEARS_MATCHER_SECRET` (the shared secret callers send as a bearer token) and
-`GEARS_RUST_REPO` (a `gears-rust` checkout the catalogue is read from, at the pinned commits).
-The LLM connector's own settings (`LLM_CONNECTORS_ACCESS_KEY` and the rest) are read by the model
-clients; for a local run `GEARS_MATCHER_ENV_FILE` may name a file that holds them.
+Keys and connections come from the service's config file, `GEARS_MATCHER_CONFIG` (TOML; see
+`gears_matcher.service.config`): the shared secret, the LLM connector's settings, the gears-rust
+clone token and, optionally, the database URL. Each config value is an environment variable too,
+and a variable set in the environment wins over the file.
 
-Optional: `GEARS_MATCHER_DATA` (the run store, the reply cache and scratch space; default
-`/var/lib/gears-matcher`), `GEARS_MATCHER_HOST`, `GEARS_MATCHER_PORT`, `GEARS_MATCHER_WORKERS`,
+Required: `GEARS_MATCHER_SECRET` (the shared secret callers send as a bearer token),
+`GEARS_RUST_REPO` (a `gears-rust` checkout the catalogue is read from, at the pinned commits), the
+LLM connector's settings (`LLM_CONNECTORS_ACCESS_KEY` and the rest, read by the model clients), and
+the run store: `GEARS_MATCHER_DATABASE_URL`, or the libpq `PG*` variables (`PGHOST` at least). For a
+local run `GEARS_MATCHER_ENV_FILE` may name a `.env` file that holds the connector settings.
+
+Optional: `GEARS_MATCHER_DATA` (the reply cache and scratch space; default
+`/var/lib/gears-matcher`), `GEARS_MATCHER_DB_POOL` (connections to the run store; 4),
+`GEARS_MATCHER_HOST`, `GEARS_MATCHER_PORT`, `GEARS_MATCHER_WORKERS`,
 `GEARS_MATCHER_MAX_CONCURRENT_RUNS` (unset: no cap), `GEARS_MATCHER_MAX_CALLS` (the per-run call
 bound a request may lower but not raise, and the default when it sets none; 400) and
 `GEARS_MATCHER_MAX_EXTRACT_CALLS` (100), `GEARS_MD_REF`, `GEARS_GDL_REF`, `GEARS_BUNDLE`.
@@ -20,7 +27,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+import psycopg
 import uvicorn
+from psycopg_pool import PoolTimeout
 
 from gears_matcher.catalogue import PINNED_GDL_COMMIT, PINNED_MD_COMMIT, build_from_repo
 from gears_matcher.judge.llm import ModelClient
@@ -33,6 +42,7 @@ from gears_matcher.judge.llm.run import (
 )
 from gears_matcher.run import VERIFIED_MODELS, ModelFactory
 from gears_matcher.service.app import create_app
+from gears_matcher.service.config import ConfigError, load_config
 from gears_matcher.service.manager import RunManager
 from gears_matcher.service.request import Limits
 from gears_matcher.service.runner import RealRunner
@@ -50,6 +60,8 @@ class SettingsError(Exception):
 class Settings:
     secret: str
     gears_rust: Path
+    database: str
+    db_pool: int
     data: Path
     host: str
     port: int
@@ -67,11 +79,19 @@ class Settings:
         repo = env.get("GEARS_RUST_REPO", "")
         if not repo or not Path(repo).is_dir():
             raise SettingsError("GEARS_RUST_REPO must name a gears-rust checkout")
+        database = env.get("GEARS_MATCHER_DATABASE_URL", "").strip()
+        if not database and not env.get("PGHOST", "").strip():
+            raise SettingsError(
+                "the run store needs GEARS_MATCHER_DATABASE_URL ([database] url in the config "
+                "file) or the PG* variables"
+            )
         cap = env.get("GEARS_MATCHER_MAX_CONCURRENT_RUNS")
         bundle = env.get("GEARS_BUNDLE")
         return cls(
             secret=secret,
             gears_rust=Path(repo),
+            database=database,
+            db_pool=_number(env, "GEARS_MATCHER_DB_POOL", 4),
             data=Path(env.get("GEARS_MATCHER_DATA", "/var/lib/gears-matcher")),
             host=env.get("GEARS_MATCHER_HOST", "0.0.0.0"),  # noqa: S104 -- a container's own port
             port=_number(env, "GEARS_MATCHER_PORT", 8080),
@@ -133,7 +153,7 @@ def build(settings: Settings) -> tuple[RunManager, RealRunner]:
         work_dir=settings.data / "work",
         bundle_catalogue=bundle,
     )
-    store = RunStore(settings.data / "runs.sqlite")
+    store = RunStore(settings.database, pool_size=settings.db_pool)
     return RunManager(store, runner, settings.limits, settings.workers), runner
 
 
@@ -142,12 +162,23 @@ def main() -> int:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     try:
+        config = os.environ.get("GEARS_MATCHER_CONFIG")
+        if config:
+            load_config(Path(config))
         env_file = os.environ.get("GEARS_MATCHER_ENV_FILE")
         if env_file:
             load_env_file(Path(env_file))
         settings = Settings.from_env(os.environ)
         manager, runner = build(settings)
-    except (SettingsError, RunError, OSError, ValueError) as exc:
+    except (
+        SettingsError,
+        ConfigError,
+        RunError,
+        OSError,
+        ValueError,
+        psycopg.Error,
+        PoolTimeout,
+    ) as exc:
         print(f"gears-service: cannot start: {exc}", file=sys.stderr)
         return EXIT_CANNOT_START
     app = create_app(manager, settings.secret, runner.info(), settings.limits)

@@ -29,21 +29,41 @@ tags — no `latest`.
 
 `matcher.enabled` (off by default) deploys the gears-matcher: a Python service the backend calls, inside
 the cluster, to run the verified matcher on a specification (ADR-0071,
-[`gears-matcher/`](../gears-matcher/README.md)). It is **one replica**
-(the chart refuses more): its runs are in SQLite on a ReadWriteOnce claim that is kept with the release.
-An init container clones `gears-rust` onto that claim, at the commits the matcher pins.
+[`gears-matcher/`](../gears-matcher/README.md)).
 
-The operator creates one Secret, named by `matcher.secrets.existingSecret`, with these keys:
+- **Runs** are in PostgreSQL, in a database of its own (`matcher.database.name`, `gears_matcher`) on the
+  Studio cluster, as the backend's runtime role (`backend.database.existingSecret`). An init container
+  creates the database if it is missing, as the bootstrap role (`backend.bootstrap.existingSecret`),
+  owned by the runtime role; the service creates its table at start. Its pool (`matcher.database.pool`,
+  3) is counted once in [the connection budget](k8s/cloudnative-pg/README.md).
+- **Keys** are in its config file: the operator creates one Secret, named by
+  `matcher.config.existingSecret`, with one key, `config.toml`:
 
-| Key | What |
-|---|---|
-| `shared-secret` | the bearer token the backend sends to the service |
-| `llm-connectors-access-key`, `constructor-stand`, `constructor-cmodel-id`, `constructor-public-connector-id` | the LLM connector's settings; the key must cover every model the matcher uses |
-| `gears-rust-token` | optional: a token for cloning a private `gears-rust` |
+  ```toml
+  shared_secret = "..."          # the bearer token the backend sends to the service
 
-`/readyz` says 503 until the run store and the reply cache can be used, so a wrong mount shows at deploy
-time. The per-run call bound (`matcher.limits.maxCalls`, 400) is the one cost limit there is; there is no
-daily or concurrency cap yet.
+  [llm]                          # the Constructor LLM connector; the key must cover every model the matcher uses
+  access_key = "..."
+  stand = "..."
+  cmodel_id = "..."
+  public_connector_id = "..."
+
+  [gears_rust]
+  token = "..."                  # optional: a token for cloning a private gears-rust
+  ```
+
+  ```bash
+  kubectl -n studio-dev create secret generic studio-gears-matcher --from-file=config.toml
+  ```
+
+  A changed Secret is read on the next start; bump `matcher.config.revision` to roll the Pod.
+- **One replica** (the chart refuses more): a run executes in the Pod that accepted it, and the reply
+  cache and the `gears-rust` checkout are on a ReadWriteOnce claim kept with the release. A second init
+  container clones `gears-rust` onto it, at the commits the matcher pins.
+
+`/readyz` says 503 until the run store and the reply cache can be used, so a wrong database or mount
+shows at deploy time. The per-run call bound (`matcher.limits.maxCalls`, 400) is the one cost limit
+there is; there is no daily or concurrency cap yet.
 
 ## Configuration model
 

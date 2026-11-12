@@ -1,10 +1,11 @@
 {{- if .Values.matcher.enabled }}
 {{- /*
-  The gears-matcher's run store (SQLite), its model-reply cache and its gears-rust checkout.
+  The gears-matcher's model-reply cache and its gears-rust checkout. The runs and their idempotency
+  keys are in PostgreSQL, not here.
 
-  Kept with the release (helm.sh/resource-policy: keep): the cached replies were paid for, and the run
-  store holds the idempotency keys, so deleting the claim would let a retried request start a second
-  paid run. One Pod mounts it (ReadWriteOnce), which is why the Deployment is Recreate.
+  Kept with the release (helm.sh/resource-policy: keep): the cached replies were paid for, and a run
+  that a restart re-queues reads them back instead of paying again. One Pod mounts it
+  (ReadWriteOnce), which is why the Deployment is Recreate.
 */}}
 apiVersion: v1
 kind: PersistentVolumeClaim

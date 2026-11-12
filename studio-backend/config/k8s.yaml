@@ -39,7 +39,7 @@ database:
         # therefore not "three connections to pg_main" — it is three PER GEAR,
         # and fourteen gear databases below inherit it: 14 x 3 = 42, plus the
         # gears with their own `pool` (20), 62 per replica. Two replicas need
-        # 124, and 144 with Keycloak, the bootstrap Job, the operator and the
+        # 124, and 147 with Keycloak, the gears-matcher, the bootstrap Job, the operator and the
         # reserved slots, against `max_connections: 160`;
         # deploy/k8s/cloudnative-pg/README.md carries the table. It was 4, and
         # two replicas then needed 172. Two replicas at 3 still give each gear

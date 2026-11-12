@@ -18,7 +18,7 @@ Status: **proposed** · Date: 2026-11-10 · Relates to the design [studio-gears-
 - [Considered Options](#considered-options)
 - [Decision Outcome](#decision-outcome)
 - [Consequences](#consequences)
-- [Open question for reviewers](#open-question-for-reviewers)
+- [Resolved in review: where the runs live](#resolved-in-review-where-the-runs-live)
 - [Confirmation](#confirmation)
 - [More Information](#more-information)
 - [Traceability](#traceability)
@@ -74,17 +74,21 @@ Option 3.
    `Idempotency-Key` and poll, a report, cancel, and `info`. It is its own contract with the backend,
    not one of the portal's (ADR-0020 does not apply to it). It is asynchronous; the backend's task
    polls it.
-5. **Run storage: in the cluster, SQLite on a persistent volume, as the default for now.** Runs, their
-   idempotency keys and their reports are kept in SQLite on a volume in the cluster, behind a small store
-   interface, with one replica. **This departs from
-   `studio-backend/AGENTS.md` ("PostgreSQL only"), which was written for the Rust gears' databases.**
-   Idempotency has to survive a restart, so memory is not enough; a volume is enough for one replica.
-   Moving to the cluster's PostgreSQL is the change to make before a second replica or a high-availability
-   requirement, and is why the store is an interface.
-6. **LLM access.** A dedicated key owned by the studio team, used through the LLM connector, not through
-   `studio-llm-proxy`. The key, the catalogue clone token and the shared secret between the two services
-   are pre-created Secrets, as for the backend. The service never writes document text to an error,
-   and keeps the text of a document only until its run ends.
+5. **Run storage: the cluster's PostgreSQL** (decided in review, 2026-11-12). Runs, their idempotency keys
+   and their reports are kept in a database of the service's own, `gears_matcher`, on the Studio PostgreSQL
+   cluster, as the backend's runtime role, following `studio-backend/AGENTS.md` ("PostgreSQL only"; no
+   SQLite and no SQLite-backed tests). The runtime role cannot create databases, so an init container
+   creates it as the bootstrap role, as the backend's bootstrap hook does for the gears; the service
+   creates its one table at start. Its pool (3) is counted in the connection budget. It is still one
+   replica: a run executes in the Pod that accepted it, and the model-reply cache and the `gears-rust`
+   checkout are on a ReadWriteOnce claim.
+6. **LLM access and keys.** A dedicated key owned by the studio team, used through the LLM connector, not
+   through `studio-llm-proxy`. **The keys are in the service's config file** (`config.toml`, decided in
+   review, 2026-11-12): the shared secret between the two services, the connector's settings and the
+   catalogue clone token, in one pre-created Secret mounted read-only. The database connection is not in
+   it: it comes from the operator-managed Secret the backend uses, so a password rotation needs no edit.
+   The service never writes document text to an error, and keeps the text of a document only until its
+   run ends.
 7. **No retention policy and no cost cap in the first build.** Reports are kept as long as the volume
    allows. A run is on request, from an administrator, so exposure is limited by who can start one.
 
@@ -94,26 +98,24 @@ Option 3.
   job (lint, types, tests).
 - There are two copies of the matching code. The copy can drift from gears-matcher; `SOURCE` and a
   named-commit rule for carrying changes are the only guard.
-- One replica and SQLite means one failure domain, and a restart re-queues unfinished runs (their
-  replies are cached, so it is cheap).
+- One replica means one failure domain, and a restart re-queues unfinished runs (their replies are
+  cached, so it is cheap). A second replica needs runs claimed in the database instead of held by the Pod,
+  and a reply cache that is not on a ReadWriteOnce claim.
+- Python CI needs a PostgreSQL service for the run store's tests.
 - Without a cap, a mistaken or repeated request costs money. Revisit before the pilot widens.
 - The compare view, the keyword fallback and the pilot tracking are studio-web work and are not decided
   here.
 
-## Open question for reviewers
+## Resolved in review: where the runs live
 
-**Where should the service keep its runs, reports and idempotency keys?** The author is not sure. The
-default above is the smallest thing that works inside the cluster, and the store is an interface so it
-can change. The options:
+The first draft kept runs in SQLite on a volume and asked reviewers to choose. The answer was the
+cluster's PostgreSQL. The options that were weighed:
 
 | Option | For | Against |
 |---|---|---|
-| **SQLite on a persistent volume** (the default for now) | nothing new to run; a file beside the model-reply cache; fast to build | `studio-backend/AGENTS.md` says "PostgreSQL only"; one replica only; a volume to back up |
-| **The cluster's PostgreSQL** (a database for this service on the existing server) | the repository's rule; survives a restart and several replicas; one place to back up | a database to provision, a connection-budget entry (`max_connections: 160`), and migrations in a Python service |
-| **Postgres through the backend** (the backend owns the data, the service is stateless) | one owner of data | the service needs the backend to be up to answer a retry; a second API between the two |
-
-Please say which you prefer, or what else the cluster already offers for this. The answer changes the
-chart (a volume or a database) and the store behind the interface; it does not change the API.
+| SQLite on a persistent volume | nothing new to run; fast to build | `studio-backend/AGENTS.md` says "PostgreSQL only"; one replica only; a volume to back up |
+| **The cluster's PostgreSQL** (chosen) | the repository's rule; survives a restart; one place to back up | a database to provision, a connection-budget entry, the table in a Python service |
+| Postgres through the backend | one owner of data | the service needs the backend to be up to answer a retry; a second API between the two |
 
 ## Confirmation
 

@@ -148,18 +148,25 @@ def test_info_says_what_the_service_runs(fixture_catalogue: Catalogue, tmp_path:
     assert set(info["catalogue"]) == {"source", "gears_md_commit", "gear_gdl_commit"}
 
 
-def test_settings_need_a_secret_and_a_checkout(tmp_path: Path) -> None:
+DB = "postgresql://matcher@db/gears_matcher"
+
+
+def test_settings_need_a_secret_a_checkout_and_a_database(tmp_path: Path) -> None:
     with pytest.raises(SettingsError, match="GEARS_MATCHER_SECRET"):
         Settings.from_env({})
     with pytest.raises(SettingsError, match="GEARS_RUST_REPO"):
         Settings.from_env({"GEARS_MATCHER_SECRET": "s", "GEARS_RUST_REPO": str(tmp_path / "none")})
-    good = Settings.from_env({"GEARS_MATCHER_SECRET": "s", "GEARS_RUST_REPO": str(tmp_path)})
+    base = {"GEARS_MATCHER_SECRET": "s", "GEARS_RUST_REPO": str(tmp_path)}
+    with pytest.raises(SettingsError, match="GEARS_MATCHER_DATABASE_URL"):
+        Settings.from_env(base)
+    good = Settings.from_env({**base, "GEARS_MATCHER_DATABASE_URL": DB})
+    assert Settings.from_env({**base, "PGHOST": "db"}).database == "", "libpq reads PG* itself"
     assert (good.port, good.workers, good.limits.max_concurrent_runs) == (8080, 4, None)
     assert good.limits == Limits()
 
 
 def test_the_per_run_call_bound_is_a_setting(tmp_path: Path) -> None:
-    env = {"GEARS_MATCHER_SECRET": "s", "GEARS_RUST_REPO": str(tmp_path)}
+    env = {"GEARS_MATCHER_SECRET": "s", "GEARS_RUST_REPO": str(tmp_path), "PGHOST": "db"}
     assert Settings.from_env(env).limits.max_calls == 400
     got = Settings.from_env(
         {**env, "GEARS_MATCHER_MAX_CALLS": "600", "GEARS_MATCHER_MAX_EXTRACT_CALLS": "40"}
@@ -170,7 +177,7 @@ def test_the_per_run_call_bound_is_a_setting(tmp_path: Path) -> None:
 
 
 def test_settings_read_numbers_and_refuse_bad_ones(tmp_path: Path) -> None:
-    env = {"GEARS_MATCHER_SECRET": "s", "GEARS_RUST_REPO": str(tmp_path)}
+    env = {"GEARS_MATCHER_SECRET": "s", "GEARS_RUST_REPO": str(tmp_path), "PGHOST": "db"}
     got = Settings.from_env(
         {**env, "GEARS_MATCHER_PORT": "9000", "GEARS_MATCHER_MAX_CONCURRENT_RUNS": "3"}
     )

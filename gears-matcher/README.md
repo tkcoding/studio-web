@@ -27,16 +27,43 @@ design: [studio-gears-matcher](../docs/design/studio-gears-matcher.md).
 
 ```bash
 cd gears-matcher
-export GEARS_MATCHER_SECRET=...                 # callers send it as a bearer token
+export GEARS_MATCHER_CONFIG=./config.toml       # the keys (see below)
 export GEARS_RUST_REPO=/path/to/gears-rust      # the catalogue, read at the pinned commits
-export GEARS_MATCHER_DATA=./data                # the run store (SQLite), reply cache, scratch space
-export LLM_CONNECTORS_ACCESS_KEY=...            # and the connector's other settings (see below)
+export GEARS_MATCHER_DATABASE_URL=postgresql://studio:studio@localhost:5432/gears_matcher  # the runs
+export GEARS_MATCHER_DATA=./data                # the reply cache and scratch space
+uv run gears-service-prepare database           # once, as a role that may create databases (PG*)
 uv run gears-service                            # http://0.0.0.0:8080
 ```
 
-The service refuses to start, and says which variable, if the secret, the checkout or a model client
-cannot be set up. `GEARS_MATCHER_ENV_FILE` may name a file holding the connector settings, for a
-local run. The others, all optional: `GEARS_MATCHER_HOST`, `GEARS_MATCHER_PORT`, `GEARS_MATCHER_WORKERS`
+The keys are in the service's config file, `GEARS_MATCHER_CONFIG` (TOML):
+
+```toml
+shared_secret = "..."          # callers send it as a bearer token
+
+[llm]                          # the Constructor LLM connector
+access_key = "..."
+stand = "..."
+cmodel_id = "..."
+public_connector_id = "..."
+
+[gears_rust]                   # used by `gears-service-prepare checkout`
+url = "https://github.com/constructorfabric/gears-rust.git"
+token = "..."                  # optional: a private gears-rust
+
+[database]                     # optional: GEARS_MATCHER_DATABASE_URL or the PG* variables otherwise
+url = "postgresql://..."
+```
+
+Each value is also an environment variable (`GEARS_MATCHER_SECRET`, `LLM_CONNECTORS_ACCESS_KEY`,
+`CONSTRUCTOR_STAND`, `CONSTRUCTOR_CMODEL_ID`, `CONSTRUCTOR_PUBLIC_CONNECTOR_ID`, `GEARS_RUST_URL`,
+`GEARS_RUST_TOKEN`, `GEARS_MATCHER_DATABASE_URL`), and a variable set in the environment wins over the
+file. An unknown key in the file is refused, naming the key and never the value.
+
+The runs are in PostgreSQL (the service creates its table at start; the database is created by
+`gears-service-prepare database`, because the runtime role in a cluster cannot create one). The service
+refuses to start, and says which variable, if the secret, the checkout, the database or a model client
+cannot be set up. `GEARS_MATCHER_ENV_FILE` may still name a `.env` file holding the connector settings,
+for a local run. The others, all optional: `GEARS_MATCHER_DB_POOL` (4), `GEARS_MATCHER_HOST`, `GEARS_MATCHER_PORT`, `GEARS_MATCHER_WORKERS`
 (default 4), `GEARS_MATCHER_MAX_CONCURRENT_RUNS` (unset: no cap), `GEARS_MATCHER_MAX_CALLS` (the per-run
 call bound: a request may lower it, never raise it, and it is the default when a request sets none;
 400) and `GEARS_MATCHER_MAX_EXTRACT_CALLS` (100), `GEARS_MD_REF`, `GEARS_GDL_REF`, `GEARS_BUNDLE` (a
@@ -62,8 +89,8 @@ curl -s localhost:8080/v1/runs/<id>/report -H "Authorization: Bearer $GEARS_MATC
 ```bash
 docker build -t gears-matcher gears-matcher
 docker run --rm -p 8080:8080 \
-  -e GEARS_MATCHER_SECRET=... \
-  -e GEARS_MATCHER_ENV_FILE=/run/llm.env -v ./llm.env:/run/llm.env:ro \
+  -e GEARS_MATCHER_CONFIG=/etc/gears-matcher/config.toml -v ./config.toml:/etc/gears-matcher/config.toml:ro \
+  -e GEARS_MATCHER_DATABASE_URL=postgresql://... \
   -v /path/to/gears-rust:/var/lib/gears-matcher/gears-rust:ro \
   -v ./cache:/var/lib/gears-matcher/cache \
   gears-matcher
@@ -71,7 +98,7 @@ docker run --rm -p 8080:8080 \
 
 The image needs a `gears-rust` checkout and a writable reply cache; `/readyz` says 503 until the cache can
 be written. In a cluster the chart (`deploy/helm/studio-web/templates/matcher/`) clones the checkout onto a
-claim and wires the Secrets; see `deploy/README.md`. A mounted checkout owned by another user needs
+claim, creates the database and mounts the config file from one Secret; see `deploy/README.md`. A mounted checkout owned by another user needs
 `-e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*'` (git refuses it
 otherwise), which a checkout cloned by the Pod itself does not.
 

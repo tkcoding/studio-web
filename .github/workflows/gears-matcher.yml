@@ -41,6 +41,19 @@ jobs:
     name: Gates (lint, format, types, tests)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # The run store's tests need PostgreSQL (one dialect, no SQLite stand-in). Each test creates a
+    # database of its own on this server and drops it after.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: gears-matcher-ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+    env:
+      GEARS_MATCHER_TEST_PG: postgresql://postgres:gears-matcher-ci@localhost:5432/postgres
     defaults:
       run:
         working-directory: gears-matcher
