@@ -604,7 +604,7 @@ matcher:
     storageClass: ""       # empty leaves it to the cluster default
   limits:
     workers: 4             # runs executed at the same time on this Pod
-    maxCalls: 200          # the per-run model-call bound: a request may lower it, never raise it
+    maxCalls: 400          # the per-run model-call bound: a request may lower it, never raise it
     maxExtractCalls: 100   # the same, for reading free-form documents
     maxConcurrentRuns: ""  # empty: no cap (ADR-0071 §7)
   resources:

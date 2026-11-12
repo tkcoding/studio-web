@@ -42,7 +42,7 @@ The operator creates one Secret, named by `matcher.secrets.existingSecret`, with
 | `gears-rust-token` | optional: a token for cloning a private `gears-rust` |
 
 `/readyz` says 503 until the run store and the reply cache can be used, so a wrong mount shows at deploy
-time. The per-run call bound (`matcher.limits.maxCalls`, 200) is the one cost limit there is; there is no
+time. The per-run call bound (`matcher.limits.maxCalls`, 400) is the one cost limit there is; there is no
 daily or concurrency cap yet.
 
 ## Configuration model

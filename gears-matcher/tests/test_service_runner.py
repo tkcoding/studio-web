@@ -160,7 +160,7 @@ def test_settings_need_a_secret_and_a_checkout(tmp_path: Path) -> None:
 
 def test_the_per_run_call_bound_is_a_setting(tmp_path: Path) -> None:
     env = {"GEARS_MATCHER_SECRET": "s", "GEARS_RUST_REPO": str(tmp_path)}
-    assert Settings.from_env(env).limits.max_calls == 200
+    assert Settings.from_env(env).limits.max_calls == 400
     got = Settings.from_env(
         {**env, "GEARS_MATCHER_MAX_CALLS": "600", "GEARS_MATCHER_MAX_EXTRACT_CALLS": "40"}
     )

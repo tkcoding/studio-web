@@ -39,7 +39,7 @@ cannot be set up. `GEARS_MATCHER_ENV_FILE` may name a file holding the connector
 local run. The others, all optional: `GEARS_MATCHER_HOST`, `GEARS_MATCHER_PORT`, `GEARS_MATCHER_WORKERS`
 (default 4), `GEARS_MATCHER_MAX_CONCURRENT_RUNS` (unset: no cap), `GEARS_MATCHER_MAX_CALLS` (the per-run
 call bound: a request may lower it, never raise it, and it is the default when a request sets none;
-200) and `GEARS_MATCHER_MAX_EXTRACT_CALLS` (100), `GEARS_MD_REF`, `GEARS_GDL_REF`, `GEARS_BUNDLE` (a
+400) and `GEARS_MATCHER_MAX_EXTRACT_CALLS` (100), `GEARS_MD_REF`, `GEARS_GDL_REF`, `GEARS_BUNDLE` (a
 gears bundle for `options.use_gears_bundle`).
 
 The connector's settings are `LLM_CONNECTORS_ACCESS_KEY`, `CONSTRUCTOR_STAND`, `CONSTRUCTOR_CMODEL_ID`

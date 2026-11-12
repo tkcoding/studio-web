@@ -30,7 +30,7 @@ class Limits:
     max_documents: int = 20
     max_document_bytes: int = 500_000
     max_request_bytes: int = 2_000_000
-    max_calls: int = 200
+    max_calls: int = 400  # Studio's PRD (54 requirements) took 126 calls; Insight (157) needs ~360
     max_extract_calls: int = 100
     max_concurrent_runs: int | None = None  # None: no cap (T9 D16, for now)
     max_run_seconds: int = 3600
@@ -61,7 +61,7 @@ class RunRequest:
     documents: tuple[Document, ...]
     own_gears: tuple[str, ...] = ()
     use_gears_bundle: bool = False
-    max_calls: int = 200
+    max_calls: int = 400
     extract_max_calls: int | None = None
 
     def to_json(self) -> dict[str, Any]:

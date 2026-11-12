@@ -8,7 +8,7 @@ clients; for a local run `GEARS_MATCHER_ENV_FILE` may name a file that holds the
 Optional: `GEARS_MATCHER_DATA` (the run store, the reply cache and scratch space; default
 `/var/lib/gears-matcher`), `GEARS_MATCHER_HOST`, `GEARS_MATCHER_PORT`, `GEARS_MATCHER_WORKERS`,
 `GEARS_MATCHER_MAX_CONCURRENT_RUNS` (unset: no cap), `GEARS_MATCHER_MAX_CALLS` (the per-run call
-bound a request may lower but not raise, and the default when it sets none; 200) and
+bound a request may lower but not raise, and the default when it sets none; 400) and
 `GEARS_MATCHER_MAX_EXTRACT_CALLS` (100), `GEARS_MD_REF`, `GEARS_GDL_REF`, `GEARS_BUNDLE`.
 """
 
