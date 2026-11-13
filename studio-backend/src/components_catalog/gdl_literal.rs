@@ -5,7 +5,9 @@
 //! A passport is a `gdl_version = "1.x"` line and one call with named literal
 //! arguments: `True`, `False`, `None`, strings, non-negative integers, lists
 //! of strings, and dicts from strings to strings or integers. `#` comments,
-//! newlines and trailing commas are free. Anything that computes -- a name, an
+//! newlines and trailing commas are free. `path("...")` reads as the string it
+//! names wherever a string or a list item may stand: GDL only marks a file
+//! with it, so nothing is computed. Anything else that computes -- a name, an
 //! operator, `if`, `def`, `load()` -- is refused with the reason and the line,
 //! and nothing is executed: the scan reads files from repositories Studio does
 //! not own.
@@ -241,11 +243,32 @@ impl Parser {
         }
     }
 
+    /// Whether `word`, just read, opens a `path("...")`.
+    fn is_path_call(&self, word: &str) -> bool {
+        word == "path" && matches!(self.peek(), Some((Tok::LParen, _)))
+    }
+
+    /// The rest of `path("...")` after its name: the string inside.
+    fn path_call(&mut self, line: usize) -> Result<String, String> {
+        match (self.next(), self.next(), self.next()) {
+            (Some((Tok::LParen, _)), Some((Tok::Str(s), _)), Some((Tok::RParen, _))) => Ok(s),
+            _ => Err(format!(
+                "line {line}: `path()` takes one string: `path(\"mfe/app\")`"
+            )),
+        }
+    }
+
     fn list(&mut self) -> Result<Lit, String> {
         let mut items = Vec::new();
         loop {
             match self.next() {
                 Some((Tok::RBracket, _)) => break,
+                Some((Tok::Ident(w), l)) if self.is_path_call(&w) => {
+                    items.push(self.path_call(l)?);
+                    if self.item_end(&Tok::RBracket, "list")? {
+                        break;
+                    }
+                }
                 Some((Tok::Str(s), _)) => {
                     items.push(s);
                     if self.item_end(&Tok::RBracket, "list")? {
@@ -297,6 +320,7 @@ impl Parser {
 
     fn value(&mut self) -> Result<Lit, String> {
         match self.next() {
+            Some((Tok::Ident(w), l)) if self.is_path_call(&w) => Ok(Lit::Str(self.path_call(l)?)),
             Some((Tok::Ident(w), l)) => match w.as_str() {
                 "True" => Ok(Lit::Bool(true)),
                 "False" => Ok(Lit::Bool(false)),

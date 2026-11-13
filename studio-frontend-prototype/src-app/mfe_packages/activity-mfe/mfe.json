@@ -1,0 +1,54 @@
+{
+  "manifest": {
+    "id": "gts.frontx.mfes.mfe.mf_manifest.v1~constructor_studio.activity.mfe.manifest.v1",
+    "remoteEntry": "http://localhost:3360/assets/remoteEntry.js"
+  },
+  "entries": [
+    {
+      "id": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.activity.mfe.main.v1",
+      "requiredProperties": [
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.theme.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.language.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.project.selected.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.organization.selected.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.project_section.selected.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.live.studio_events.last_event.v1~"
+      ],
+      "actions": [],
+      "domainActions": [],
+      "manifest": "gts.frontx.mfes.mfe.mf_manifest.v1~constructor_studio.activity.mfe.manifest.v1",
+      "exposedModule": "./lifecycle"
+    }
+  ],
+  "extensions": [
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.activity.sections.activity.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.activity.mfe.main.v1",
+      "presentation": {
+        "label": "Activity",
+        "icon": "lucide:history",
+        "route": "/projects/activity",
+        "order": 40,
+        "level": "project",
+        "section": "activity",
+        "kit": "project-activity"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.activity.sections.timeline.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.activity.mfe.main.v1",
+      "presentation": {
+        "label": "Timeline",
+        "icon": "lucide:calendar-days",
+        "route": "/projects/timeline",
+        "order": 50,
+        "level": "project",
+        "section": "timeline",
+        "kit": "project-activity",
+        "needs": ["milestone"]
+      }
+    }
+  ]
+}

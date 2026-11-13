@@ -6,10 +6,3 @@
 # fails CI and a fixed one has to be deleted here. It only ever shrinks.
 #
 # See rule G3 in docs/api-conventions.md.
-
-# The IDE reverse proxy registers its path from a variable
-# (`OperationBuilder::get(path)` in src/studio_session/rest.rs), so it is absent
-# from docs/api-contract.json and nothing here can match it. That is the
-# `path-literal` debt in studio-backend/docs/api-contract-baseline.txt, and
-# clearing it clears this line too — it is the cheapest entry in either file.
-studio-session/v1/ide/session-1

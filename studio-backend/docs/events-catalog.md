@@ -20,6 +20,8 @@ is [`studio-frontend/docs/studio-events.md`](../../studio-frontend/docs/studio-e
 | `desktop_session` | the desktop session (lease) id | `GET /studio-session/v1/desktop-sessions?project_id=` |
 | `domain_type` | the domain type whose objects changed | `POST /studio-domain-model/v1/query` with that `type` |
 | `domain_model` | the model version the change made | `GET /studio-domain-model/v1/types` |
+| `tenant` | the organization or workspace id | `GET /studio-organizations/v1/rollups?organization_id=` (names), `GET /studio-organizations/v1/logo?tenant_id=` |
+| `kit` | the kit's slug | `GET /studio-kits/v1/installed-kits?organization_id=` (or `?project_id=`) |
 
 ## `task_run` — background work
 
@@ -91,6 +93,39 @@ model read it again, so a field an administrator adds shows at once.
 | `kind` | When | Payload fields |
 | --- | --- | --- |
 | `domain.model_changed` | a model version was recorded | `version`, `op` |
+
+## `kit` — a kit started or stopped applying
+
+Published by `studio-kits` (`source: "studio-kits"`) when the installer records
+an install or an uninstall: for an organization, for one project of it
+(heard on the organization's channel, `project_id` set) or as a base kit
+(heard on the platform's channel only; an organization reads its kits again
+when it next opens). The shell reads the installed kits and the kits'
+micro-frontends again and registers or unloads their screens, so another
+person's install shows without a reload, also for a kit that brings no model.
+`version` is the version installed, `null` on an uninstall; `level` is `base`,
+`organization` or `project`.
+
+| `kind` | When | Payload fields |
+| --- | --- | --- |
+| `kit.installed` | a kit was installed, or installed at another version | `kit_slug`, `version`, `level`, `organization_id`, `project_id` |
+| `kit.uninstalled` | a kit stopped applying where it was installed | `kit_slug`, `version`, `level`, `organization_id`, `project_id` |
+
+## `tenant` — an organization or a workspace changed
+
+Published by `studio-organizations` (`source: "studio-organizations"`) on the
+organization's channel when one of its tenants changes through the gear: a
+rename (`PUT /name`), a logo set or removed, the organization deleted, a grant
+of its access config changed (`PUT`/`DELETE /access-grants`). The path bar
+reads names and logos again; the Team and People screens read the grants
+again. A rename made straight in account-management publishes nothing.
+
+| `kind` | When | Payload fields |
+| --- | --- | --- |
+| `tenant.renamed` | an organization or a workspace was renamed | `tenant_id`, `organization_id`, `name`, `tenant_type` |
+| `tenant.logo_changed` | a tenant's logo was set or removed | `tenant_id`, `organization_id`, `has_logo` |
+| `tenant.deleted` | the organization was deleted | `tenant_id`, `organization_id`, `tenant_type` |
+| `tenant.access_changed` | a grant of the organization's access config changed | `tenant_id`, `organization_id` |
 
 ## `workspace` — the IDE bridge
 

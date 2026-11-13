@@ -13,8 +13,10 @@ use super::sdk::{self, Api, Tool};
 /// decides whether it can go on (MCP's version negotiation).
 pub const VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
 
-const INSTRUCTIONS: &str = "Constructor Studio: a project's domain model, the requirements and \
-capabilities its specifications state, and the spec-quality detectors. Every call acts as the \
+const INSTRUCTIONS: &str = "Constructor Studio: a project's domain model (what its documents say, \
+`project_domain_model_*`), the requirements and capabilities its specifications state, the \
+spec-quality detectors, and the Studio domain model (Studio's own types and objects, \
+`domain_model_*` and `domain_type*`; not a project's). Every call acts as the \
 person whose token this is, with exactly what they may do in the Studio portal. A project is \
 named by `project_id`, the id in the portal's address of that project. Text you send is checked \
 as you send it: nothing is read from your disk or your repository.";

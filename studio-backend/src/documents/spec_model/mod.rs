@@ -1,5 +1,5 @@
 //! A project's domain model, read from its documents, and the places they
-//! disagree about it (`docs/spec-domain-model.md`).
+//! disagree about it (`docs/project-domain-model.md`).
 //!
 //! Built in stages: the reference index and its rules (`index.rs`), which
 //! need no model; the facts of each document revision, read by a model on the
@@ -9,10 +9,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+pub(crate) mod basis;
 pub(crate) mod build;
 pub(crate) mod check_methods;
+pub(crate) mod doc_quality;
 pub(crate) mod domain_doc;
 pub(crate) mod extract;
+pub(crate) mod fact_key;
 pub(crate) mod finding;
 pub(crate) mod glossary;
 pub(crate) mod glossary_doc;
@@ -23,7 +26,9 @@ pub(crate) mod record;
 pub(crate) mod related;
 pub(crate) mod rename;
 pub(crate) mod requirements;
+pub(crate) mod resolve;
 pub(crate) mod rules;
+pub(crate) mod select;
 pub(crate) mod trace;
 pub(crate) mod work;
 
@@ -38,7 +43,12 @@ pub struct SourceText {
     pub node: String,
     /// The document binding it was read for.
     pub binding: Option<uuid::Uuid>,
+    /// The repository commit and branch its text was read at; `None` for a
+    /// Studio document, an uploaded source, or a checkout that is not git.
+    pub at: Option<GitRevision>,
 }
+
+pub use crate::artifact_ingest::port::GitRevision;
 
 /// What the model is read from: the project's documents, and every path of
 /// its checkouts for resolving references.
@@ -119,6 +129,10 @@ pub struct Coverage {
     pub facts: usize,
     pub dropped: usize,
     pub error: Option<String>,
+    /// The repository commit and branch the reading shown was taken at;
+    /// `None` when never read, for a source that is not a repository file,
+    /// and for a reading kept before the commit was recorded.
+    pub at: Option<GitRevision>,
 }
 
 /// Whether a path is a template or an example rather than documentation — a
@@ -143,6 +157,19 @@ pub struct Kept<'a> {
     /// When it was kept, in Unix seconds: the latest reading of a document
     /// whose text is not here is the one [`last_read`] shows.
     pub created_at: i64,
+    /// The commit and branch the text was read at, when it was recorded.
+    pub source_commit: Option<&'a str>,
+    pub source_ref: Option<&'a str>,
+}
+
+impl Kept<'_> {
+    /// Where in the repository's history this reading was taken.
+    pub fn at(&self) -> Option<GitRevision> {
+        self.source_commit.map(|commit| GitRevision {
+            commit: commit.to_owned(),
+            git_ref: self.source_ref.map(str::to_owned),
+        })
+    }
 }
 
 /// The facts of every document at its current revision, and where each
@@ -164,6 +191,7 @@ pub fn current(documents: &[SourceText], kept: &[Kept<'_>]) -> (Vec<extract::Fac
         let now = rows
             .iter()
             .find(|k| k.revision == revision && k.extractor_version == extract::EXTRACTOR_VERSION);
+        let mut at = now.and_then(|k| k.at());
         let (state, n, dropped, error) = match now {
             Some(k) => {
                 let got: Vec<extract::Fact> = serde_json::from_str(k.facts).unwrap_or_default();
@@ -194,6 +222,7 @@ pub fn current(documents: &[SourceText], kept: &[Kept<'_>]) -> (Vec<extract::Fac
                     let got: Vec<extract::Fact> = serde_json::from_str(k.facts).unwrap_or_default();
                     let n = got.len();
                     facts.extend(got);
+                    at = k.at();
                     ("stale", n, usize::try_from(k.dropped).unwrap_or(0), None)
                 }
                 None => ("stale", 0, 0, None),
@@ -206,6 +235,7 @@ pub fn current(documents: &[SourceText], kept: &[Kept<'_>]) -> (Vec<extract::Fac
             facts: n,
             dropped,
             error,
+            at,
         });
     }
     (facts, coverage)
@@ -240,6 +270,7 @@ pub fn last_read(unread: &[String], kept: &[Kept<'_>]) -> (Vec<extract::Fact>, V
             facts: got.len(),
             dropped: usize::try_from(k.dropped).unwrap_or(0),
             error: None,
+            at: k.at(),
         });
         facts.extend(got);
     }
@@ -336,6 +367,7 @@ mod current_tests {
             doc_type: Some("prd".to_owned()),
             node: String::new(),
             binding: None,
+            at: None,
         }
     }
 
@@ -353,6 +385,8 @@ mod current_tests {
             dropped: 0,
             error: None,
             created_at: 0,
+            source_commit: None,
+            source_ref: None,
         }];
         let (facts, coverage) = current(std::slice::from_ref(&d), &kept);
         assert_eq!(facts.len(), 1, "the earlier reading still shows");
@@ -387,6 +421,8 @@ mod current_tests {
             dropped: 0,
             error,
             created_at: at,
+            source_commit: None,
+            source_ref: None,
         }
     }
 
@@ -428,6 +464,28 @@ mod current_tests {
     }
 
     #[test]
+    fn a_reading_carries_the_commit_it_was_taken_at_and_an_old_one_none() {
+        let d = doc("docs/a.md", "An invoice.\n");
+        let revision = extract::revision(&d.text);
+        let mut row = kept(&revision, extract::EXTRACTOR_VERSION, None, 1);
+        row.source_commit = Some("4fbc8023aa");
+        row.source_ref = Some("main");
+        let (_, coverage) = current(std::slice::from_ref(&d), std::slice::from_ref(&row));
+        assert_eq!(
+            coverage[0].at,
+            Some(GitRevision {
+                commit: "4fbc8023aa".into(),
+                git_ref: Some("main".into()),
+            })
+        );
+        let old = kept(&revision, extract::EXTRACTOR_VERSION, None, 1);
+        let (_, coverage) = current(std::slice::from_ref(&d), &[old]);
+        assert_eq!(coverage[0].at, None, "kept before commits were recorded");
+        let (_, coverage) = current(std::slice::from_ref(&d), &[]);
+        assert_eq!(coverage[0].at, None, "never read");
+    }
+
+    #[test]
     fn another_revision_gives_no_facts() {
         let d = doc("docs/a.md", "An invoice, changed.\n");
         let kept = [Kept {
@@ -438,6 +496,8 @@ mod current_tests {
             dropped: 0,
             error: None,
             created_at: 0,
+            source_commit: None,
+            source_ref: None,
         }];
         let (facts, coverage) = current(std::slice::from_ref(&d), &kept);
         assert!(facts.is_empty(), "its lines are not this text's");

@@ -23,6 +23,7 @@ pub(crate) mod gts;
 mod index;
 mod mcp;
 pub(crate) use mcp::tools as mcp_tools;
+mod detach_task; // a source taken out of a project as one run (#1042)
 mod ingest_task;
 pub mod sdk;
 pub(crate) use ingest_task::{IngestPayload, TASK_TYPE as INGEST_TASK_TYPE};
@@ -311,6 +312,21 @@ impl RestApiCapability for StudioArtifactIngestGear {
             crate::tasks::sdk::register(Arc::new(ingest_task::IngestTask::new(Arc::clone(
                 service,
             ))))?;
+            // Detaching a source writes the project's config and prunes what
+            // was synced from it, in one run. Without account-management there
+            // is no config to write, and the route answers 503 for want of
+            // the task type.
+            match ctx
+                .client_hub()
+                .get::<dyn account_management_sdk::AccountManagementClient>()
+            {
+                Ok(am) => crate::tasks::sdk::register(Arc::new(detach_task::DetachTask::new(
+                    Arc::new(detach_task::InProcess::new(am, Arc::clone(service))),
+                )))?,
+                Err(e) => {
+                    warn!(error = %e, "studio-artifact-ingest: account-management unavailable — sources cannot be detached")
+                }
+            }
         }
 
         // Offer the checkout to whoever owns the documents in it.

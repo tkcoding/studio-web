@@ -1,0 +1,26 @@
+# This micro-frontend's passport: everything a tool that assembles a product
+# from FrontX packages (Gearbox, Constructor Studio) needs to know about it, in
+# one file. It restates what package.json and mfe.json say, and those tools
+# check that they agree, so keep them in step when either changes.
+#
+# The Components kit: a built-in kit (ADR-0068 §7), a base kit by default
+# (ADR-0069 §4). Platform › Components, Repositories and Publication requests,
+# and Organization › Components, from one entry.
+gdl_version = "1.5"
+
+mfe(
+    name = "@constructor-studio/components-mfe",
+    version = "0.2.0-alpha.0",
+
+    # The backend gears its screens call, by gear id.
+    requires = ["studio-components-catalog", "studio-connector", "studio-kits", "studio-user", "studio-tasks"],
+
+    screens = ["Components", "Repositories", "Publication requests", "Components"],
+    mounts = ["/platform/components", "/platform/repositories", "/platform/publication-requests", "/components"],
+
+    frontx = "0.2.0-alpha.15",
+
+    roles = [],
+
+    preview = ["/components", "/platform/components"],
+)

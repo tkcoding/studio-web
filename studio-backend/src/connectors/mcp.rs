@@ -12,11 +12,12 @@ pub fn tools() -> Vec<Tool> {
     vec![
         Tool {
             name: "project_connections",
-            description: "The connections a project can use: its own, or its organization's \
-                when it has none of its own. Each with `id` (what a project source names as \
-                `connection_id`), provider (github, gitlab, kubernetes, registry, research…), \
-                label, account, base URL, scope (`personal`: one person's token) and whether it \
-                is the caller's.",
+            description: "The connections a project can use: its own, its workspace's and its \
+                organization's together, each marked `inherited` when it is held above the \
+                project (`owner_tenant_id` says where). Each with `id` (what a project source \
+                names as `connection_id`), provider (github, gitlab, kubernetes, registry, \
+                research…), label, account, base URL, scope (`personal`: one person's token) \
+                and whether it is the caller's.",
             input_schema: || object(json!({ "project_id": project_id() }), &["project_id"]),
             effect: Effect::Read,
             experimental: false,
@@ -52,7 +53,10 @@ fn project_connections(api: Api, args: Map<String, Value>) -> ToolFuture {
         let list = api
             .get(
                 "/studio-connector/v1/connections",
-                &[("tenant".to_owned(), tenant)],
+                &[
+                    ("tenant".to_owned(), tenant),
+                    ("with_ancestors".to_owned(), "true".to_owned()),
+                ],
             )
             .await?;
         Ok(compact_connections(&list))
@@ -76,6 +80,7 @@ fn compact_connections(list: &Value) -> Value {
                 "base_url": c["base_url"],
                 "scope": c["scope"],
                 "owner_tenant_id": c["owner_tenant_id"],
+                "inherited": c["inherited"],
                 "mine": c["mine"],
             })
         })
@@ -112,11 +117,12 @@ mod tests {
             "id": "c1", "provider": "github", "label": "Acme", "account": "bot",
             "base_url": "https://github.com", "scope": "tenant", "owner_tenant_id": "o",
             "secret_ref": "cred://x", "options": {"k": "v"}, "mine": false,
-            "created_at_epoch_secs": 1
+            "inherited": true, "created_at_epoch_secs": 1
         }]});
         let out = compact_connections(&list);
         assert_eq!(out["total"], 1);
         assert_eq!(out["items"][0]["id"], "c1");
+        assert_eq!(out["items"][0]["inherited"], true);
         assert!(out["items"][0].get("secret_ref").is_none());
         assert!(out.to_string().find("cred://").is_none());
     }

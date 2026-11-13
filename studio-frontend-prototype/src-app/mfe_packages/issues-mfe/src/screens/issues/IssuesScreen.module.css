@@ -1,0 +1,269 @@
+/*
+ * Project › Issues over ui-kit semantic tokens (see theme.css in
+ * @gears-frontx/ui-kit). No Tailwind: inside the shadow root the re-anchored
+ * kit tokens shadow the shell's HSL triplets.
+ */
+
+.screen {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 100%;
+  padding: var(--space-6);
+  color: var(--foreground);
+}
+
+/* The kit's theme.css paints `[data-theme]`; the shell's screen keeps its own. */
+.screen[data-theme] {
+  background: transparent;
+}
+
+.skeleton {
+  height: 12rem;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-heading-1-size);
+  line-height: var(--text-heading-1-line-height);
+  font-weight: var(--text-heading-1-weight);
+}
+
+.build {
+  margin-left: auto;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted-foreground);
+}
+
+.about {
+  margin: 0;
+  max-width: 60rem;
+  color: var(--muted-foreground);
+}
+
+.muted {
+  color: var(--muted-foreground);
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+.error {
+  margin: 0;
+  color: var(--destructive);
+}
+
+.errorInline {
+  color: var(--destructive);
+}
+
+.resolve {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.verdict .ok {
+  color: var(--success, var(--foreground));
+}
+
+.verdict .bad {
+  color: var(--destructive);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.search {
+  max-width: 18rem;
+}
+
+.count {
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.sortable {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.row {
+  cursor: pointer;
+}
+
+.titleCell {
+  white-space: normal;
+}
+
+.where {
+  font-size: 0.85em;
+}
+
+.issueLink {
+  color: var(--primary);
+}
+
+.status_blocks {
+  color: var(--destructive);
+}
+
+.rowActions {
+  text-align: right;
+}
+
+.detailRow > td {
+  background: var(--muted);
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  white-space: normal;
+}
+
+.done {
+  opacity: 0.75;
+}
+
+.itemHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sides {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: var(--space-2);
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sidePath {
+  align-self: flex-start;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.85em;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.sidePath:disabled {
+  color: var(--muted-foreground);
+  cursor: default;
+}
+
+.quote {
+  margin: 0;
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--border);
+  color: var(--muted-foreground);
+}
+
+.fix {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fix ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.fix del {
+  color: var(--destructive);
+}
+
+.fix ins {
+  text-decoration: none;
+  color: var(--success, var(--foreground));
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.saved {
+  color: var(--success, var(--foreground));
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.inverse {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.inverse input {
+  max-width: 14rem;
+}
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.issueForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}

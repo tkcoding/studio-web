@@ -1,0 +1,275 @@
+{
+  "manifest_version": "1",
+  "slug": "project-activity",
+  "name": "Activity",
+  "description": "The project's Activity tab, beyond the shell's own run list.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "project"
+  ],
+  "model": {
+    "types": [
+      {
+        "name": "comment",
+        "id": "comment",
+        "label": "Comment",
+        "description": "A source-aware comment attached to a pull request or document, with authorship, threading, resolution and edit history.",
+        "entity": {
+          "id": "comment",
+          "bucket": "collaboration",
+          "name": "Comment",
+          "kind": "threaded collaboration record",
+          "description": "A source-aware comment attached to a pull request or document, with authorship, threading, resolution and edit history.",
+          "meta": {
+            "relationship": "human-loop",
+            "priority": "P2",
+            "level": 3,
+            "badge": "",
+            "note": "",
+            "badge-style": "neutral",
+            "profiles": [
+              "PdM",
+              "Arch",
+              "Dev",
+              "QA"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "CommentId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "subject_ref",
+              "type": "EntityRef",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "subject_kind",
+              "type": "pull_request | document",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "author_ref",
+              "type": "ActorRef",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "body",
+              "type": "TextContent",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "parent_ref",
+              "type": "CommentId?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "thread_ref",
+              "type": "CommentId?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "source_system",
+              "type": "SourceId?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "external_id",
+              "type": "string?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "status",
+              "type": "active | resolved | deleted",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "updated_at",
+              "type": "timestamp?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "replies_to",
+              "type": "Comment",
+              "description": "",
+              "relation": "comment",
+              "relationType": "references",
+              "relationLabel": "replies to",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "authored_by",
+              "type": "Person",
+              "description": "",
+              "relation": "person",
+              "relationType": "references",
+              "relationLabel": "authored by",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "notifies",
+              "type": "Notification",
+              "description": "",
+              "relation": "notification",
+              "relationType": "derives",
+              "relationLabel": "produces",
+              "required": false,
+              "extends": "link"
+            },
+            {
+              "name": "belongs_to",
+              "type": "DiscussionThread",
+              "description": "",
+              "relation": "discussion-thread",
+              "relationType": "references",
+              "relationLabel": "belongs to",
+              "required": false,
+              "cardinality": "N:1",
+              "extends": "edge"
+            },
+            {
+              "name": "targets",
+              "type": "ManagedObject",
+              "description": "",
+              "relation": "managed-object",
+              "relationType": "references",
+              "relationLabel": "targets",
+              "required": false,
+              "cardinality": "N:1",
+              "extends": "edge"
+            },
+            {
+              "name": "targets_2",
+              "type": "CandidateObject",
+              "description": "",
+              "relation": "candidate-object",
+              "relationType": "references",
+              "relationLabel": "targets",
+              "required": false,
+              "cardinality": "N:1",
+              "extends": "link"
+            },
+            {
+              "name": "targets_3",
+              "type": "ActionRun",
+              "description": "",
+              "relation": "action-run",
+              "relationType": "references",
+              "relationLabel": "targets",
+              "required": false,
+              "cardinality": "N:1",
+              "extends": "link"
+            },
+            {
+              "name": "contains",
+              "type": "Mention",
+              "description": "",
+              "relation": "mention",
+              "relationType": "composes",
+              "relationLabel": "contains",
+              "required": false,
+              "extends": "link"
+            }
+          ],
+          "methods": [
+            {
+              "name": "reply",
+              "description": "",
+              "input": "author, body",
+              "result": "Comment"
+            },
+            {
+              "name": "edit",
+              "description": "",
+              "input": "body",
+              "result": "Comment"
+            },
+            {
+              "name": "resolve",
+              "description": "",
+              "input": "actor",
+              "result": "void"
+            },
+            {
+              "name": "delete",
+              "description": "",
+              "input": "actor",
+              "result": "void"
+            },
+            {
+              "name": "list_replies",
+              "description": "",
+              "input": "",
+              "result": "Comment[]"
+            }
+          ],
+          "examples": [
+            "GitHub pull-request comment",
+            "GitHub review thread",
+            "Confluence page comment",
+            "Confluence inline comment"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "managed-object"
+        }
+      }
+    ],
+    "properties": [
+      {
+        "on": "project",
+        "property": {
+          "name": "activity",
+          "type": "activity",
+          "relation": "activity",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Activity",
+          "description": "A tab of the project: what it shows."
+        }
+      },
+      {
+        "on": "actor",
+        "property": {
+          "name": "authors",
+          "type": "Comment",
+          "description": "",
+          "relation": "comment",
+          "relationType": "references",
+          "relationLabel": "authors",
+          "required": false,
+          "cardinality": "1:N",
+          "extends": "link"
+        }
+      }
+    ]
+  }
+}

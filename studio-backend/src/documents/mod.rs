@@ -24,7 +24,6 @@ mod entity;
 pub(crate) mod gts;
 pub(crate) mod intake;
 mod mcp;
-pub(crate) use mcp::tools as mcp_tools;
 mod migrations;
 pub(crate) mod model;
 mod model_table;
@@ -43,11 +42,13 @@ mod review_guide;
 mod review_store;
 pub mod sdk;
 mod service;
+mod sources_flight;
 mod spec_model;
 mod spec_rows;
 mod stamp;
 #[cfg(test)]
 mod sync_analysis_tests;
+mod uploads;
 mod validate;
 
 use std::sync::{Arc, OnceLock};
@@ -64,6 +65,8 @@ use types_registry_sdk::{RegisterResult, TypesRegistryClient};
 
 use repo::DocumentsRepo;
 use service::{DocumentsService, SyncAnalysis};
+
+pub(crate) use mcp::tools as mcp_tools;
 
 /// `gears.studio-documents.config`.
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -88,7 +91,7 @@ pub struct StorageConfig {
     pub process: process_store::ProcessStorage,
     /// Review requests, the verdicts on them, and decisions.
     pub reviews: review_store::ReviewStorage,
-    /// Documents, bindings, verdicts, the spec model, parts, delivery scopes.
+    /// Documents, bindings, verdicts, the project domain model, parts, delivery scopes.
     pub documents: model_table::TableStorage,
 }
 
@@ -210,6 +213,10 @@ impl toolkit::Gear for StudioDocumentsGear {
         // registry to bound a model's suggestion by.
         ctx.client_hub()
             .register::<dyn port::CapabilityVocabulary>(service.clone());
+        // A new project's first document, for its creation run
+        // (studio-organizations).
+        ctx.client_hub()
+            .register::<dyn port::ProjectDocuments>(service.clone());
 
         self.service
             .set(service)

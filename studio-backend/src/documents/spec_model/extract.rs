@@ -1,5 +1,5 @@
 //! Stage 2: a document's facts, asked of a model and checked against the
-//! text (`docs/spec-domain-model.md`, "A build").
+//! text (`docs/project-domain-model.md`, "A build").
 //!
 //! Everything here is pure: cutting a document into pieces a model can read
 //! with their line numbers, the prompt, and reading the answer. Reading the

@@ -1,0 +1,22 @@
+# This micro-frontend's passport (see tests-mfe/frontx.gdl for what each field is).
+#
+# The Issues kit: a built-in kit (ADR-0068 §7), a base kit by default
+# (ADR-0069 §4). Its one screen is a project-level tab.
+gdl_version = "1.5"
+
+mfe(
+    name = "@constructor-studio/issues-mfe",
+    version = "0.2.0-alpha.0",
+
+    # The backend gears its screen calls, by gear id.
+    requires = ["studio-documents", "studio-user"],
+
+    screens = ["Issues"],
+    mounts = ["/issues"],
+
+    frontx = "0.2.0-alpha.15",
+
+    roles = [],
+
+    preview = ["/issues"],
+)

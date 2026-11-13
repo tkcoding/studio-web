@@ -1,0 +1,34 @@
+.block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.failed {
+  gap: var(--space-4);
+  padding-block: var(--space-4);
+}
+
+.error {
+  margin: 0;
+  padding-inline: var(--space-4);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line-height);
+  color: var(--danger);
+}
+
+.retry {
+  margin-inline: var(--space-4);
+  align-self: flex-start;
+}
+
+.stripSkeleton {
+  height: var(--control-height-sm);
+  width: 20rem;
+  margin: var(--space-3) var(--space-4);
+}
+
+.tableSkeleton {
+  height: 16rem;
+  margin-inline: var(--space-4);
+}

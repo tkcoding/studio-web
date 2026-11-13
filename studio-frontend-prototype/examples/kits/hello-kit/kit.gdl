@@ -1,0 +1,16 @@
+# A kit from outside the portal's build (ADR-0068 phase 5): its screen is a
+# FrontX bundle the backend serves at run time, so installing it shows its tab
+# with no portal rebuild. `mfe` names the bundle `npm run build` writes.
+gdl_version = "1.7"
+
+kit(
+    name = "hello-kit",
+    title = "Hello kit",
+    version = "0.1.0",
+    description = "A demo: one project tab, loaded at run time from the kit's own bundle.",
+    publisher = "Constructor Fabric (example)",
+    visibility = "public",
+    levels = ["organization", "project"],
+    mfe = [path("mfe/hello")],
+    docs = ["README.md"],
+)

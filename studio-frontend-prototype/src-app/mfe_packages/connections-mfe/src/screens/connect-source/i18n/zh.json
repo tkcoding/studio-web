@@ -1,0 +1,1 @@
+{"title": "连接来源", "field_provider": "提供方", "field_provider_placeholder": "选择提供方", "field_label": "名称", "field_label_hint": "此连接将在列表中显示的名称", "field_base_url": "安装地址", "field_token": "凭据", "cancel": "取消", "create": "创建", "error_no_org": "未指定组织，因此无法关联此连接。", "error_generic": "无法创建连接。", "error_providers": "无法加载提供方列表。", "loading_providers": "正在加载提供方..."}

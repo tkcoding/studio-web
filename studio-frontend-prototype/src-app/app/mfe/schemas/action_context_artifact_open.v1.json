@@ -1,0 +1,58 @@
+{
+  "$id": "gts://gts.frontx.mfes.comm.action.v1~constructor_studio.context.artifact.open.v1~",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Shell-owned action an MFE executes against the screen domain when a member asks to open one artifact. The MFE publishes, the shell owns the answer: a navigation on the router to the editor screen, with the artifact in the address (ADR-0028, #320), echoed back as ...context.artifact.selected.v1~. Nothing in the MFE writes the selection locally — see projects-mfe/src/actions/artifactActions.ts.",
+  "allOf": [
+    {
+      "$ref": "gts://gts.frontx.mfes.comm.action.v1~"
+    }
+  ],
+  "properties": {
+    "payload": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "$comment": "Tenant id of the project the artifact was listed in."
+        },
+        "artifactId": {
+          "type": "string",
+          "minLength": 1,
+          "$comment": "The node's instance_id in the artifact gear; a Studio document's id for kind document."
+        },
+        "repository": {
+          "type": "string",
+          "$comment": "The repository's full_path, as the gear names it. Goes into the address as given; the router serializes / raw."
+        },
+        "path": {
+          "type": "string",
+          "$comment": "Checkout-relative path of a file — what studio.openInEditor takes. A Studio document's title, which names its tab in the IDE. Empty for kinds that have no path."
+        },
+        "kind": {
+          "enum": [
+            "repo",
+            "file",
+            "issue",
+            "pullRequest",
+            "commit",
+            "comment",
+            "user",
+            "document"
+          ],
+          "$comment": "STUDIO_ARTIFACT_KINDS in mfe-shared (host/hostActions.ts), not the gear's type ids. #320 writes this token into the address; a file and a Studio document open in the editor."
+        }
+      },
+      "required": [
+        "projectId",
+        "artifactId",
+        "repository",
+        "path",
+        "kind"
+      ]
+    }
+  },
+  "required": [
+    "payload"
+  ]
+}

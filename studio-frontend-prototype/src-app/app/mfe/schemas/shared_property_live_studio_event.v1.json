@@ -1,0 +1,21 @@
+{
+  "$id": "gts://gts.frontx.mfes.comm.shared_property.v1~constructor_studio.live.studio_events.last_event.v1~",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Shell-owned: the last frame of the shell's one studio-events subscription for the signed-in person (docs/studio-events.md), or null before the first. The shell holds the only connection and relays each frame here, so a screen learns that something happened without a stream of its own. A signal to read again, not a log: only the newest frame is kept.",
+  "allOf": [{ "$ref": "gts://gts.frontx.mfes.comm.shared_property.v1~" }],
+  "properties": {
+    "value": {
+      "type": ["object", "null"],
+      "$comment": "A StudioEvent as the channel carries it: seq, at_ms, kind, subject_type, subject_id, source, payload. The payload is whatever the publishing gear sent, so it is not described here.",
+      "properties": {
+        "seq": { "type": "number" },
+        "at_ms": { "type": "number" },
+        "kind": { "type": "string" },
+        "subject_type": { "type": "string" },
+        "subject_id": { "type": "string" },
+        "source": { "type": "string" }
+      },
+      "required": ["seq", "kind", "subject_type", "subject_id"]
+    }
+  }
+}

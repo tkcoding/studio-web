@@ -1,0 +1,716 @@
+{
+  "manifest_version": "1",
+  "slug": "project-lifecycle",
+  "name": "Project lifecycle",
+  "description": "A project's phases, its phase chip, and what waits on its owner.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "organization",
+    "workspace",
+    "project"
+  ],
+  "model": {
+    "types": [
+      {
+        "name": "phase",
+        "label": "Project phase",
+        "description": "One of the phases a project moves through: idea, discovery, build, run.",
+        "fields": [
+          {
+            "name": "order",
+            "type": "integer",
+            "description": "Where the phase sits in the lifecycle"
+          },
+          {
+            "name": "summary",
+            "type": "string?",
+            "description": "What a project does in this phase"
+          }
+        ]
+      },
+      {
+        "name": "risk",
+        "id": "risk",
+        "label": "Risk",
+        "description": "A scoped uncertainty that may affect delivery or outcomes, tracked with probability, impact, ownership, mitigation and evidence.",
+        "entity": {
+          "id": "risk",
+          "bucket": "planning",
+          "name": "Risk",
+          "kind": "governance record",
+          "description": "A scoped uncertainty that may affect delivery or outcomes, tracked with probability, impact, ownership, mitigation and evidence.",
+          "meta": {
+            "relationship": "delivery-planning",
+            "priority": "P1",
+            "level": 3,
+            "badge": "",
+            "note": "",
+            "badge-style": "neutral",
+            "profiles": [
+              "CTO",
+              "PdM",
+              "Arch",
+              "Dev",
+              "QA"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "EntityId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "scope_ref",
+              "type": "EntityRef",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "category",
+              "type": "schedule | cost | technical | security | compliance | operational",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "probability",
+              "type": "0..1",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "impact",
+              "type": "low | medium | high | critical",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "score",
+              "type": "decimal?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "owner_ref",
+              "type": "ActorRef?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "mitigation_ref",
+              "type": "EntityRef?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "status",
+              "type": "identified | analyzing | mitigating | accepted | closed",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "owned_by",
+              "type": "Person",
+              "description": "",
+              "relation": "person",
+              "relationType": "member",
+              "relationLabel": "owned by",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "mitigated_by",
+              "type": "WorkItem",
+              "description": "",
+              "relation": "work-item",
+              "relationType": "references",
+              "relationLabel": "mitigated by",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "assessed_as",
+              "type": "Evidence",
+              "description": "",
+              "relation": "evidence",
+              "relationType": "derives",
+              "relationLabel": "assessed as",
+              "required": false,
+              "extends": "link"
+            }
+          ],
+          "methods": [
+            {
+              "name": "assess",
+              "description": "",
+              "input": "",
+              "result": "RiskScore"
+            },
+            {
+              "name": "mitigate",
+              "description": "",
+              "input": "work",
+              "result": "void"
+            },
+            {
+              "name": "accept",
+              "description": "",
+              "input": "actor, reason",
+              "result": "Approval"
+            },
+            {
+              "name": "to_evidence",
+              "description": "",
+              "input": "",
+              "result": "Evidence"
+            }
+          ],
+          "examples": [
+            "Release schedule risk",
+            "Security exposure",
+            "Dependency risk",
+            "Operational capacity risk"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "managed-object"
+        }
+      },
+      {
+        "name": "dependency",
+        "id": "dependency",
+        "label": "Dependency",
+        "description": "A dated, attributed record that one object depends on another: what blocks what, since when, and how badly. A reified relationship, so its dates and criticality survive.",
+        "entity": {
+          "id": "dependency",
+          "bucket": "planning",
+          "name": "Dependency",
+          "kind": "reified relationship",
+          "description": "A dated, attributed record that one object depends on another: what blocks what, since when, and how badly. A reified relationship, so its dates and criticality survive.",
+          "meta": {
+            "relationship": "delivery-planning",
+            "priority": "P2",
+            "level": 3,
+            "badge": "From MaxV",
+            "note": "Reified relationship required by invariant 8. · model.md §8.2",
+            "badge-style": "green",
+            "profiles": [
+              "PdM",
+              "Arch",
+              "Dev",
+              "CTO",
+              "QA"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "EntityId",
+              "description": "",
+              "required": true,
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "source_ref",
+              "type": "EntityId",
+              "description": "The object that depends",
+              "required": true,
+              "relationLabel": ""
+            },
+            {
+              "name": "target_ref",
+              "type": "EntityId",
+              "description": "The object depended on",
+              "required": true,
+              "relationLabel": ""
+            },
+            {
+              "name": "dependency_kind",
+              "type": "blocks | requires | affects",
+              "description": "",
+              "required": true,
+              "relationLabel": ""
+            },
+            {
+              "name": "criticality",
+              "type": "low | medium | high | blocking",
+              "description": "",
+              "required": false,
+              "relationLabel": ""
+            },
+            {
+              "name": "valid_from",
+              "type": "timestamp",
+              "description": "",
+              "required": true,
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "valid_to",
+              "type": "timestamp?",
+              "description": "",
+              "required": false,
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "status",
+              "type": "proposed | confirmed | resolved | retired",
+              "description": "",
+              "required": true,
+              "relationLabel": ""
+            },
+            {
+              "name": "note",
+              "type": "string?",
+              "description": "",
+              "required": false,
+              "relationLabel": ""
+            },
+            {
+              "name": "depends_on",
+              "type": "ManagedObject",
+              "description": "",
+              "relation": "managed-object",
+              "relationType": "references",
+              "relationLabel": "depends_on",
+              "required": false,
+              "extends": "edge"
+            }
+          ],
+          "methods": [
+            {
+              "name": "is_active",
+              "description": "",
+              "input": "at?",
+              "result": "boolean"
+            },
+            {
+              "name": "resolve",
+              "description": "",
+              "input": "actor",
+              "result": "void"
+            },
+            {
+              "name": "explain",
+              "description": "",
+              "input": "",
+              "result": "Provenance"
+            }
+          ],
+          "examples": [
+            "Clean Restore blocked by a storage-layer change",
+            "A release requires a third-party component upgrade"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "managed-object"
+        }
+      },
+      {
+        "name": "lifecycle-stage",
+        "id": "lifecycle-stage",
+        "label": "Lifecycle Stage",
+        "description": "One stage of a kit-defined construction lifecycle, containing activities per performer role and gates.",
+        "entity": {
+          "id": "lifecycle-stage",
+          "bucket": "kit-management",
+          "name": "Lifecycle Stage",
+          "kind": "kit lifecycle stage",
+          "description": "One stage of a kit-defined construction lifecycle, containing activities per performer role and gates.",
+          "meta": {
+            "relationship": "configuration",
+            "priority": "P1",
+            "level": 2,
+            "badge": "From MaxV",
+            "note": "Added for per-role configured activities, gates and checkpoints. · model.md §7",
+            "badge-style": "green",
+            "profiles": [
+              "StudioAdmin",
+              "Arch",
+              "PdM",
+              "Dev"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "EntityId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "phase_ref",
+              "type": "PhaseId",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "name",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "ordinal",
+              "type": "integer",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "activity_refs",
+              "type": "EntityId[]",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "quality_gate_refs",
+              "type": "EntityId[]",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "defines",
+              "type": "Activity",
+              "description": "",
+              "relation": "activity",
+              "relationType": "composes",
+              "relationLabel": "defines",
+              "required": false,
+              "cardinality": "1:N",
+              "extends": "link"
+            }
+          ],
+          "methods": [
+            {
+              "name": "list_activities",
+              "description": "",
+              "input": "role?",
+              "result": "Activity[]"
+            },
+            {
+              "name": "list_gates",
+              "description": "",
+              "input": "",
+              "result": "QualityGate[]"
+            }
+          ],
+          "examples": [
+            "Intent",
+            "Design",
+            "Release"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "record"
+        }
+      },
+      {
+        "name": "milestone",
+        "id": "milestone",
+        "label": "Milestone",
+        "description": "A significant dated outcome or decision point on a roadmap, product or project.",
+        "entity": {
+          "id": "milestone",
+          "bucket": "planning",
+          "name": "Milestone",
+          "kind": "delivery checkpoint",
+          "description": "A significant dated outcome or decision point on a roadmap, product or project.",
+          "meta": {
+            "relationship": "delivery-planning",
+            "priority": "P1",
+            "level": 3,
+            "badge": "",
+            "note": "",
+            "badge-style": "neutral",
+            "profiles": [
+              "CTO",
+              "PdM",
+              "Arch",
+              "Dev",
+              "QA"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "EntityId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "name",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "target_at",
+              "type": "timestamp",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "status",
+              "type": "planned | at_risk | achieved | missed | cancelled",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "completion_criteria",
+              "type": "Criterion[]",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "owner_ref",
+              "type": "EntityId?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "tracks",
+              "type": "Project",
+              "description": "",
+              "relation": "project",
+              "relationType": "references",
+              "relationLabel": "tracks",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "tracks_2",
+              "type": "WorkItem",
+              "description": "",
+              "relation": "work-item",
+              "relationType": "references",
+              "relationLabel": "tracks",
+              "required": false,
+              "extends": "edge"
+            }
+          ],
+          "methods": [
+            {
+              "name": "evaluate",
+              "description": "",
+              "input": "",
+              "result": "MilestoneStatus"
+            },
+            {
+              "name": "list_dependencies",
+              "description": "",
+              "input": "",
+              "result": "Object[]"
+            },
+            {
+              "name": "mark_achieved",
+              "description": "",
+              "input": "evidence",
+              "result": "void"
+            }
+          ],
+          "examples": [
+            "MVP ready",
+            "Public beta",
+            "Migration complete",
+            "General availability"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "managed-object"
+        }
+      }
+    ],
+    "fields": [
+      {
+        "on": "project",
+        "name": "phase",
+        "type": "idea | discovery | build | run",
+        "description": "The phase the project is in"
+      },
+      {
+        "on": "project",
+        "name": "phase_owner",
+        "type": "string?",
+        "description": "Who moves the project on from its phase (a subject id)"
+      },
+      {
+        "on": "project",
+        "name": "phase_since",
+        "type": "timestamp?",
+        "description": "When the project entered its phase"
+      }
+    ],
+    "tabs": [
+      {
+        "level": "project",
+        "name": "phases",
+        "label": "Phases",
+        "target": "phase"
+      }
+    ],
+    "lifecycles": [
+      {
+        "on": "project",
+        "field": "phase",
+        "states": [
+          "idea",
+          "discovery",
+          "build",
+          "run"
+        ],
+        "initial": "idea",
+        "transitions": [
+          {
+            "name": "discover",
+            "from": [
+              "idea"
+            ],
+            "to": "discovery"
+          },
+          {
+            "name": "build",
+            "from": [
+              "discovery"
+            ],
+            "to": "build"
+          },
+          {
+            "name": "launch",
+            "from": [
+              "build"
+            ],
+            "to": "run"
+          },
+          {
+            "name": "rethink",
+            "from": [
+              "discovery",
+              "build"
+            ],
+            "to": "idea"
+          },
+          {
+            "name": "rework",
+            "from": [
+              "run"
+            ],
+            "to": "build"
+          }
+        ]
+      }
+    ],
+    "properties": [
+      {
+        "on": "project",
+        "property": {
+          "name": "tracks",
+          "type": "Risk",
+          "description": "",
+          "relation": "risk",
+          "relationType": "composes",
+          "relationLabel": "tracks",
+          "required": false,
+          "extends": "edge"
+        }
+      },
+      {
+        "on": "workspace",
+        "property": {
+          "name": "ptypes",
+          "type": "project-type",
+          "relation": "project-type",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Templates & phases",
+          "description": "A tab of the workspace: what it shows."
+        }
+      }
+    ]
+  },
+  "inbox": [
+    {
+      "id": "phase-waiting",
+      "label": "A project waiting in its phase on its owner",
+      "query": {
+        "type": "project",
+        "where": {
+          "_and": [
+            {
+              "phase_owner": {
+                "_eq": "$me"
+              }
+            },
+            {
+              "phase": {
+                "_in": [
+                  "idea",
+                  "discovery",
+                  "build"
+                ]
+              }
+            }
+          ]
+        },
+        "fields": [
+          "name",
+          "tenant_id",
+          "parent_tenant_id",
+          "phase",
+          "phase_owner",
+          "phase_since"
+        ],
+        "order_by": [
+          {
+            "field": "phase_since"
+          }
+        ],
+        "limit": 200
+      },
+      "title": "{name} waits in its {phase} phase",
+      "workspace_field": "parent_tenant_id"
+    }
+  ],
+  "mcp_tools": [
+    {
+      "name": "project_phase",
+      "description": "A project's phase, its owner and the phases it may move to"
+    },
+    {
+      "name": "project_phase_set",
+      "description": "Move a project to a phase along the declared lifecycle"
+    }
+  ],
+  "permissions": {
+    "reads": [
+      "GET /studio-kits/v1/project-phase",
+      "GET /studio-kits/v1/project-phases"
+    ],
+    "writes": [
+      "PUT /studio-kits/v1/project-phase"
+    ]
+  }
+}

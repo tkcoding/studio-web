@@ -421,6 +421,16 @@ gears:
             - "$ref": "gts://gts.cf.core.am.tenant_metadata.v1~"
           x-gts-traits:
             inheritance_policy: "override_only"
+        - "$id": "gts://gts.cf.core.am.tenant_metadata.v1~cf.studio.kits.installed.v1~"
+          # Installed kits (ADR-0069 §4): the base kits on the platform root, an
+          # organization's own kits on the organization. Written by studio-kits alone.
+          "$schema": "http://json-schema.org/draft-07/schema#"
+          description: "Constructor Studio kits installed for every organization (root), one organization, or one project"
+          type: "object"
+          allOf:
+            - "$ref": "gts://gts.cf.core.am.tenant_metadata.v1~"
+          x-gts-traits:
+            inheritance_policy: "override_only"
         - "$id": "gts://gts.cf.core.am.tenant_metadata.v1~cf.studio.access.config.v1~"
           # Organization access config (ADR-0009): {model, roles[]}. Free-form
           # object like workspace.settings; shape enforced client-side until the
@@ -789,7 +799,7 @@ gears:
       server: "pg_main"
       dbname: "studio_domain_model"
       pool:
-        max_conns: 2
+        max_conns: 6
         min_conns: 0
         acquire_timeout: "10s"
         idle_timeout: "5m"
@@ -824,6 +834,17 @@ gears:
   # GET /studio-tasks/v1/runs/{id}.
   studio-notify:
     config: {}
+
+  # Constructor Research (ADR-0049). docker-compose points it at the Research
+  # emulator (`research-emulator` service, docs/research-emulator.md) unless
+  # .env names a real stand. Empty values leave Constructor Research out.
+  research-connector-plugin:
+    config:
+      issuer: "${STUDIO_RESEARCH_ISSUER:-}"
+      client_id: "${STUDIO_RESEARCH_CLIENT_ID:-}"
+      client_secret: "${STUDIO_RESEARCH_CLIENT_SECRET:-}"
+      redirect_uri: "${STUDIO_RESEARCH_REDIRECT_URI:-}"
+      api_url: "${STUDIO_RESEARCH_API_URL:-}"
 
   mini-chat:
     database:

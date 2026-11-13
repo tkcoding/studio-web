@@ -40,57 +40,56 @@ gzip_types
     font/otf;
 # text/html is always compressed when gzip is on and needs no entry above.
 
-# index.html and env.js select the current immutable bundle, so they must be
-# revalidated after every deployment. Hashed Vite assets can be cached forever.
+# index.html, env.js and each MFE's remoteEntry.js name the current immutable
+# bundle, so they must be revalidated after every deployment. Everything under
+# an `assets/` directory is Vite-hashed — the host app's own and each MFE's
+# (`/mfes/<name>/assets/`), which is why the pattern allows a prefix — so its
+# name changes whenever its bytes do and it can be cached forever.
+#
+# Each MFE's `shared/` (react, the FrontX packages: ~0.8 MB, the same bytes in
+# every MFE) and the MFE catalogue `generated-mfe-manifests.json` (~320 KB)
+# have stable, unhashed names, so they cannot be immutable — but `no-store`
+# made every page load download them again. `no-cache` keeps a copy and asks
+# each time: an unchanged file costs a 304 against its ETag, a changed one is
+# fetched, so neither is ever stale.
 map $uri $frontend_cache_control {
-    default                   "no-store, no-cache, must-revalidate";
-    ~^/(prototype/)?assets/   "public, max-age=31536000, immutable";
+    default                              "no-store, no-cache, must-revalidate";
+    ~^/(.*/)?assets/                     "public, max-age=31536000, immutable";
+    ~^/mfes/[^/]+/shared/                "no-cache";
+    ~^/generated-mfe-manifests\.json$    "no-cache";
 }
+
+# Content Security Policy: none is set here today. One added later must keep
+#   script-src 'self' blob:          every MFE chunk, built-in or a kit's, is
+#                                    fetched and evaluated from a blob: URL
+#   style-src  'self' 'unsafe-inline'  screens put their styles in a shadow root
+#   connect-src 'self'               chunks and APIs come through /cf/ and /mfes/
+# A kit's micro-frontends (ADR-0068 phase 5) are served by the backend under
+# /cf/studio-kits/v1/kits/…, same origin, so a kit needs nothing added to it.
+# See docs/design/studio-kits.md §3.12.
 
 server {
     # 8080: the image is nginxinc/nginx-unprivileged (runs as uid 101,
     # k8s runAsNonRoot-compatible) — non-root can't bind 80.
     listen 8080;
     server_name _;
-    # TLS terminates at Traefik, so nginx sees HTTP internally. Keep redirects
-    # relative for the legacy /prototype container mount as well.
-    absolute_redirect off;
 
     root /usr/share/nginx/html;
     index index.html;
-
-    # Compatibility mount for local/legacy callers. Kubernetes exposes the
-    # image at `/` on a dedicated POC host, but retaining this costs nothing
-    # and lets the same immutable image serve older compose configurations.
-    location = /prototype {
-        return 308 /prototype/;
-    }
-
-    location ^~ /prototype/ {
-        rewrite ^/prototype/(.*)$ /$1 break;
-        add_header Cache-Control $frontend_cache_control always;
-        try_files $uri $uri/ /index.html;
-    }
-
-    # The SPA's own files, at whatever depth an address asked for them. The
-    # build references them relatively (vite `base: "./"`, for the /prototype
-    # mount), so a reload at /workspaces/{id}/projects/{id} or /space/{id}
-    # asks for …/assets/index-*.js one level down, where the fallback below
-    # would answer index.html in place of the script. They only ever exist at
-    # the root. The proxied prefixes are left out: /cf/ and /studio/ are the
-    # backend's and the IDE's, whatever their paths contain. try_files moves
-    # $uri to /assets/…, so the cache map above still marks them immutable.
-    # The product mark and the favicons are public/ files referenced the same
-    # way: without them here, the header's mark broke on every nested address.
-    location ~ ^/(?!cf/|studio/|prototype/)(?:.+/)?(assets/[^/]+|env\.js|constructor-symbol\.svg|favicon\.(?:ico|png))$ {
-        add_header Cache-Control $frontend_cache_control always;
-        try_files /$1 =404;
-    }
 
     # SPA fallback
     location / {
         add_header Cache-Control $frontend_cache_control always;
         try_files $uri $uri/ /index.html;
+    }
+
+    # Well-known URIs are asked by programs, never by a person, and the SPA
+    # fallback would answer every one of them 200 with the portal's HTML. An
+    # MCP client signing in for /cf/studio-mcp asks
+    # /.well-known/oauth-authorization-server/auth/realms/studio first (RFC
+    # 8414) and must get a 404 to go on to Keycloak's own discovery document.
+    location ^~ /.well-known/ {
+        try_files $uri =404;
     }
 
 

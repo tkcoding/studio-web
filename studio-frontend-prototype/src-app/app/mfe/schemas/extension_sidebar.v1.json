@@ -1,0 +1,33 @@
+{
+  "$id": "gts://gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.sidebar.v1~",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Sidebar Extension Schema (Derived). What a kit docks beside the screen — Studio AI, the built-in kit `assistant`, is the first. The shell's KitDock mounts one only while its kit is installed where the person is, so `kit` is required: the sidebar is never the shell's own feature (ADR-0068: everything outside the shell is a kit). Same derived-type mechanism as extension_overlay.v1.",
+  "allOf": [
+    { "$ref": "gts://gts.frontx.mfes.ext.extension.v1~" }
+  ],
+  "properties": {
+    "presentation": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "$comment": "Accessible name of the docked panel"
+        },
+        "icon": {
+          "type": "string",
+          "$comment": "Icon identifier (Iconify name with prefix)"
+        },
+        "order": {
+          "type": "number",
+          "$comment": "When more than one installed kit docks a panel, the lowest order is docked"
+        },
+        "kit": {
+          "type": "string",
+          "$comment": "The kit this panel belongs to; docked only where that kit is installed"
+        }
+      },
+      "required": ["label", "kit"]
+    }
+  },
+  "required": ["presentation"]
+}

@@ -22,7 +22,7 @@ decision is ADR-0033. This README is what you need to work in the directory.
   reached only through `components_catalog::port::RoadmapCatalog`; schedules go
   through `scheduler::port::Schedules`; the plan file is read through a GitHub
   connection from [`../connectors`](../connectors).
-- The Reports screen is `studio-frontend-prototype/src/reports.tsx`.
+- The Reports screen is `studio-frontend-poc/src/reports.tsx` (the archived old prototype).
 
 ## Working here
 

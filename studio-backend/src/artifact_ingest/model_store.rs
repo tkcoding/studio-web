@@ -31,7 +31,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use super::graph::{
-    GraphStore, GtsEdge, GtsEdgeView, GtsNode, NodePage, NodePageQuery, ingested_file,
+    GraphStore, GtsEdge, GtsEdgeView, GtsNode, NodePage, NodePageQuery, PageStart, ingested_file,
     page_of_nodes,
 };
 use super::gts;
@@ -226,6 +226,7 @@ const SHARED_KINDS: [&str; 3] = ["work-item", "comment", "finding"];
 /// The types and relations the model needs before the first write.
 fn needs() -> Vec<TypeNeed> {
     let new_type = |id: &str, name: &str, description: &str| TypeNeed {
+        declared_by: GEAR.to_owned(),
         id: id.to_string(),
         name: name.to_string(),
         description: description.to_string(),
@@ -274,6 +275,7 @@ fn needs() -> Vec<TypeNeed> {
             continue;
         }
         out.push(TypeNeed {
+            declared_by: GEAR.to_owned(),
             id: entity.to_string(),
             fields: common_fields(),
             // What a sync writes is the source's, and the next sync would
@@ -286,6 +288,7 @@ fn needs() -> Vec<TypeNeed> {
         });
     }
     out.push(TypeNeed {
+        declared_by: GEAR.to_owned(),
         id: RELATION_SOURCE.to_string(),
         relations: RELATIONS
             .iter()
@@ -371,8 +374,19 @@ impl ModelGraphStore {
                 rows.first().is_some_and(|o| {
                     o.payload.get("status").and_then(Value::as_str) != Some("returned")
                 })
-            })
-            .unwrap_or(false);
+            });
+        // A marker that could not be read is not a marker that is absent.
+        // Taking a busy pool's timeout for "never moved" started the whole
+        // move (every artifact listed off the graph and written again) under
+        // exactly the load that made the read fail. This read answers from
+        // the old store; the next one asks again.
+        let marked = match marked {
+            Ok(marked) => marked,
+            Err(e) => {
+                warn!(error = %format!("{e:#}"), "studio-artifact-ingest: the move marker could not be read; this read stays on the old store");
+                return false;
+            }
+        };
         if marked {
             if let Ok(mut m) = self.moved.lock() {
                 m.insert(tenant);
@@ -530,20 +544,127 @@ impl ModelGraphStore {
         type_filter: Option<&str>,
         where_: Option<Value>,
     ) -> anyhow::Result<Vec<GtsNode>> {
+        let answers = self
+            .query_types(ctx, type_filter, |entity| {
+                let mut body = json!({"type": entity});
+                if let Some(w) = &where_ {
+                    body["where"] = w.clone();
+                }
+                body
+            })
+            .await?;
+        Ok(answers
+            .into_iter()
+            .flat_map(|(_, nodes, _)| nodes)
+            .collect())
+    }
+
+    /// One query per listable type `type_filter` names, all at once: each is
+    /// its own access check and read-model query, and the default listing
+    /// names four types, which one after another cost four round trips.
+    /// Answers each type's nodes and its total, in the types' order.
+    async fn query_types(
+        &self,
+        ctx: &SecurityContext,
+        type_filter: Option<&str>,
+        body_of: impl Fn(&str) -> Value,
+    ) -> anyhow::Result<Vec<(&'static str, Vec<GtsNode>, usize)>> {
         let port = self.port()?;
-        let mut out = Vec::new();
-        for artifact_type in gts::resolve_listable_types(type_filter) {
-            let Some(entity) = entity_of(artifact_type) else {
-                continue;
-            };
-            let mut body = json!({"type": entity});
-            if let Some(w) = &where_ {
-                body["where"] = w.clone();
-            }
-            let (rows, _) = port.query(ctx, body).await?;
-            out.extend(rows.into_iter().map(|o| Self::to_node(artifact_type, o)));
+        let reads = gts::resolve_listable_types(type_filter)
+            .into_iter()
+            .filter_map(|t| entity_of(t).map(|e| (t, e)))
+            .map(|(artifact_type, entity)| {
+                let port = Arc::clone(&port);
+                let body = body_of(entity);
+                async move {
+                    let (rows, total) = port.query(ctx, body).await?;
+                    let nodes: Vec<GtsNode> = rows
+                        .into_iter()
+                        .map(|o| Self::to_node(artifact_type, o))
+                        .collect();
+                    anyhow::Ok((artifact_type, nodes, total))
+                }
+            });
+        futures_util::future::try_join_all(reads).await
+    }
+
+    /// One page of a scope's artifacts, narrowed, ordered and sliced by the
+    /// model, so a page of 50 reads 50 rows and a count instead of every
+    /// artifact of the scope (a synced project holds thousands of files).
+    ///
+    /// The same rules as [`page_of_nodes`]: newest `updated_at` first with
+    /// ties by id, else by id, an absent date last. The model breaks ties by
+    /// object id, which is the artifact id behind one shared prefix, so the
+    /// order is the same. Over several types each answers the first
+    /// `offset + limit` of its own, and the page is cut from their merge.
+    async fn page_in_model(
+        &self,
+        ctx: &SecurityContext,
+        scope: &str,
+        q: &NodePageQuery<'_>,
+        offset: usize,
+    ) -> anyhow::Result<NodePage> {
+        let types = gts::resolve_listable_types(q.type_filter);
+        let single = types.len() == 1;
+        let mut where_ = scope_where(scope);
+        if let Some(repo) = q.repo {
+            where_["repo"] = json!({"_eq": repo});
         }
-        Ok(out)
+        let order = if q.by_updated {
+            json!([{"field": "updated_at", "direction": "desc"}])
+        } else {
+            json!([])
+        };
+        let answers = self
+            .query_types(ctx, q.type_filter, |entity| {
+                let mut body = json!({"type": entity, "where": where_, "order_by": order});
+                if single {
+                    body["offset"] = json!(offset);
+                    body["limit"] = json!(q.limit);
+                } else {
+                    body["limit"] = json!(offset.saturating_add(q.limit));
+                }
+                body
+            })
+            .await?;
+        let total: usize = answers.iter().map(|(_, _, n)| *n).sum();
+        let start = offset.min(total);
+        let mut nodes: Vec<GtsNode> = answers.into_iter().flat_map(|(_, n, _)| n).collect();
+        if !single {
+            sort_as_listed(&mut nodes, q.by_updated);
+            nodes = nodes.into_iter().skip(start).take(q.limit).collect();
+        }
+        nodes.truncate(q.limit);
+        Ok(NodePage {
+            nodes,
+            total: u64::try_from(total).unwrap_or(u64::MAX),
+            start: u64::try_from(start).unwrap_or(u64::MAX),
+        })
+    }
+}
+
+/// The artifacts whose payload names `scope` as their workspace or project.
+fn scope_where(scope: &str) -> Value {
+    json!({"_or": [{"workspace_id": {"_eq": scope}}, {"project_id": {"_eq": scope}}]})
+}
+
+/// The listing's order ([`page_of_nodes`]): newest `updated_at` first, an
+/// absent one last, ties by id; or by id alone.
+fn sort_as_listed(nodes: &mut [GtsNode], by_updated: bool) {
+    if by_updated {
+        fn updated(n: &GtsNode) -> &str {
+            n.value
+                .get("updated_at")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+        }
+        nodes.sort_by(|a, b| {
+            updated(b)
+                .cmp(updated(a))
+                .then_with(|| a.instance_id.cmp(&b.instance_id))
+        });
+    } else {
+        nodes.sort_by(|a, b| a.instance_id.cmp(&b.instance_id));
     }
 }
 
@@ -714,8 +835,7 @@ impl GraphStore for ModelGraph {
         if !s.ready(ctx).await {
             return s.legacy.list_in_scope(ctx, type_filter, scope).await;
         }
-        let w = json!({"_or": [{"workspace_id": {"_eq": scope}}, {"project_id": {"_eq": scope}}]});
-        s.read(ctx, type_filter, Some(w)).await
+        s.read(ctx, type_filter, Some(scope_where(scope))).await
     }
 
     async fn count_in_scope(
@@ -724,7 +844,19 @@ impl GraphStore for ModelGraph {
         type_filter: Option<&str>,
         scope: &str,
     ) -> anyhow::Result<u64> {
-        let n = self.list_in_scope(ctx, type_filter, scope).await?.len();
+        let s = &self.0;
+        if !s.ready(ctx).await {
+            return s.legacy.count_in_scope(ctx, type_filter, scope).await;
+        }
+        // The model counts; one row each is all that is read.
+        let answers = s
+            .query_types(
+                ctx,
+                type_filter,
+                |entity| json!({"type": entity, "where": scope_where(scope), "limit": 1}),
+            )
+            .await?;
+        let n: usize = answers.iter().map(|(_, _, n)| *n).sum();
         Ok(u64::try_from(n).unwrap_or(u64::MAX))
     }
 
@@ -749,6 +881,21 @@ impl GraphStore for ModelGraph {
         let s = &self.0;
         if !s.ready(ctx).await {
             return s.legacy.page(ctx, query).await;
+        }
+        // `subject` is no field of the model's types, and the text search
+        // spans fields the model does not index: those pages are still cut
+        // here, as is a page after a cursor (an id, not a position).
+        if let (Some(scope), None, None, PageStart::Offset(offset)) =
+            (query.scope, query.subject, query.needle, query.start)
+        {
+            match s.page_in_model(ctx, scope, query, offset).await {
+                Ok(page) => return Ok(page),
+                // A model whose types lack a field the page orders by
+                // still answers, the slow way.
+                Err(e) => {
+                    warn!(error = %format!("{e:#}"), "studio-artifact-ingest: the model could not cut the page; reading the scope whole");
+                }
+            }
         }
         let nodes = match query.scope {
             Some(scope) => self.list_in_scope(ctx, query.type_filter, scope).await?,

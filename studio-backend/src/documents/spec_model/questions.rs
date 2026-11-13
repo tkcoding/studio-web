@@ -1,6 +1,6 @@
 //! What one document leaves out of the domain the rest of the project
 //! describes, and the words it uses where the project agreed on others
-//! (`docs/spec-domain-model.md`, "Questions while writing"; issue #737).
+//! (`docs/project-domain-model.md`, "Questions while writing"; issue #737).
 //!
 //! Interview problem 1.3: two or three people per company know a domain, and
 //! a PRD written without them misses a key entity — the ledger in billing —

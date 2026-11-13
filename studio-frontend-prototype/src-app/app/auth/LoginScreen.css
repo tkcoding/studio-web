@@ -1,0 +1,272 @@
+/* The portal's front door, carried over from the prototype (ADR-0069): one
+   centred column on a dark-to-blue field — the mark, a two-line headline,
+   and a panel split by a vertical rule, the e-mail form on the left and
+   federated sign-in on the right.
+
+   Everything here is drawn for the dark field in both themes, so colours are
+   literal rather than tokens: a light theme must not turn the front door
+   white, and deriving the art from --primary would let a theme change
+   repaint it silently. */
+.auth-shell {
+  --auth-fg: #fff;
+  --auth-muted: rgb(255 255 255 / 0.62);
+  --auth-line: rgb(255 255 255 / 0.22);
+  --auth-blue: #0065e3;
+  --auth-link: #4d9bff;
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 48px 16px;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  background:
+    radial-gradient(70% 60% at 100% 0%, rgb(0 101 227 / 0.95) 0%, rgb(0 101 227 / 0) 70%),
+    linear-gradient(160deg, #0b0f17 0%, #0a1a3a 45%, #0b0f17 100%);
+  color: var(--auth-fg);
+}
+.auth-column {
+  width: 100%;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+}
+.auth-title {
+  margin: 40px 0 0;
+  text-align: center;
+  font-size: clamp(36px, 5vw, 64px);
+  line-height: 1.06;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+.auth-accent {
+  color: #2f86ff;
+}
+
+.auth-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1px 222px;
+  column-gap: 40px;
+  width: 100%;
+  max-width: 666px;
+  margin-top: 52px;
+}
+/* The rule between the panes is the grid's middle column. */
+.auth-panel::before {
+  content: '';
+  grid-column: 2;
+  grid-row: 1;
+  background: var(--auth-line);
+}
+.auth-local {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+.auth-federated {
+  grid-column: 3;
+  grid-row: 1;
+  padding-top: 52px;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+  width: max-content;
+  border-bottom: 1px solid var(--auth-line);
+}
+.auth-tabs button {
+  padding: 0 7px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  border-radius: 0;
+  background: none;
+  color: var(--auth-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.auth-tabs button.active {
+  color: var(--auth-fg);
+  border-bottom-color: var(--auth-blue);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 28px;
+}
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--auth-muted);
+}
+.auth-field-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.auth-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--auth-link);
+  font-size: 11px;
+  font-weight: 500;
+}
+.auth-link:hover {
+  text-decoration: underline;
+}
+.auth-password {
+  position: relative;
+  display: block;
+}
+.auth-shell input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 38px;
+  padding: 0 36px 0 9px;
+  border: 1px solid var(--auth-line);
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.02);
+  color: var(--auth-fg);
+  font-size: 12px;
+}
+.auth-shell input::placeholder {
+  color: rgb(255 255 255 / 0.6);
+}
+.auth-shell input:focus {
+  outline: none;
+  border-color: var(--auth-blue);
+  box-shadow: 0 0 0 2px rgb(0 101 227 / 0.35);
+}
+.auth-eye {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--auth-muted);
+  cursor: pointer;
+}
+.auth-eye:hover {
+  color: var(--auth-fg);
+}
+
+.auth-shell .auth-submit,
+.auth-shell .auth-provider {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.auth-shell .auth-submit {
+  margin-top: 18px;
+  border: 1px solid var(--auth-blue);
+  background: var(--auth-blue);
+  color: #fff;
+}
+.auth-shell .auth-submit:hover:not(:disabled) {
+  background: #0a72f5;
+}
+.auth-shell .auth-provider {
+  border: 1px solid var(--auth-line);
+  background: rgb(255 255 255 / 0.02);
+  color: var(--auth-fg);
+}
+.auth-shell .auth-provider:hover:not(:disabled) {
+  border-color: rgb(255 255 255 / 0.45);
+}
+.auth-shell button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.auth-kicker {
+  margin: 0 0 12px;
+  color: rgb(255 255 255 / 0.55);
+  font: 600 8px/12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.auth-copy {
+  margin: 0;
+  color: var(--auth-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+.auth-error {
+  margin-top: 16px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  border: 1px solid rgb(239 68 68 / 0.45);
+  background: rgb(254 226 226);
+  color: rgb(185 28 28);
+  font-size: 12px;
+}
+.auth-dev {
+  margin-top: 20px;
+  font-size: 11px;
+  color: var(--auth-muted);
+}
+.auth-dev summary {
+  cursor: pointer;
+}
+.auth-dev form {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Phone width: the panes stack and the rule becomes a horizontal one. */
+@media (max-width: 720px) {
+  .auth-panel {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 28px;
+    margin-top: 36px;
+  }
+  .auth-panel::before {
+    grid-column: 1;
+    grid-row: 2;
+    height: 1px;
+  }
+  .auth-local {
+    grid-row: 1;
+  }
+  .auth-federated {
+    grid-column: 1;
+    grid-row: 3;
+    padding-top: 0;
+  }
+  /* The headline wraps where it must, not where the desktop break is. */
+  .auth-title br {
+    display: none;
+  }
+}

@@ -46,6 +46,9 @@ impl MigratorTrait for Migrator {
             Box::new(m0025::Migration),
             Box::new(m0026::Migration),
             Box::new(m0027::Migration),
+            Box::new(m0028::Migration),
+            Box::new(m0029::Migration),
+            Box::new(m0030::Migration),
         ]
     }
 }
@@ -937,7 +940,7 @@ ALTER TABLE studio_document_bindings DROP COLUMN IF EXISTS inferred_capabilities
 }
 
 /// What a model read out of each document revision of a project
-/// (`docs/spec-domain-model.md`). One row per (project, path, revision,
+/// (`docs/project-domain-model.md`). One row per (project, path, revision,
 /// extractor version): an unchanged document is never asked about twice, and
 /// a new prompt asks again.
 mod m0015 {
@@ -998,9 +1001,9 @@ CREATE TABLE IF NOT EXISTS studio_spec_model_extractions (
     }
 }
 
-/// What the judge said about each candidate of a project's spec model, per
+/// What the judge said about each candidate of the project domain model, per
 /// revision of the documents on its sides, and what members decided about
-/// the findings (`docs/spec-domain-model.md`).
+/// the findings (`docs/project-domain-model.md`).
 mod m0016 {
     use toolkit_db::sea_orm_migration::prelude::*;
     use toolkit_db::sea_orm_migration::sea_orm::ConnectionTrait;
@@ -1704,6 +1707,160 @@ mod m0027 {
             ] {
                 manager.get_connection().execute_unprepared(sql).await?;
             }
+            Ok(())
+        }
+    }
+}
+
+/// The repository commit and branch each document was read at, beside the
+/// hash of its text (`docs/project-domain-model.md`, "Where a fact was read").
+/// A reading kept before has neither, and says so as null.
+mod m0028 {
+    use toolkit_db::sea_orm_migration::prelude::*;
+    use toolkit_db::sea_orm_migration::sea_orm::ConnectionTrait;
+
+    use super::{UNSUPPORTED, is_postgres};
+
+    pub struct Migration;
+
+    impl MigrationName for Migration {
+        fn name(&self) -> &str {
+            "m0028_spec_model_extraction_commit"
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MigrationTrait for Migration {
+        async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+            if !is_postgres(manager) {
+                return Err(DbErr::Custom(UNSUPPORTED.to_owned()));
+            }
+            for sql in [
+                "ALTER TABLE studio_spec_model_extractions ADD COLUMN IF NOT EXISTS source_commit TEXT;",
+                "ALTER TABLE studio_spec_model_extractions ADD COLUMN IF NOT EXISTS source_ref TEXT;",
+            ] {
+                manager.get_connection().execute_unprepared(sql).await?;
+            }
+            Ok(())
+        }
+
+        async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+            if !is_postgres(manager) {
+                return Err(DbErr::Custom(UNSUPPORTED.to_owned()));
+            }
+            for sql in [
+                "ALTER TABLE studio_spec_model_extractions DROP COLUMN IF EXISTS source_ref;",
+                "ALTER TABLE studio_spec_model_extractions DROP COLUMN IF EXISTS source_commit;",
+            ] {
+                manager.get_connection().execute_unprepared(sql).await?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// A member's correction of a fact's value, kept with the reviews
+/// (`state = 'corrected'`).
+mod m0029 {
+    use toolkit_db::sea_orm_migration::prelude::*;
+    use toolkit_db::sea_orm_migration::sea_orm::ConnectionTrait;
+
+    use super::{UNSUPPORTED, is_postgres};
+
+    pub struct Migration;
+
+    impl MigrationName for Migration {
+        fn name(&self) -> &str {
+            "m0029_spec_model_review_value"
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MigrationTrait for Migration {
+        async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+            if !is_postgres(manager) {
+                return Err(DbErr::Custom(UNSUPPORTED.to_owned()));
+            }
+            manager
+                .get_connection()
+                .execute_unprepared(
+                    "ALTER TABLE studio_spec_model_reviews ADD COLUMN IF NOT EXISTS value TEXT;",
+                )
+                .await?;
+            Ok(())
+        }
+
+        async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+            if !is_postgres(manager) {
+                return Err(DbErr::Custom(UNSUPPORTED.to_owned()));
+            }
+            manager
+                .get_connection()
+                .execute_unprepared(
+                    "ALTER TABLE studio_spec_model_reviews DROP COLUMN IF EXISTS value;",
+                )
+                .await?;
+            Ok(())
+        }
+    }
+}
+
+/// Sources a member uploads for the project domain model to read (CSV,
+/// JSON, plain text), kept out of the repository: the bytes in file-storage
+/// when the deployment has it, here otherwise.
+mod m0030 {
+    use toolkit_db::sea_orm_migration::prelude::*;
+    use toolkit_db::sea_orm_migration::sea_orm::ConnectionTrait;
+
+    use super::{UNSUPPORTED, is_postgres};
+
+    pub struct Migration;
+
+    impl MigrationName for Migration {
+        fn name(&self) -> &str {
+            "m0030_spec_model_uploads"
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MigrationTrait for Migration {
+        async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+            if !is_postgres(manager) {
+                return Err(DbErr::Custom(UNSUPPORTED.to_owned()));
+            }
+            for sql in [
+                r"
+CREATE TABLE IF NOT EXISTS studio_spec_model_uploads (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    project_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('csv', 'json', 'text')),
+    revision TEXT NOT NULL,
+    size BIGINT NOT NULL DEFAULT 0,
+    storage TEXT NOT NULL,
+    file_id TEXT,
+    content TEXT,
+    created_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (project_id, name)
+);",
+                r"CREATE INDEX IF NOT EXISTS idx_studio_spec_model_uploads_project
+    ON studio_spec_model_uploads (tenant_id, project_id);",
+            ] {
+                manager.get_connection().execute_unprepared(sql).await?;
+            }
+            Ok(())
+        }
+
+        async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+            if !is_postgres(manager) {
+                return Err(DbErr::Custom(UNSUPPORTED.to_owned()));
+            }
+            manager
+                .get_connection()
+                .execute_unprepared("DROP TABLE IF EXISTS studio_spec_model_uploads;")
+                .await?;
             Ok(())
         }
     }

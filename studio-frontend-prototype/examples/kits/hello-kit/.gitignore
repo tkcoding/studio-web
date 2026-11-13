@@ -1,0 +1,4 @@
+# The built bundle: `npm run build` writes it, the backend serves it.
+mfe/
+node_modules
+.__mf__temp

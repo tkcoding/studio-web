@@ -304,7 +304,7 @@ pub fn not_reachable(e: &anyhow::Error) -> Option<CanonicalError> {
 }
 
 impl Product {
-    fn require_descriptions(&self) -> ApiResult<()> {
+    pub(super) fn require_descriptions(&self) -> ApiResult<()> {
         self.service
             .descriptions()
             .map(|_| ())

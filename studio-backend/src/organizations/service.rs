@@ -291,10 +291,97 @@ impl OrganizationService {
     /// Keep a new logo for the organization, or remove it with `None`.
     pub async fn set_logo(
         &self,
+        ctx: &SecurityContext,
         org_id: Uuid,
         logo: Option<&super::logo::Logo>,
     ) -> anyhow::Result<()> {
-        super::logo::write(&self.am, org_id, logo).await
+        super::logo::write(&self.am, org_id, logo).await?;
+        self.announce(
+            ctx,
+            org_id,
+            super::events::LOGO_CHANGED,
+            serde_json::json!({ "has_logo": logo.is_some() }),
+        )
+        .await;
+        Ok(())
+    }
+
+    /// May the caller change who holds which role in `org`?
+    pub async fn may_manage_access(&self, ctx: &SecurityContext, org_id: Uuid) -> bool {
+        self.authority
+            .may_administer(ctx, org_id, super::access_grants::ACCESS_PRIVILEGE)
+            .await
+    }
+
+    /// Change one grant of `org`'s access config as the caller
+    /// ([`super::access_grants::change`]), and say so on its channel.
+    pub async fn change_access<T>(
+        &self,
+        ctx: &SecurityContext,
+        org_id: Uuid,
+        change: &(dyn Fn(&mut serde_json::Value) -> Result<T, String> + Send + Sync),
+    ) -> Result<T, super::access_grants::ChangeError> {
+        let out = super::access_grants::change(self.am.as_ref(), ctx, org_id, change).await?;
+        self.announce(
+            ctx,
+            org_id,
+            super::events::ACCESS_CHANGED,
+            serde_json::json!({}),
+        )
+        .await;
+        Ok(out)
+    }
+
+    /// Rename an organization or a workspace, as the caller (account-management
+    /// decides whether they may), and say so on the organization's channel.
+    pub async fn rename(
+        &self,
+        ctx: &SecurityContext,
+        tenant_id: Uuid,
+        name: &str,
+    ) -> Result<String> {
+        let tenant = self
+            .am
+            .get_tenant(ctx, tenant_id)
+            .await
+            .map_err(|e| anyhow!("there is no tenant {tenant_id} for this caller: {e}"))?;
+        let kind = tenant.tenant_type.clone().unwrap_or_default();
+        if kind != ORGANIZATION_TENANT_TYPE && kind != super::rollups::WORKSPACE_TENANT_TYPE {
+            return Err(anyhow!(
+                "{tenant_id} is not an organization or a workspace: a project is renamed in \
+                 its project config"
+            ));
+        }
+        let renamed = self
+            .am
+            .update_tenant(
+                ctx,
+                tenant_id,
+                account_management_sdk::UpdateTenantRequest::new().with_name(name),
+            )
+            .await
+            .map_err(|e| anyhow!("cannot rename {tenant_id}: {e}"))?;
+        self.announce(
+            ctx,
+            tenant_id,
+            super::events::RENAMED,
+            serde_json::json!({ "name": renamed.name, "tenant_type": kind }),
+        )
+        .await;
+        Ok(renamed.name)
+    }
+
+    /// Publish `kind` about `tenant` on its organization's channel.
+    async fn announce(
+        &self,
+        ctx: &SecurityContext,
+        tenant: Uuid,
+        kind: &str,
+        payload: serde_json::Value,
+    ) {
+        let Some(hub) = &self.hub else { return };
+        let org = crate::org_scope::org_of(self.am.as_ref(), ctx, tenant).await;
+        super::events::publish(hub, org, tenant, kind, payload);
     }
 
     /// Create an organization owned by the caller, or finish creating one.
@@ -391,6 +478,16 @@ impl OrganizationService {
             .delete_tenant(ctx, org_id)
             .await
             .map_err(|e| anyhow!("cannot delete organization {org_id}: {e}"))?;
+        // Its own channel: whoever still has it on screen leaves it.
+        if let Some(hub) = &self.hub {
+            super::events::publish(
+                hub,
+                org_id,
+                org_id,
+                super::events::DELETED,
+                serde_json::json!({ "tenant_type": ORGANIZATION_TENANT_TYPE }),
+            );
+        }
         Ok(Deletion {
             people: evicted.people,
             connections: evicted.connections,

@@ -1,0 +1,26 @@
+# This micro-frontend's passport: everything a tool that assembles a product
+# from FrontX packages (Gearbox, Constructor Studio) needs to know about it, in
+# one file. It restates what package.json and mfe.json say, and those tools
+# check that they agree, so keep them in step when either changes.
+#
+# The Project domain model kit (what a project's documents say; not the Studio
+# domain model): a built-in kit (ADR-0068 §7), a base kit by default
+# (ADR-0069 §4). Its one screen is a project-level tab.
+gdl_version = "1.5"
+
+mfe(
+    name = "@constructor-studio/domain-model-mfe",
+    version = "0.2.0-alpha.0",
+
+    # The backend gears its screen calls, by gear id.
+    requires = ["studio-documents", "studio-spec-mapping", "studio-kits", "studio-product"],
+
+    screens = ["Project domain model"],
+    mounts = ["/domain-model"],
+
+    frontx = "0.2.0-alpha.15",
+
+    roles = [],
+
+    preview = ["/domain-model"],
+)

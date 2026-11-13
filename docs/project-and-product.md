@@ -5,7 +5,7 @@ how Studio shows the distance between the product the documents describe and
 the product the repositories hold.
 
 Status: proposal, 2026-10-13. It builds on
-[the domain model read from a project's documents](spec-domain-model.md) and
+[the domain model read from a project's documents](project-domain-model.md) and
 on [ADR-0037](adr/0037-one-model-for-a-project.md), which already names the
 chain a project is made of: document → capability → gear → product.
 
@@ -20,7 +20,7 @@ over the same sources, not a second project inside one product.
 Studio already knows both halves, but not as one picture:
 
 - **The product described**: the project's documents. The
-  [domain model](spec-domain-model.md) reads its entities, requirements,
+  [domain model](project-domain-model.md) reads its entities, requirements,
   constraints and decisions, and finds where the documents disagree.
 - **The product made**: the project's repositories (`sources[]` of
   `project.config`), the gears composed in `product.gdl` and resolved by the
@@ -101,7 +101,7 @@ decided by a member with the same ✓/✗ the domain model uses. A decided link
 holds until either end changes.
 
 **Work → requirement, the mechanical half: built.** `GET
-/studio-documents/v1/spec-model/work?project_id=` takes every identifier the
+/studio-documents/v1/project-domain-model/work?project_id=` takes every identifier the
 documents define with an `**ID**:` label (requirements, components,
 decisions), and the synced issues, pull requests and commits, through
 `artifact_ingest::port::ProjectWork` (three indexed reads in scope), and links
@@ -183,7 +183,7 @@ as its own data, read the same way as the project's glossary below.
 
 **The glossary is decided, not detected: built.** The domain model already
 tried `term.synonym_drift` and dropped it: every candidate in calibration was a
-deliberate rename between layers ([spec-domain-model](spec-domain-model.md#the-rule-catalogue)).
+deliberate rename between layers ([project-domain-model](project-domain-model.md#the-rule-catalogue)).
 So the glossary is not a rule that flags two names. It is the per-project alias
 table that page listed as later work, made from what the build already has, with
 no model and no key (`documents/spec_model/glossary.rs`):
@@ -193,7 +193,7 @@ no model and no key (`documents/spec_model/glossary.rs`):
   use most; a subject only ever a decision is not an entry;
 - a member names an entry the way the project says it, or makes it an alias of
   another entry when the documents call one thing by two names, and can split
-  it out again (`GET /studio-documents/v1/spec-model/glossary`, `POST
+  it out again (`GET /studio-documents/v1/project-domain-model/glossary`, `POST
   …/glossary/decisions`, the Domain model tab's **Glossary** view);
 - an alias is one level deep: an alias of an entry the documents no longer
   name, or of an entry that is an alias itself, holds nothing, so undoing one

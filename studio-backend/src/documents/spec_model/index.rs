@@ -2,7 +2,7 @@
 //! model: a reference to something the project does not have, and a bare ADR
 //! number two ADR sets of the project both have.
 //!
-//! Everything here reads the text as written (`docs/spec-domain-model.md`,
+//! Everything here reads the text as written (`docs/project-domain-model.md`,
 //! "Read as written"): no front matter, template or naming scheme is required,
 //! and nothing names a project. A convention is used only where the project
 //! itself shows it — an identifier family is checked only when the project

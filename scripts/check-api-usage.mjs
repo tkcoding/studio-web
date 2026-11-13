@@ -43,7 +43,7 @@ const BASELINE = join(ROOT, 'scripts/api-usage-baseline.txt');
 /** Where a portal's sources live. */
 const PORTALS = [
   { name: 'studio-frontend', dirs: ['studio-frontend/src', 'studio-frontend/src-app'] },
-  { name: 'studio-frontend-prototype', dirs: ['studio-frontend-prototype/src'] },
+  { name: 'studio-frontend-prototype', dirs: ['studio-frontend-prototype/src', 'studio-frontend-prototype/src-app'] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -75,6 +75,9 @@ for (const operation of contract.operations) {
     registered.push({
       path: operation.path,
       segments: segments.map((segment) => (segment.startsWith('{') ? WILDCARD : segment)),
+      // `{*file}` takes the rest of the path, so a base path under it (a kit's
+      // bundle root, say) is that route too.
+      catchAll: segments.at(-1)?.startsWith('{*') ?? false,
       methods: new Set([operation.method]),
       calledBy: new Set(),
     });
@@ -121,12 +124,15 @@ for (const portal of PORTALS) {
 // The comparison
 // ---------------------------------------------------------------------------
 
-function matches(asked, backend) {
-  if (asked.length !== backend.length) return false;
-  return asked.every(
-    (segment, index) =>
-      segment === WILDCARD || backend[index] === WILDCARD || segment === backend[index]
-  );
+function matches(asked, backend, catchAll) {
+  const fixed = catchAll ? backend.length - 1 : backend.length;
+  if (catchAll ? asked.length < fixed : asked.length !== fixed) return false;
+  return asked
+    .slice(0, fixed)
+    .every(
+      (segment, index) =>
+        segment === WILDCARD || backend[index] === WILDCARD || segment === backend[index]
+    );
 }
 
 const missing = [];
@@ -138,7 +144,9 @@ for (const [key, entry] of asked) {
     external += 1; // account-management and the other platform gears
     continue;
   }
-  const hit = registered.find((candidate) => matches(entry.segments, candidate.segments));
+  const hit = registered.find((candidate) =>
+    matches(entry.segments, candidate.segments, candidate.catchAll)
+  );
   if (hit) {
     for (const site of entry.sites) hit.calledBy.add(site);
   } else {

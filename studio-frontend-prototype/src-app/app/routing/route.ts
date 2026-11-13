@@ -1,0 +1,67 @@
+/**
+ * The shell's route: what the one screen-domain entry says (ADR-0028).
+ *
+ * `token` names the screen group (`screenTokens.ts` derives it from the
+ * manifests); the four level parameters are the level context, written in this
+ * order and only as far down as the level in scope goes, and the artifact
+ * parameters follow them on the editor's route (#320). The codec is
+ * deliberately dumb: it neither validates ids nor knows levels —
+ * `materialize` does both.
+ */
+import type { DomainKey, Param } from '@gears-frontx/routing';
+
+/**
+ * A domain key or extension token: @gears-frontx/routing 0.4's `name` rule,
+ * which it no longer exports. `route.test.ts` holds it to the library's own.
+ */
+export const ROUTE_NAME = /^[a-z][a-z0-9-]*$/;
+
+/** The root domain key the shell projects. A valid `name`; `route.test.ts` proves it. */
+export const SCREEN_DOMAIN_KEY = 'screen' as DomainKey;
+
+/** The editor's token: the project-level screen an artifact opens on */
+export const EDITOR_SCREEN_TOKEN = 'space';
+
+export interface ShellRoute {
+  token: string;
+  org?: string;
+  workspace?: string;
+  project?: string;
+  section?: string;
+  artifact?: string;
+  repository?: string;
+  path?: string;
+  kind?: string;
+}
+
+const PARAM_ORDER = ['org', 'workspace', 'project', 'section', 'artifact', 'repository', 'path', 'kind'] as const;
+type RouteParam = (typeof PARAM_ORDER)[number];
+
+export function routeToParams(route: ShellRoute): Param[] {
+  const params: Param[] = [];
+  for (const name of PARAM_ORDER) {
+    const value = route[name];
+    if (value) params.push({ name, value });
+  }
+  return params;
+}
+
+export function routeFromEntry(entry: { extension: string; params: readonly Param[] }): ShellRoute {
+  const route: ShellRoute = { token: entry.extension };
+  for (const param of entry.params) {
+    const name = param.name as RouteParam;
+    if (!PARAM_ORDER.includes(name)) continue;
+    if (route[name] !== undefined || !param.value) continue;
+    route[name] = param.value;
+  }
+  return route;
+}
+
+export function routesEqual(
+  a: ShellRoute | null | undefined,
+  b: ShellRoute | null | undefined
+): boolean {
+  if (!a || !b) return !a && !b;
+  if (a.token !== b.token) return false;
+  return PARAM_ORDER.every((name) => (a[name] || undefined) === (b[name] || undefined));
+}

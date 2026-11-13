@@ -1,0 +1,81 @@
+{
+  "manifest": {
+    "id": "gts.frontx.mfes.mfe.mf_manifest.v1~constructor_studio.components.mfe.manifest.v1",
+    "remoteEntry": "http://localhost:3250/assets/remoteEntry.js"
+  },
+  "entries": [
+    {
+      "id": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.components.mfe.main.v1",
+      "requiredProperties": [
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.theme.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.language.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.project_section.selected.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.organization.selected.v1~"
+      ],
+      "actions": [],
+      "domainActions": [
+        "gts.frontx.mfes.comm.action.v1~constructor_studio.shell.screen.open.v1~"
+      ],
+      "manifest": "gts.frontx.mfes.mfe.mf_manifest.v1~constructor_studio.components.mfe.manifest.v1",
+      "exposedModule": "./lifecycle"
+    }
+  ],
+  "extensions": [
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.components.screens.platform.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.components.mfe.main.v1",
+      "presentation": {
+        "label": "Components",
+        "icon": "lucide:layers",
+        "route": "/platform/components",
+        "order": 20,
+        "level": "platform",
+        "kit": "components",
+        "section": "catalogue"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.components.screens.repositories.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.components.mfe.main.v1",
+      "presentation": {
+        "label": "Repositories",
+        "icon": "lucide:plug",
+        "route": "/platform/repositories",
+        "order": 30,
+        "level": "platform",
+        "kit": "components",
+        "section": "repositories"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.components.screens.publications.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.components.mfe.main.v1",
+      "presentation": {
+        "label": "Publication requests",
+        "icon": "lucide:package",
+        "route": "/platform/publication-requests",
+        "order": 40,
+        "level": "platform",
+        "kit": "components",
+        "section": "publications"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.components.screens.organization.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.components.mfe.main.v1",
+      "presentation": {
+        "label": "Components",
+        "icon": "lucide:package",
+        "route": "/components",
+        "order": 65,
+        "level": "organization",
+        "kit": "components",
+        "modelTab": "gears"
+      }
+    }
+  ]
+}

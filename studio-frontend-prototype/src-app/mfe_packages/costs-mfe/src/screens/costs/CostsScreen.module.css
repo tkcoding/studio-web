@@ -1,0 +1,182 @@
+/*
+ * Organization › Costs over ui-kit semantic tokens (see theme.css in
+ * @gears-frontx/ui-kit). No Tailwind: inside the shadow root the re-anchored
+ * kit tokens shadow the shell's HSL triplets.
+ */
+
+.screen {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 100%;
+  padding: var(--space-6);
+  color: var(--foreground);
+}
+
+/* The kit's theme.css paints `[data-theme]`; the shell's screen keeps its own. */
+.screen[data-theme] {
+  background: transparent;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-heading-1-size);
+  line-height: var(--text-heading-1-line-height);
+  font-weight: var(--text-heading-1-weight);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chip {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.total {
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.headerAction {
+  margin-left: auto;
+}
+
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 60rem;
+  color: var(--muted-foreground);
+}
+
+.about p {
+  margin: 0;
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+}
+
+.controls,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.strong {
+  font-weight: 600;
+}
+
+.number {
+  max-width: 8rem;
+}
+
+.currency {
+  width: 5rem;
+}
+
+.percent {
+  width: 5rem;
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.unpriced {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.error {
+  margin: 0;
+  color: var(--destructive);
+}
+
+.notice {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+.warnings {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+}
+
+.warnings ul {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+}
+
+.dialog {
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+/* The kit's lg dialog caps at 36rem; the standings table needs more. */
+@media (min-width: 640px) {
+  .dialog {
+    max-width: min(54rem, calc(100vw - 2rem));
+  }
+}
+
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.skeleton {
+  height: 2rem;
+  width: 16rem;
+}

@@ -1,4 +1,4 @@
-//! The domain model a person edits on the Domain model tab, kept in the
+//! The domain model a person edits on the Project domain model tab, kept in the
 //! project's repository as one document Studio writes: `docs/domain-model.md`,
 //! one section per entity (what it is, what it holds, how it relates). It is
 //! read back like any other document of the project once its type is
@@ -25,7 +25,7 @@ pub struct EntityEdit {
 }
 
 const HEAD: &str = "---\ntype: design\n---\n\n# Domain model\n\n\
-<!-- Kept by Constructor Studio from the Domain model tab: one section per entity. \
+<!-- Kept by Constructor Studio from the Project domain model tab: one section per entity. \
 Edit it here or there; Studio rewrites only the section of the entity it saves. -->\n";
 
 /// A cell or a line that cannot break the table or the list it sits in.
@@ -196,7 +196,7 @@ pub fn insert_after(text: &str, line: usize, sentence: &str) -> Option<String> {
 /// documentation: a file whose type is settled, as that type; and Studio's
 /// own [`DOMAIN_DOC_PATH`] whatever its binding says, because Studio writes
 /// it as a design document -- nobody has to bind it by hand for an edit on
-/// the Domain model tab to count.
+/// the Project domain model tab to count.
 pub fn read_as(path: &str, typed: bool, type_key: Option<&str>) -> Option<Option<String>> {
     if path == DOMAIN_DOC_PATH {
         let settled = type_key.filter(|_| typed).unwrap_or(DOMAIN_DOC_TYPE);

@@ -17,10 +17,10 @@ implicit ceiling is one nobody can check. Per backend replica:
 | studio-backend, studio-events | 2 | that gear's own `pool` override |
 | studio-backend, studio-product | 2 | that gear's own `pool` override (ADR-0053) |
 | studio-backend, studio-artifact-ingest | 2 | that gear's own `pool` override |
-| studio-backend, studio-domain-model | 2 | that gear's own `pool` override (ADR-0066) |
+| studio-backend, studio-domain-model | 6 | that gear's own `pool` override (ADR-0066); 2 until 2026-11-10 queued a project screen's reads past the gateway |
 | studio-backend, studio-environments | 1 | that gear's own `pool` override (ADR-0062) |
 | studio-backend, postgres-usage-collector-plugin | 3 | 1 on its toolkit `pool`, 2 on its own sqlx pool (`pool_size_max`) |
-| **One replica** | **62** | |
+| **One replica** | **66** | |
 
 And once, whatever the number of replicas:
 
@@ -44,9 +44,9 @@ The arithmetic for two replicas, which is the whole reason for the numbers:
 
 | shared `max_conns` | per replica | two replicas | with everyone else | fits 160? |
 |---|---|---|---|---|
-| 4 (until 2026-11) | 76 | 152 | 175 | no |
-| **3 (today)** | **62** | **124** | **147** | **yes, 13 spare** |
-| 2 | 48 | 96 | 119 | yes, but a queue |
+| 4 (until 2026-11) | 80 | 160 | 183 | no |
+| **3 (today)** | **66** | **132** | **155** | **yes, 5 spare** |
+| 2 | 52 | 104 | 127 | yes, but a queue |
 
 The shared pool was 4 until the domain read model (ADR-0066), the product
 descriptions (ADR-0053) and the environments gear (ADR-0062) each took their

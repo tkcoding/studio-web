@@ -1,0 +1,51 @@
+{
+  "manifest_version": "1",
+  "slug": "product-releases",
+  "name": "Product & Releases",
+  "description": "A project's product (its map, configurator and frontend), its builds and its deploys up the environment ladder.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "project"
+  ],
+  "model": {
+    "properties": [
+      {
+        "on": "project",
+        "property": {
+          "name": "components",
+          "type": "project-product",
+          "relation": "project-product",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Product",
+          "description": "A tab of the project: what it shows."
+        }
+      },
+      {
+        "on": "project",
+        "property": {
+          "name": "releases",
+          "type": "deployment",
+          "relation": "deployment",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Releases",
+          "description": "A tab of the project: what it shows."
+        }
+      }
+    ]
+  },
+  "inbox": [
+    {
+      "id": "deploys-awaiting-approval",
+      "label": "Deploys waiting for your decision",
+      "kind": "endpoint",
+      "path": "/studio-environments/v1/inbox/deploys-awaiting-approval"
+    }
+  ],
+  "permissions": {
+    "reads": [
+      "GET /studio-environments/v1/inbox/deploys-awaiting-approval"
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "title": "Studio API",
+  "loading": "Reading the API description…",
+  "load_failed": "Could not load the API description: {error}"
+}

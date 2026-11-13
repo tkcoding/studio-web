@@ -1,0 +1,104 @@
+/**
+ * Every GTS schema the shell registers before it constructs the FrontX app, in
+ * registration order. `main.tsx` registers this list, and the tests that stand
+ * up a registry of their own register the same one — a copy of it in a test
+ * passes while the browser fails.
+ */
+
+import type { JSONSchema } from '@gears-frontx/react';
+import { themeSchema, languageSchema, extensionScreenSchema } from '@gears-frontx/frontx-template-shell';
+import extensionOverlaySchemaJson from './extension_overlay.v1.json';
+import extensionSlotContributionSchemaJson from './extension_slot_contribution.v1.json';
+import extensionSidebarSchemaJson from './extension_sidebar.v1.json';
+import extensionScreenLeveledSchemaJson from './extension_screen_leveled.v1.json';
+import actionContextPublishSchemaJson from './action_context_publish.v1.json';
+import actionContextWorkspacesPublishSchemaJson from './action_context_workspaces_publish.v1.json';
+import actionContextArtifactOpenSchemaJson from './action_context_artifact_open.v1.json';
+import actionShellNotificationShowSchemaJson from './action_shell_notification_show.v1.json';
+import actionShellScreenOpenSchemaJson from './action_shell_screen_open.v1.json';
+import actionShellPlaceOpenSchemaJson from './action_shell_place_open.v1.json';
+import actionChainOutcomeDoneSchemaJson from './action_chain_outcome_done.v1.json';
+import actionChainOutcomeFailedSchemaJson from './action_chain_outcome_failed.v1.json';
+import sharedPropertyContextArtifactSchemaJson from './shared_property_context_artifact.v1.json';
+import sharedPropertyContextProjectSchemaJson from './shared_property_context_project.v1.json';
+import sharedPropertyContextOrganizationSchemaJson from './shared_property_context_organization.v1.json';
+import sharedPropertyContextWorkspaceSchemaJson from './shared_property_context_workspace.v1.json';
+import sharedPropertyContextSectionSchemaJson from './shared_property_context_section.v1.json';
+import sharedPropertySessionProfileSchemaJson from './shared_property_session_user_profile.v1.json';
+import sharedPropertySpaceFrameUrlSchemaJson from './shared_property_space_frame_url.v1.json';
+import sharedPropertyLiveStudioEventSchemaJson from './shared_property_live_studio_event.v1.json';
+import sharedPropertyScreensAvailableSchemaJson from './shared_property_screens_available.v1.json';
+import entryIframeSchemaJson from './entry_iframe.v1.json';
+
+export const SHELL_SCHEMAS: readonly JSONSchema[] = [
+  // Application-level constraints (valid theme names, supported languages,
+  // screen extension shape) that are not part of the core type system in
+  // @gears-frontx/gts-plugin.
+  themeSchema,
+  languageSchema,
+  extensionScreenSchema,
+  // The overlay counterpart of extensionScreenSchema, owned here rather than in
+  // the template's src/gts: GTS refuses to register an instance whose type has no
+  // schema, and the overlay domain pins no derived type — so a contribution to it
+  // needs one declared somewhere. Without this, registering the search extension
+  // throws, bootstrapMFE rejects, and MfeScreenContainer never renders the screen
+  // slot: the tabs still list their items while every click mounts into nothing.
+  extensionOverlaySchemaJson as JSONSchema,
+  // What a kit contributes into one of the shell's named slots (mfe/slots.ts):
+  // every slot domain pins it, so a contribution has a type to chain through.
+  extensionSlotContributionSchemaJson as JSONSchema,
+  // The sidebar's counterpart: what a kit docks beside the screen (Studio AI).
+  extensionSidebarSchemaJson as JSONSchema,
+  // One derivation further down the screen chain: the level a screen belongs to —
+  // organization, workspace or project — which the tabs group by. After
+  // extensionScreenSchema on purpose: a derived schema resolves its parent by
+  // chain, so the type it extends has to be in the registry first, and a screen
+  // extension that chains through this one fails to register otherwise.
+  extensionScreenLeveledSchemaJson as JSONSchema,
+  // The context-slot action an MFE executes against the screen domain. Same rule
+  // as above: GTS refuses to route an action instance whose type has no schema.
+  actionContextPublishSchemaJson as JSONSchema,
+  // The overlay-domain counterpart: a workspace an MFE has just created, handed to
+  // the shell that owns the list it belongs in.
+  actionContextWorkspacesPublishSchemaJson as JSONSchema,
+  // One artifact a member asked to open (#319), and the shell's echo of which one
+  // the editor is on (#320). The MFE publishes, the shell owns the answer.
+  actionContextArtifactOpenSchemaJson as JSONSchema,
+  sharedPropertyContextArtifactSchemaJson as JSONSchema,
+  // A toast an MFE asks for: the shell owns the only toaster.
+  actionShellNotificationShowSchemaJson as JSONSchema,
+  actionShellScreenOpenSchemaJson as JSONSchema,
+  // Go to an organization, workspace or project (Search's results).
+  actionShellPlaceOpenSchemaJson as JSONSchema,
+  // The replies that say how a request ended: see chainOutcome in mfe-shared.
+  actionChainOutcomeDoneSchemaJson as JSONSchema,
+  actionChainOutcomeFailedSchemaJson as JSONSchema,
+  // The shell -> MFE half of the same slot. `sharedProperties` on a domain and
+  // `requiredProperties` on an entry both carry an `x-gts-ref` that checks the type
+  // is IN THE REGISTRY, not merely that the string looks right, so an unregistered
+  // id fails registration and takes bootstrapMFE with it.
+  sharedPropertyContextProjectSchemaJson as JSONSchema,
+  // The other two halves of the same channel: which organization the session is
+  // working in, and who is signed in. Both are the shell's to know and every MFE's
+  // to be told — see contextActions.ts for what they replace.
+  sharedPropertyContextOrganizationSchemaJson as JSONSchema,
+  // The level between them: a project's parent and the Projects list's root.
+  sharedPropertyContextWorkspaceSchemaJson as JSONSchema,
+  // The tabs are the shell's, the sections are the MFE's — this is the choice
+  // crossing between them.
+  sharedPropertyContextSectionSchemaJson as JSONSchema,
+  sharedPropertySessionProfileSchemaJson as JSONSchema,
+  // The address a frame-entry MFE loads. Registered for the same reason as the
+  // context properties above.
+  sharedPropertySpaceFrameUrlSchemaJson as JSONSchema,
+  // The shell's live channel: the last studio-events frame, relayed to every
+  // screen that asks for it (app/live/liveChannel.ts).
+  sharedPropertyLiveStudioEventSchemaJson as JSONSchema,
+  // Which screens a row may send the person to: a kit's only where it is
+  // installed (app/layout/AvailableScreens.tsx).
+  sharedPropertyScreensAvailableSchemaJson as JSONSchema,
+  // A frame is an entry the host loads into an iframe. Registered before any
+  // package declaring one: GTS refuses to register an instance whose type has
+  // no schema, and the refusal takes bootstrapMFE down with it.
+  entryIframeSchemaJson as JSONSchema,
+];

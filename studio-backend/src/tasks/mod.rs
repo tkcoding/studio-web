@@ -138,6 +138,15 @@ pub trait TaskQueue: Send + Sync + 'static {
     /// Ask a run to stop, for a `replace` policy. Cooperative, like the REST
     /// verb it mirrors: it records the request and returns.
     async fn request_cancel(&self, tenant: Uuid, run: Uuid) -> anyhow::Result<()>;
+
+    /// Put a failed or cancelled run back on the queue, as
+    /// `POST /runs/{id}/retry` does: for a gear whose caller asked for the
+    /// same work again (the same idempotency key) after it gave up. The run
+    /// keeps its recorded result, so a handler that records its steps
+    /// continues where it stopped.
+    async fn retry(&self, _tenant: Uuid, _run: Uuid) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("this queue cannot retry a run"))
+    }
 }
 
 #[async_trait]
@@ -163,6 +172,13 @@ impl TaskQueue for TaskService {
     async fn request_cancel(&self, tenant: Uuid, run: Uuid) -> anyhow::Result<()> {
         let ctx = service_context(tenant)?;
         TaskService::cancel(self, &ctx, tenant, run)
+            .await
+            .map(|_| ())
+    }
+
+    async fn retry(&self, tenant: Uuid, run: Uuid) -> anyhow::Result<()> {
+        let ctx = service_context(tenant)?;
+        TaskService::retry(self, &ctx, tenant, run)
             .await
             .map(|_| ())
     }

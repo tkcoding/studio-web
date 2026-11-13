@@ -9,25 +9,6 @@
   padding: 0 var(--space-6) var(--space-6);
 }
 
-.searchRow {
-  display: flex;
-  align-items: center;
-  padding-block: var(--space-2);
-  border-bottom: var(--border-width) solid var(--border);
-}
-
-/* The kit's Input with an icon wraps the field in a full-width span. */
-.searchBox {
-  flex: none;
-}
-
-/* `input.search`, not `.search`: on the first mount the kit's `._input` rule
-   lands in the shadow root after this sheet, so a single class loses. */
-input.search {
-  width: 13.75rem;
-  height: var(--control-height-sm);
-}
-
 .sort {
   /* Label plus the longest value; below this the trigger clips its own text. */
   min-width: 12rem;
@@ -35,41 +16,6 @@ input.search {
 
 .sortPrefix {
   color: var(--muted-foreground);
-}
-
-.table {
-  width: 100%;
-  table-layout: fixed;
-}
-
-/* according to the mockup's row */
-.table.table tbody tr > td {
-  padding-block: var(--space-4);
-}
-
-.table th {
-  color: var(--muted-foreground);
-}
-
-.headLabel {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.sortSlot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--icon-size-sm, 1rem);
-  height: var(--icon-size-sm, 1rem);
-  flex: none;
-  color: var(--foreground);
-  transition: transform 120ms ease;
-}
-
-.sortSlot[data-direction='asc'] {
-  transform: rotate(180deg);
 }
 
 .srOnly {
@@ -84,76 +30,22 @@ input.search {
   border: 0;
 }
 
-.colProject {
-  text-align: start;
-}
-
-.colStatus {
-  width: 15%;
-}
-
-.colIssues {
-  width: 11%;
-}
-
-.colMovement {
-  width: 15%;
-}
-
-.colOwner {
-  width: 15%;
-}
-
-.colIssues,
-.colMovement,
-.colOwner {
-  text-align: start;
-  white-space: nowrap;
-}
-
-.colStatus {
-  text-align: start;
-}
-
 .loadFailed {
   display: inline-flex;
   align-items: center;
   color: var(--warning);
 }
 
-.colUpdated {
-  width: 12%;
-  text-align: end;
-  white-space: nowrap;
-}
-
-.nameButton {
+.nameCell {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
+  min-width: 0;
 }
 
 .cellSkeleton {
   height: var(--text-body-line-height, 1.25rem);
   width: 4.5rem;
-}
-
-.nameButton:hover .name {
-  color: var(--link-foreground);
-}
-
-.nameButton:focus-visible {
-  outline: var(--border-width-focus) solid var(--ring);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
 }
 
 .rowGlyph {
@@ -182,12 +74,6 @@ input.search {
   font-size: var(--text-meta-size);
   line-height: var(--text-meta-line-height);
   color: var(--muted-foreground);
-}
-
-.owner {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 .ownerName {
@@ -219,12 +105,4 @@ input.search {
   margin-inline: auto;
   border: 0;
   white-space: normal;
-}
-
-.footer {
-  padding: var(--space-3) var(--space-4);
-  border-top: var(--border-width) solid var(--border);
-  font-size: var(--text-meta-size);
-  line-height: var(--text-meta-line-height);
-  color: var(--muted-foreground);
 }

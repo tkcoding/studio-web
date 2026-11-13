@@ -133,7 +133,7 @@ A **run** is one execution request for one task type: its payload, state
 phase, summary or last error, and result. A **task type** is a name a handler
 was registered under (`notify.deliver`, `artifact.ingest`, `session.reap`,
 `session.await_ready`, `spec_quality.analyze`, `spec_quality.analyze_batch`,
-`catalog.sync`, `connector.graph_sync`, and this gear's own
+`catalog.sync`, `connector.graph_sync`, `organizations.project_create`, and this gear's own
 `tasks.retention_sweep`).
 
 ### 3.2 Component Model

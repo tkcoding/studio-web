@@ -1,0 +1,5 @@
+{
+  "title": "API Studio",
+  "loading": "Читаем описание API…",
+  "load_failed": "Не удалось загрузить описание API: {error}"
+}

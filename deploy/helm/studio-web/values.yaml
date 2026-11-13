@@ -191,6 +191,17 @@ backend:
       size: 8Gi
       # Empty leaves it to the cluster default.
       storageClass: ""
+  # Who hands the artifact-clones and gearbox claims to the backend user
+  # (uid 1000). fsGroup does not reach a Cinder claim whose class sets no
+  # fsType (CSI fsGroupPolicy ReadWriteOnceWithFSType): it mounts root:root
+  # 755 and every write is refused (#854). A root `claim-owner` init
+  # container chowns the mount point, which PodSecurity "restricted" warns
+  # about (#1040), so it runs only when needed:
+  #   fresh  - only in the rollout that creates the claim (helm `lookup`
+  #            finds no claim yet); the chown stays on the volume after.
+  #   always - every rollout (re-hand a claim that was replaced by hand).
+  #   never  - the class sets fsType (e.g. cinder-postgres), so fsGroup does.
+  claimOwner: fresh
   # The Gearbox engine: the gear catalogue an IDE lists when its workspace
   # holds no gear corpus (`/studio-product/v1/gearbox/catalogue`),
   # product previews, and the corpus clone relay. Off, those routes do not
@@ -559,6 +570,23 @@ capacity:
     max:
       cpu: 4
       memory: 8Gi
+
+# Constructor Research emulator (docs/research-emulator.md): a stand-in for
+# Research while the stand cannot reach a real one. The backend image runs
+# `studio-backend research-emulator`, the ingress sends `path` on the portal's
+# hostname to it, and the backend's `research` settings above are replaced by
+# the emulator's. Nothing is really built or run.
+researchEmulator:
+  enabled: false
+  path: /research-emulator
+  publicUrl: ""            # default https://<global.hostname><path>
+  clientSecret: "research-emulator"  # not a secret: the emulator guards nothing
+  deskSeconds: 5
+  buildSeconds: 20
+  startSeconds: 5
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 500m, memory: 256Mi }
 
 ingress:
   enabled: true

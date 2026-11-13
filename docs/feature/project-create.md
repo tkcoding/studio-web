@@ -228,16 +228,24 @@ are traced.
 
 **Output**: the created tenant's id, or the reason it was refused
 
+The steps are one background run of studio-organizations
+(`organizations.project_create`, `docs/design/studio-organizations.md`,
+"A project is created by one run, on behalf of whoever asked"): the server
+checks the request as the member, then creates the tenant, writes its
+configuration (mode, the workspace's required stages, status, brief, owner,
+the picked repositories as sources) and, with a brief, its PRD, each step
+recorded so a retry continues where it stopped. The wizard no longer makes
+those requests itself.
+
 **Steps**:
 1. [x] - `p1` - Trim the name; reject an empty one before any request - `inst-1`
-2. [x] - `p1` - `API: POST /cf/account-management/v1/tenants (name, project tenant type, parent = the workspace in scope)` - `inst-2`
-3. [x] - `p1` - **IF** account-management refuses - `inst-3`
+2. [x] - `p1` - `API: POST /cf/studio-organizations/v1/project-creations (workspace, name, mode, brief, owner, sources, an idempotency key)` - `inst-2`
+3. [x] - `p1` - **IF** the server refuses (the workspace, a connection) - `inst-3`
    1. [x] - `p1` - **RETURN** the refusal; the draft survives so the member can correct it - `inst-4`
-4. [x] - `p1` - `API: GET /studio-documents/v1/workspaces/{id}/stages (the required ones seed the project)` - `inst-4a`
-5. [x] - `p1` - `API: PUT /cf/account-management/v1/tenants/{id}/metadata/{project config type} (mode, stages, status, brief, sources, each with its default branch and share mode)` - `inst-5`
-6. [x] - `p1` - **IF** the metadata write fails - `inst-6`
-   1. [x] - `p1` - Report it but keep the tenant: a project without attributes is recoverable, a rollback is not - `inst-7`
-7. [x] - `p1` - **RETURN** the tenant id - `inst-8`
+4. [x] - `p1` - `API: GET /cf/studio-organizations/v1/project-creations/{run_id}?organization_id= (the run's state and each step's), shown in the dialog until it ends` - `inst-5`
+5. [x] - `p1` - **IF** the run fails or is cancelled - `inst-6`
+   1. [x] - `p1` - Report why with the step that stopped; the run stays in Background work, where a retry continues it - `inst-7`
+6. [x] - `p1` - **RETURN** the tenant id the run created - `inst-8`
 
 ### Read the repository catalogue
 

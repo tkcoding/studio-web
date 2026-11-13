@@ -45,6 +45,7 @@ export { SectionHeader } from './ui/SectionHeader';
 export { LIST_PAGE_LIMITS, ListGrid, TEXT_SEARCH_FILTER_KEY } from './ui/ListGrid';
 export { ListNoMatch, ListReadFailed } from './ui/ListStates';
 export { useListRows, type ListRows } from './ui/useListRows';
+export { matchesSearch } from './ui/matchesSearch';
 export { useThemedRoot } from './ui/useThemedRoot';
 export { StudioMfeLifecycle } from './mfe/StudioMfeLifecycle';
 export { authShared } from './auth/authShared';

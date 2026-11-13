@@ -526,7 +526,77 @@ fn read(spend: Option<Result<Spend, String>>) -> Read {
         )]),
         spend,
         windows: windows(datetime!(2026-10-19 12:00 UTC)),
+        kits: Kits::All,
     }
+}
+
+fn with_kits(kits: &[&str]) -> Read {
+    Read {
+        kits: Kits::Only(kits.iter().map(|k| (*k).to_owned()).collect()),
+        ..read(None)
+    }
+}
+
+#[test]
+fn without_project_git_the_pull_requests_leave_and_the_rest_stands() {
+    let now = datetime!(2026-10-19 12:00 UTC);
+    let all = compose(ORG, &with_kits(&[GIT_KIT, COMPONENTS_KIT, COSTS_KIT]), now);
+    assert_eq!(
+        all.needs
+            .iter()
+            .map(|n| n.kind.as_str())
+            .collect::<Vec<_>>(),
+        ["connection", "pulls", "components"]
+    );
+    assert_eq!(
+        all.needs
+            .iter()
+            .map(|n| n.kit.as_deref())
+            .collect::<Vec<_>>(),
+        [None, Some(GIT_KIT), Some(COMPONENTS_KIT)]
+    );
+    assert_eq!(all.workspaces[0].projects[0].stuck, 1);
+
+    let no_git = compose(ORG, &with_kits(&[COMPONENTS_KIT]), now);
+    assert_eq!(
+        no_git
+            .needs
+            .iter()
+            .map(|n| n.kind.as_str())
+            .collect::<Vec<_>>(),
+        ["connection", "components"]
+    );
+    assert!(no_git.waiting_on.is_none());
+    assert_eq!(
+        (
+            no_git.delivery.merged,
+            no_git.delivery.open,
+            no_git.delivery.median_wait_days
+        ),
+        (None, None, None)
+    );
+    assert_eq!(no_git.workspaces[0].projects[0].stuck, 0);
+    // The other blocks stay.
+    assert_eq!(no_git.specs.failing, Some(1));
+    assert!(no_git.workspaces[0].projects[0].broken);
+    assert_eq!(no_git.decisions.as_ref().unwrap().undecided, 2);
+    assert_eq!(
+        no_git.kits.as_deref(),
+        Some(&[COMPONENTS_KIT.to_owned()][..])
+    );
+
+    // No kit at all: only the shell's own need, and nothing breaks.
+    let bare = compose(ORG, &with_kits(&[]), now);
+    assert_eq!(
+        bare.needs
+            .iter()
+            .map(|n| n.kind.as_str())
+            .collect::<Vec<_>>(),
+        ["connection"]
+    );
+    assert_eq!(bare.people.active, Some(2));
+    // Kits that could not be read hide nothing.
+    assert!(compose(ORG, &read(None), now).kits.is_none());
 }
 
 #[test]

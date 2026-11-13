@@ -2445,6 +2445,7 @@ dependencies = [
  "kube",
  "libc",
  "mimalloc",
+ "regex",
  "reqwest 0.12.28",
  "rust_decimal",
  "rustls",

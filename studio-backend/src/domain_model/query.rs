@@ -1009,8 +1009,9 @@ fn groups_of(matched: &[ObjectNode], paths: &[Vec<String>]) -> Vec<Group> {
 }
 
 /// A gear's read of its own objects: [`run`] with the page bound lifted to
-/// [`BULK_LIMIT`] for the root (relations keep theirs). On the graph the
-/// scan bound lifts with it, so the answer is complete either way.
+/// [`BULK_LIMIT`] for the root (relations keep theirs), or the `limit` it
+/// sends. On the graph the scan bound is [`BULK_LIMIT`] whatever the page,
+/// so the answer is complete either way.
 pub(super) async fn run_bulk(
     store: &dyn DomainStore,
     ontology: &Ontology,
@@ -1063,7 +1064,11 @@ async fn run_with(
     if let Some(limit) = bulk {
         plan.limit = limit;
     }
-    let scan_limit = bulk.map_or(SCAN_LIMIT, |b| b.max(SCAN_LIMIT));
+    // A gear's read scans as far as a bulk answer can reach whatever page it
+    // asks for: a page of 50 still needs every match ordered and counted, or
+    // its `total` and order would cover only the first objects the graph
+    // lists.
+    let scan_limit = bulk.map_or(SCAN_LIMIT, |_| BULK_LIMIT);
     let group_by = group_paths(ontology, &entity, q.aggregate.as_ref())?;
     let scope = q.scope.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let type_ids = vec![gts::node_type_id(&entity)];

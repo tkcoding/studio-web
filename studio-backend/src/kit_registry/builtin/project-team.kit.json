@@ -1,0 +1,158 @@
+{
+  "manifest_version": "1",
+  "slug": "project-team",
+  "name": "Team",
+  "description": "A project's Team tab: who works on it and in which role.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "project"
+  ],
+  "model": {
+    "types": [
+      {
+        "name": "assignment",
+        "id": "assignment",
+        "label": "Assignment",
+        "description": "A dated record that work was allocated to someone: who, to what, in which job role, from when. A reified relationship, distinct from ownership, which is accountability rather than allocation.",
+        "entity": {
+          "id": "assignment",
+          "bucket": "planning",
+          "name": "Assignment",
+          "kind": "reified relationship",
+          "description": "A dated record that work was allocated to someone: who, to what, in which job role, from when. A reified relationship, distinct from ownership, which is accountability rather than allocation.",
+          "meta": {
+            "relationship": "delivery-planning",
+            "priority": "P2",
+            "level": 3,
+            "badge": "From MaxV",
+            "note": "Reified relationship required by invariant 8. Not the same as Ownership. · model.md §8.2",
+            "badge-style": "green",
+            "profiles": [
+              "PdM",
+              "Dev",
+              "QA",
+              "Arch",
+              "HR"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "EntityId",
+              "description": "",
+              "required": true,
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "assignee_ref",
+              "type": "EntityId",
+              "description": "",
+              "required": true,
+              "relationLabel": ""
+            },
+            {
+              "name": "assignee_kind",
+              "type": "person | team | agent",
+              "description": "",
+              "required": true,
+              "relationLabel": ""
+            },
+            {
+              "name": "subject_ref",
+              "type": "EntityId",
+              "description": "The work being allocated",
+              "required": true,
+              "relationLabel": ""
+            },
+            {
+              "name": "job_role",
+              "type": "string?",
+              "description": "The role the assignee acts in for this work",
+              "required": false,
+              "relationLabel": ""
+            },
+            {
+              "name": "valid_from",
+              "type": "timestamp",
+              "description": "",
+              "required": true,
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "valid_to",
+              "type": "timestamp?",
+              "description": "",
+              "required": false,
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "status",
+              "type": "proposed | active | completed | withdrawn",
+              "description": "",
+              "required": true,
+              "relationLabel": ""
+            },
+            {
+              "name": "assigns",
+              "type": "ManagedObject",
+              "description": "",
+              "relation": "managed-object",
+              "relationType": "references",
+              "relationLabel": "assigns",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "assigned_to",
+              "type": "Person",
+              "description": "",
+              "relation": "person",
+              "relationType": "member",
+              "relationLabel": "assigned_to",
+              "required": false,
+              "extends": "edge"
+            }
+          ],
+          "methods": [
+            {
+              "name": "is_active",
+              "description": "",
+              "input": "at?",
+              "result": "boolean"
+            },
+            {
+              "name": "withdraw",
+              "description": "",
+              "input": "actor",
+              "result": "void"
+            }
+          ],
+          "examples": [
+            "Ivanov assigned to the Clean Restore spec as author",
+            "QA team assigned to the release validation"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "managed-object"
+        }
+      }
+    ],
+    "properties": [
+      {
+        "on": "project",
+        "property": {
+          "name": "people",
+          "type": "person",
+          "relation": "person",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Team",
+          "description": "A tab of the project: what it shows."
+        }
+      }
+    ]
+  }
+}

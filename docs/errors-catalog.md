@@ -109,7 +109,30 @@ dropping the session — never by each caller.
 A new category is not ours to add: the sixteen come from
 `toolkit-canonical-errors` and adding a seventeenth is an upstream change.
 
-What a gear does add is `context`, and that is a contract too. A new field in a
+What a gear does add is `context`, and that is a contract too.
+
+### Precondition kinds a screen branches on
+
+A `failed_precondition` names its kind in `context.violations[].type_`. These
+are stable; a screen may branch on them.
+
+| Gear | Kind | When |
+| --- | --- | --- |
+| `studio-kits` | `BASE_KIT` | An organization or a project uninstalls a kit the platform installed for every organization. |
+| `studio-kits` | `ORGANIZATION_KIT` | A project uninstalls a kit its organization installed. |
+| `studio-kits` | `NOT_A_PROJECT_KIT` | A kit whose `levels` do not name `project` is installed in a project. |
+| `studio-kits` | `KIT_SLUG_TAKEN` | An organization adds to its shelf a kit whose slug a built-in or official kit already has. |
+| `studio-kits` | `KIT_INSTALLED` | An organization takes off its shelf a kit it has installed. |
+| `studio-kits` | `KIT_MODEL_CONFLICT` | A kit's model overlay would add a type, field, relation, tab or lifecycle the organization's model already has from somebody else. Nothing is installed. |
+| `studio-kits` | `MODEL_KIT_NOT_FOR_PROJECT` | A kit that brings a model is installed for one project; the model is the organization's. |
+| `studio-kits` | `KIT_NOT_INSTALLED` | A kit's function (a project's phase) is used where the kit does not apply. |
+| `studio-kits` | `NO_SUCH_TRANSITION` | A project's phase is moved along a transition its lifecycle does not declare. |
+
+The `permission_denied` reasons of the same gear are `PLATFORM_ADMIN_REQUIRED`,
+`KIT_ADMIN_REQUIRED` and `DOMAIN_EDIT_REQUIRED` (the PDP refused the
+project's write) (`context.reason`).
+
+### Context fields A new field in a
 `context` shape that a screen is expected to read lands in this file in the same
 PR. A field nobody may read does not need to be here — but then no screen may
 read it either.

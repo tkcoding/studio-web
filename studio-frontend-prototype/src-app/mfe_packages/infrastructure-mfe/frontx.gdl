@@ -1,0 +1,33 @@
+# This micro-frontend's passport: everything a tool that assembles a product
+# from FrontX packages (Gearbox, Constructor Studio) needs to know about it, in
+# one file. It restates what package.json and mfe.json say, and those tools
+# check that they agree, so keep them in step when either changes.
+#
+# The Infrastructure kit, `org-infrastructure`: a built-in kit (ADR-0068 §7),
+# a base kit by default (ADR-0069 §4). Its one screen is Organization ›
+# Infrastructure (ADR-0056 §2): the places the organization holds, the
+# environments it defines on them and what runs where, carried over from the
+# prototype (ADR-0069 §5).
+#
+# Its second screen, Organization › Constructor Research, is the Constructor Research
+# kit's, `constructor-research`: a built-in kit that is not a base kit by
+# default (docs/design/studio-kits.md §3.13), shown only where an
+# organization installed it.
+gdl_version = "1.5"
+
+mfe(
+    name = "@constructor-studio/infrastructure-mfe",
+    version = "0.2.0-alpha.0",
+
+    # The backend gears its screens call, by gear id.
+    requires = ["studio-environments", "studio-connector", "studio-kits", "account-management"],
+
+    screens = ["Infrastructure", "Constructor Research"],
+    mounts = ["/infrastructure", "/constructor-research"],
+
+    frontx = "0.2.0-alpha.15",
+
+    roles = [],
+
+    preview = ["/infrastructure", "/constructor-research"],
+)

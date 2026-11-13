@@ -1,0 +1,24 @@
+{
+  "$id": "gts://gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.screens.available.v1~",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Shell-owned: which screens a micro-frontend may send the person to right now, so a row's button never leads to a tab of a kit that is not installed where the person is (ADR-0068 §5). null before the shell knows its screens. `kits` is null while the installed kits are unknown (the read in flight, a backend without the installer): unknown never hides anything, as in the tabs.",
+  "allOf": [{ "$ref": "gts://gts.frontx.mfes.comm.shared_property.v1~" }],
+  "properties": {
+    "value": {
+      "type": ["object", "null"],
+      "properties": {
+        "routes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "$comment": "The routes of the registered screens that show where the person is: the shell's own, and a kit's where its kit is installed."
+        },
+        "kits": {
+          "type": ["array", "null"],
+          "items": { "type": "string" },
+          "$comment": "The slugs of the kits installed where the person is, or null while unknown."
+        }
+      },
+      "required": ["routes", "kits"]
+    }
+  }
+}

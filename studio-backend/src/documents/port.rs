@@ -255,3 +255,34 @@ pub trait SpecNeeds: Send + Sync + 'static {
         project_id: Uuid,
     ) -> anyhow::Result<(Vec<DeclaredCapability>, Vec<DeclaredRequirement>)>;
 }
+
+/// A project's first document, written by its creation run
+/// (studio-organizations, `organizations.project_create`): the same write
+/// `POST /workspaces/{workspace_id}/projects/{project_id}/documents` makes,
+/// as the run's service context, with the person who asked for the project
+/// recorded as its author.
+#[async_trait]
+pub trait ProjectDocuments: Send + Sync + 'static {
+    /// Whether the project has a document of `type_key` already.
+    async fn has_document(
+        &self,
+        ctx: &SecurityContext,
+        workspace_id: Uuid,
+        project_id: Uuid,
+        type_key: &str,
+    ) -> anyhow::Result<bool>;
+
+    /// Write a document of `type_key` from one questionnaire answer
+    /// (`question_id`, `text`); its id.
+    #[allow(clippy::too_many_arguments)]
+    async fn create_answered(
+        &self,
+        ctx: &SecurityContext,
+        workspace_id: Uuid,
+        project_id: Uuid,
+        type_key: &str,
+        title: &str,
+        answers: &[(String, String)],
+        created_by: &str,
+    ) -> anyhow::Result<Uuid>;
+}

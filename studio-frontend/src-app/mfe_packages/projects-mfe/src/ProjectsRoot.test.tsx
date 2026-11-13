@@ -5,7 +5,7 @@ import { FrontXProvider } from '@gears-frontx/react';
 import {
   createMfeBridgeFixture,
   mfeContextValue,
-} from '../../../__test-utils__/createMfeBridgeFixture';
+} from '@frontx-test-utils/createMfeBridgeFixture.ts';
 
 /**
  * Which screen shows is `projects/nav.projectId` and nothing else — there is no
@@ -54,8 +54,8 @@ describe('ProjectsRoot', () => {
       </FrontXProvider>
     );
 
-    // The list screen owns the search box; the project frame has no such thing.
-    expect(await screen.findByRole('searchbox')).toBeTruthy();
+    // The list screen owns New project; the project frame has no such button.
+    expect(await screen.findByRole('button', { name: 'New project' })).toBeTruthy();
 
     await act(async () => {
       mfeApp.store.dispatch(openProject('11111111-1111-4111-8111-111111111111'));
@@ -64,13 +64,13 @@ describe('ProjectsRoot', () => {
     // The frame's own chrome is its <header> (`banner`); the section navigation
     // that used to stand in for it here is the shell's now, so it is not asserted.
     expect(await screen.findByRole('banner')).toBeTruthy();
-    expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'New project' })).toBeNull();
 
     await act(async () => {
       mfeApp.store.dispatch(closeProject());
     });
 
-    expect(await screen.findByRole('searchbox')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'New project' })).toBeTruthy();
     // Two full renders of the kit's chrome in jsdom, measured at 14-15s against
     // vitest's 15s default -- a coin flip, and a CI flake waiting to happen. The
     // budget is raised rather than the work reduced because none of what takes

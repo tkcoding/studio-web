@@ -1,0 +1,17 @@
+
+.root {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  min-height: 100%;
+  height: 100%;
+  font-family: var(--font-sans);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line-height);
+  color: var(--foreground);
+}
+
+/* The kit's theme.css paints `body, [data-theme]`, and this root carries
+ * data-theme so its palette applies — which would repaint the shell's screen.
+ * A class and an attribute (0,2,0) outrank that rule wherever the sheets land. */
+.root[data-theme] {
+  background: transparent;
+}

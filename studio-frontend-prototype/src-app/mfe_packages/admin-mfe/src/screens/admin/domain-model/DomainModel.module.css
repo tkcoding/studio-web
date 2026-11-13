@@ -1,0 +1,280 @@
+/*
+ * Admin › Studio domain model: the prototype's `.dm-*` rules (styles.css) over
+ * ui-kit tokens. One colour per origin, the same on the list's dot, the type's
+ * chip and the relation map's node.
+ */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.list {
+  max-height: 78vh;
+  overflow: auto;
+}
+
+.listBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.listHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.h4 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.origins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.bucket {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bucketName {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.type {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md, 6px);
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.type:hover {
+  background: var(--muted);
+}
+
+.typeOn,
+.typeOn:hover {
+  background: var(--secondary);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.typeName {
+  flex: 1;
+  min-width: 0;
+}
+
+.typeHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.push {
+  margin-left: auto;
+}
+
+.actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+}
+
+.origin_studio { background: var(--primary); }
+.origin_kit { background: var(--success); }
+.origin_gear { background: var(--chart-category-teal); }
+.origin_upload { background: var(--warning); }
+.origin_organization { background: var(--chart-category-purple); }
+.origin_earlier { background: var(--muted-foreground); }
+
+.fill_studio { fill: var(--primary); }
+.fill_kit { fill: var(--success); }
+.fill_gear { fill: var(--chart-category-teal); }
+.fill_upload { fill: var(--warning); }
+.fill_organization { fill: var(--chart-category-purple); }
+.fill_earlier { fill: var(--muted-foreground); }
+
+.origin {
+  padding: 1px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full, 9999px);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.chip_studio {
+  border-color: color-mix(in oklab, var(--primary) 50%, transparent);
+  background: color-mix(in oklab, var(--primary) 10%, var(--card));
+}
+.chip_kit {
+  border-color: color-mix(in oklab, var(--success) 55%, transparent);
+  background: color-mix(in oklab, var(--success) 10%, var(--card));
+}
+.chip_gear { border-color: color-mix(in oklab, var(--chart-category-teal) 55%, transparent); }
+.chip_upload { border-color: color-mix(in oklab, var(--warning) 55%, transparent); }
+.chip_organization { border-color: color-mix(in oklab, var(--chart-category-purple) 55%, transparent); }
+.chip_earlier { color: var(--muted-foreground); }
+
+.gts summary {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.gts code {
+  word-break: break-all;
+}
+
+.relations {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.svgWrap {
+  overflow-x: auto;
+}
+
+.svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.svg text {
+  fill: var(--foreground);
+  font-size: 12px;
+}
+
+.node {
+  cursor: pointer;
+}
+
+.node:hover text,
+.node:focus text {
+  text-decoration: underline;
+}
+
+.edge {
+  fill: none;
+  stroke: color-mix(in oklab, var(--foreground) 35%, transparent);
+  stroke-width: 1.4;
+}
+
+.edgeIn {
+  stroke: color-mix(in oklab, var(--primary) 45%, transparent);
+}
+
+.edgeInherited {
+  stroke-dasharray: 4 3;
+}
+
+.arrowhead {
+  fill: color-mix(in oklab, var(--foreground) 45%, transparent);
+}
+
+.center rect {
+  fill: var(--primary);
+}
+
+.svg .center text {
+  fill: var(--primary-foreground);
+  font-weight: 600;
+}
+
+.linkLists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+
+.listTitle {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.links {
+  display: grid;
+  gap: 2px;
+  margin: var(--space-1) 0 0;
+  padding-left: 1rem;
+  font-size: 0.8125rem;
+}
+
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--link-foreground, var(--primary));
+  font: inherit;
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.8125rem;
+}
+
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

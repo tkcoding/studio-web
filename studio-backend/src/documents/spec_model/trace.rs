@@ -1,5 +1,5 @@
 //! Where each requirement is cited: the documents that refer to it, the code
-//! that names it, the tests that name it (`docs/spec-domain-model.md`,
+//! that names it, the tests that name it (`docs/project-domain-model.md`,
 //! "From requirement to code and test"; issue #738).
 //!
 //! Mechanical, as the work links are: a file cites a requirement when it
@@ -301,7 +301,7 @@ pub fn trace(
         .collect()
 }
 
-/// A project's trace as `/spec-model/trace` answers it.
+/// A project's trace as `/project-domain-model/trace` answers it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Traced {
     pub traces: Vec<Trace>,

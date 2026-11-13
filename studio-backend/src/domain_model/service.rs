@@ -324,8 +324,26 @@ struct TenantModel {
     version: u64,
 }
 
+/// The type ids a registration carried, and the ones it pinned.
+type RegisteredTypes = (std::collections::BTreeSet<String>, Vec<String>);
+
 pub struct DomainModelService {
     store: Arc<dyn DomainStore>,
+    /// One expensive registration flight per tenant, independent of other
+    /// tenants. A cold screen can issue dozens of concurrent object reads.
+    registration: Mutex<HashMap<Uuid, Arc<tokio::sync::Mutex<()>>>>,
+    /// The type ids this process last registered for a tenant, and which of
+    /// them were pinned. A registration is a function of the type ids alone
+    /// (`gts::derived_node_schema` reads nothing else), so a model that comes
+    /// back with no type this set lacks needs no second one. That is the
+    /// common case: a reload after the head moved, a kit or core sync that
+    /// changed a field. Without it every reload re-registered the whole model,
+    /// which on studio-dev cost `/connections` about 1.4 s a request.
+    registered_types: Mutex<HashMap<Uuid, RegisteredTypes>>,
+    /// One gear declaration written at a time per tenant. Cold reads after a
+    /// start declare the same need together; racing they each claimed the
+    /// same version, and all but one re-read the model and tried again.
+    declaring: Mutex<HashMap<Uuid, Arc<tokio::sync::Mutex<()>>>>,
     /// Who may read and write objects (ADR-0035). Tenant-only unless a PDP is
     /// wired in, which is what the in-memory build and the tests run.
     policy: Arc<dyn ObjectPolicy>,
@@ -345,6 +363,19 @@ pub struct DomainModelService {
     claimed: Mutex<HashMap<Uuid, u64>>,
 }
 
+/// A person's write to a type a kit left dormant (ADR-0070 §4). The gear that
+/// holds it writes through its own path and is not refused.
+fn refuse_dormant(ontology: &Ontology, entity_id: &str) -> anyhow::Result<()> {
+    match ontology.left_by(entity_id) {
+        Some(kit) => Err(AccessError::Dormant {
+            entity: entity_id.to_owned(),
+            kit: kit.to_owned(),
+        }
+        .into()),
+        None => Ok(()),
+    }
+}
+
 /// How long an object path trusts its cached model before asking the graph
 /// for the head version again (one single-node read).
 const MODEL_RECHECK: std::time::Duration = std::time::Duration::from_secs(10);
@@ -353,6 +384,9 @@ impl DomainModelService {
     pub fn new(store: Arc<dyn DomainStore>) -> Self {
         Self {
             store,
+            registration: Mutex::new(HashMap::new()),
+            registered_types: Mutex::new(HashMap::new()),
+            declaring: Mutex::new(HashMap::new()),
             policy: Arc::new(TenantOnly),
             tenants: Mutex::new(HashMap::new()),
             notify: super::events::Notifier::default(),
@@ -472,6 +506,15 @@ impl DomainModelService {
     /// the stored head version (one node) and reload when it has moved. It is
     /// one extra single-row read on the endpoints where being a version behind
     /// would be visibly wrong.
+    /// The tenant's model as the read model's fill sees it, for tests.
+    #[cfg(test)]
+    pub(crate) async fn tenant_model(
+        &self,
+        ctx: &SecurityContext,
+    ) -> anyhow::Result<Arc<Ontology>> {
+        self.model_current(ctx).await
+    }
+
     async fn model_current(&self, ctx: &SecurityContext) -> anyhow::Result<Arc<Ontology>> {
         let ontology = self.model(ctx).await?;
         let tenant = ctx.subject_tenant_id();
@@ -813,16 +856,171 @@ impl DomainModelService {
         Ok(())
     }
 
+    /// Compose the running core under the organization's model (ADR-0070 §5,
+    /// [`Ontology::sync_core_layer`]). The first sync of a stored model is its
+    /// migration into the layer: one version with no inverse. A migration
+    /// that cannot be shown to keep the model as it reads (its composition
+    /// differs, or the stored model cannot be read completely) leaves the
+    /// stored model as it is, on the legacy additive repair, so nothing
+    /// changes silently. Answers the number of types changed.
     pub async fn ensure_studio_types(&self, ctx: &SecurityContext) -> anyhow::Result<usize> {
+        match self
+            .sync_core_layer(ctx, &Ontology::running_core(), &Ontology::running_moves())
+            .await
+        {
+            Ok(change) => Ok(change.map_or(0, |c| c.updated.len())),
+            Err(e) => {
+                warn!(
+                    tenant = %ctx.subject_tenant_id(),
+                    error = %e,
+                    "studio-domain-model: the core layer was not applied; the organization stays on its stored model"
+                );
+                self.add_legacy_studio_types(ctx).await
+            }
+        }
+    }
+
+    /// The pre-layer repair: add what the stored model lacks of the core,
+    /// nothing else. Only for a model the core layer could not take.
+    async fn add_legacy_studio_types(&self, ctx: &SecurityContext) -> anyhow::Result<usize> {
         let model = self.model_current(ctx).await?;
-        // Asked of a copy first: a model with nothing to add stays unwritten.
-        if (*model).clone().add_studio_types().is_empty() {
+        if model.has_core_layer() || (*model).clone().add_studio_types().is_empty() {
             return Ok(0);
         }
         self.edit_entities(ctx, "studio-types", "take in Studio's own types", |next| {
             Ok(next.add_studio_types())
         })
         .await
+    }
+
+    /// The types the stored model names but this read did not hand back: an
+    /// incomplete projection, or a model moving under it.
+    async fn unread_model_members(
+        &self,
+        ctx: &SecurityContext,
+        model: &Ontology,
+    ) -> anyhow::Result<Vec<String>> {
+        let head = self
+            .store
+            .list_objects(ctx, &[gts::META_MODEL.to_string()], None, Some(1))
+            .await?;
+        let Some(named) = head
+            .first()
+            .and_then(|row| row.value.get("entity_ids"))
+            .and_then(Value::as_array)
+        else {
+            return Ok(Vec::new());
+        };
+        let held: std::collections::HashSet<String> = model.entity_ids().into_iter().collect();
+        Ok(named
+            .iter()
+            .filter_map(Value::as_str)
+            .filter(|id| !held.contains(*id))
+            .map(str::to_owned)
+            .take(16)
+            .collect())
+    }
+
+    /// Compose `core` under the caller's organization's model and store the
+    /// result as one version; `None` when it already stands on this core.
+    pub(crate) async fn sync_core_layer(
+        &self,
+        ctx: &SecurityContext,
+        core: &[Value],
+        moves: &std::collections::BTreeMap<String, String>,
+    ) -> anyhow::Result<Option<super::ontology::CoreLayerChange>> {
+        self.ensure_persisted(ctx).await?;
+        for attempt in 0..EDIT_ATTEMPTS {
+            let mut current = self.model_current(ctx).await?;
+            if !current.has_core_layer() {
+                // The migration writes the model's membership. A read that
+                // missed a type would make it the organization's removal, so
+                // it re-reads once and then refuses.
+                let mut unread = self.unread_model_members(ctx, &current).await?;
+                if !unread.is_empty() {
+                    current = self.reload(ctx).await?;
+                    unread = self.unread_model_members(ctx, &current).await?;
+                }
+                anyhow::ensure!(
+                    unread.is_empty(),
+                    "the stored model names types this read did not return ({unread:?}); not migrating it"
+                );
+            }
+            let mut next = (*current).clone();
+            let Some(change) = next.sync_core_layer(core, moves)? else {
+                return Ok(None);
+            };
+            let (op, patch, undo) = if change.adopted {
+                // The boundary: the legacy document is not something a later
+                // revert could rebuild the layers from.
+                ("core-layer-migration", json!([]), json!([]))
+            } else {
+                (
+                    "core",
+                    json!(json_patch::diff(current.document(), next.document())),
+                    json!(json_patch::diff(next.document(), current.document())),
+                )
+            };
+            let summary = if change.adopted {
+                format!(
+                    "move onto the running core: {} type(s) completed, {} organization difference(s) kept",
+                    change.updated.len(),
+                    change.legacy_overrides
+                )
+            } else {
+                format!(
+                    "running core: {} type(s) changed, {} key(s) released",
+                    change.updated.len(),
+                    change.released.len()
+                )
+            };
+            let version_no = self.next_version(ctx)?;
+            let rev = Revision::new(version_no, ctx, op, "", summary).with_patches(patch, undo);
+            if !self.claim_version(ctx, &rev).await? {
+                warn!(
+                    attempt,
+                    version = version_no,
+                    "studio-domain-model: model version taken, retrying the core layer"
+                );
+                self.reload(ctx).await?;
+                continue;
+            }
+            let mut nodes = Vec::new();
+            for e in next.entities() {
+                let Some(id) = e.get("id").and_then(Value::as_str) else {
+                    continue;
+                };
+                if current.entity(id) == Some(e) {
+                    continue;
+                }
+                let node = next
+                    .object_type_node(id)
+                    .ok_or_else(|| anyhow::anyhow!("unknown domain type: {id}"))?;
+                nodes.push(NodeUpsert {
+                    type_id: gts::META_OBJECT_TYPE.to_string(),
+                    node_key: gts::instance_id(gts::META_OBJECT_TYPE, id),
+                    name: Some(node.name.clone()),
+                    payload: node.payload.clone(),
+                    expected_version: None,
+                });
+            }
+            nodes.push(self.model_node(&next, version_no));
+            self.store.upsert_nodes(ctx, &nodes).await?;
+            if let Some(m) = self.tenants_lock()?.get_mut(&ctx.subject_tenant_id()) {
+                m.ontology = Arc::new(next);
+                m.version = version_no;
+                m.registered = false;
+            }
+            info!(
+                tenant = %ctx.subject_tenant_id(),
+                ?change,
+                "studio-domain-model: the running core composed under the organization's model"
+            );
+            return Ok(Some(change));
+        }
+        Err(anyhow::anyhow!(
+            "the model is being edited concurrently: no version could be claimed in {EDIT_ATTEMPTS} attempts"
+        ))
     }
 
     pub async fn import_model(
@@ -843,6 +1041,8 @@ impl DomainModelService {
         // the types Studio's own screens read.
         let current = self.model_current(ctx).await?;
         ontology.keep_held_from(&current);
+        ontology.keep_kit_property_sources(&current);
+        ontology.keep_core_layer(&current);
         ontology.add_studio_types();
         let summary = ImportSummary {
             entities: ontology.entities().len() as u64,
@@ -902,6 +1102,38 @@ impl DomainModelService {
         Ok(summary)
     }
 
+    /// The kit that left `type_ref` dormant in the caller's organization, if
+    /// it did; `None` for an installed or an unknown type.
+    pub async fn dormant_kit(
+        &self,
+        ctx: &SecurityContext,
+        type_ref: &str,
+    ) -> anyhow::Result<Option<String>> {
+        let ontology = self.model(ctx).await?;
+        Ok(ontology
+            .resolve_entity_id(type_ref)
+            .and_then(|id| ontology.left_by(&id).map(str::to_owned)))
+    }
+
+    /// The kit an absent type comes with (ADR-0070 §6): a type the running
+    /// core handed over to a kit (`moved_to_kits`) that the caller's
+    /// organization's model does not have, because the kit is not installed
+    /// there. `None` for a type the model has, and for a name no kit brings.
+    pub async fn absent_kit(
+        &self,
+        ctx: &SecurityContext,
+        type_ref: &str,
+    ) -> anyhow::Result<Option<String>> {
+        if type_ref.contains('.') {
+            return Ok(None);
+        }
+        let ontology = self.model(ctx).await?;
+        if ontology.resolve_entity_id(type_ref).is_some() {
+            return Ok(None);
+        }
+        Ok(Ontology::running_moves().remove(type_ref))
+    }
+
     /// The whole ontology document — the source the frontend regenerates from.
     pub async fn ontology_document(&self, ctx: &SecurityContext) -> anyhow::Result<Value> {
         Ok(self.model_current(ctx).await?.document().clone())
@@ -942,9 +1174,9 @@ impl DomainModelService {
     /// when a model is imported, which bumps `generation`; adding a field to a
     /// type leaves the set alone (the registered schema is open).
     ///
-    /// Two writers racing a cold tenant may both register — the call is
-    /// idempotent and converges, which is the cheaper trade than holding a lock
-    /// across the await.
+    /// Concurrent callers for the same tenant share one registration flight.
+    /// A migration invalidating the model during that flight cannot mark the
+    /// replacement generation registered; it is registered before proceeding.
     ///
     /// A node type's schema carries the payload paths it is searched and
     /// embedded on, and those are derived from the entity's own fields — so
@@ -957,7 +1189,7 @@ impl DomainModelService {
     /// and with it every object creation in the model.
     async fn ensure_types(&self, ctx: &SecurityContext) -> anyhow::Result<()> {
         let tenant = ctx.subject_tenant_id();
-        let ontology = self.model(ctx).await?;
+        self.model(ctx).await?;
         if self
             .tenants_lock()?
             .get(&tenant)
@@ -965,25 +1197,73 @@ impl DomainModelService {
         {
             return Ok(());
         }
-        let (node_types, edge_types) = (ontology.node_types(), ontology.edge_types());
-        let pinned = self
-            .store
-            .register_types(ctx, &node_types, &edge_types)
-            .await?;
-        if !pinned.is_empty() {
-            warn!(
-                %tenant,
-                count = pinned.len(),
-                types = ?pinned,
-                "studio-domain-model: these types keep the schema they were registered with — \
-                 the model declares different search paths, which needs a type migration"
-            );
+        let flight = self
+            .registration
+            .lock()
+            .map_err(|_| anyhow::anyhow!("domain registration mutex poisoned"))?
+            .entry(tenant)
+            .or_default()
+            .clone();
+        let _flight = flight.lock().await;
+        for _ in 0..EDIT_ATTEMPTS {
+            let ontology = self.model(ctx).await?;
+            if self
+                .tenants_lock()?
+                .get(&tenant)
+                .is_some_and(|m| m.registered)
+            {
+                return Ok(());
+            }
+            let (node_types, edge_types) = (ontology.node_types(), ontology.edge_types());
+            let wanted: std::collections::BTreeSet<String> = node_types
+                .iter()
+                .map(|t| t.type_id.clone())
+                .chain(edge_types.iter().map(|t| t.type_id.clone()))
+                .collect();
+            let known = self
+                .registered_types
+                .lock()
+                .map_err(|_| anyhow::anyhow!("domain registered-types lock poisoned"))?
+                .get(&tenant)
+                .filter(|(done, _)| wanted.is_subset(done))
+                .map(|(_, pinned)| pinned.clone());
+            if let Some(pinned) = known {
+                let mut tenants = self.tenants_lock()?;
+                if let Some(m) = tenants.get_mut(&tenant)
+                    && Arc::ptr_eq(&m.ontology, &ontology)
+                {
+                    m.registered = true;
+                    m.pinned = pinned;
+                    return Ok(());
+                }
+                continue;
+            }
+            let pinned = self
+                .store
+                .register_types(ctx, &node_types, &edge_types)
+                .await?;
+            if let Ok(mut done) = self.registered_types.lock() {
+                let entry = done.entry(tenant).or_default();
+                entry.0.extend(wanted);
+                entry.1 = pinned.clone();
+            }
+            let mut tenants = self.tenants_lock()?;
+            if let Some(m) = tenants.get_mut(&tenant)
+                && Arc::ptr_eq(&m.ontology, &ontology)
+            {
+                if !pinned.is_empty() {
+                    warn!(%tenant, count = pinned.len(), types = ?pinned,
+                        "studio-domain-model: these types keep the schema they were registered with — \
+                         the model declares different search paths, which needs a type migration");
+                }
+                m.registered = true;
+                m.pinned = pinned;
+                return Ok(());
+            }
         }
-        if let Some(m) = self.tenants_lock()?.get_mut(&tenant) {
-            m.registered = true;
-            m.pinned = pinned;
-        }
-        Ok(())
+        anyhow::bail!(
+            "domain model changed during every type registration attempt; retry the operation"
+        )
     }
 
     /// Create (or upsert) an object of a domain type. `type_ref` may be an
@@ -1022,6 +1302,7 @@ impl DomainModelService {
         if let Some(gear) = ontology.held_by(&entity_id) {
             return Err(AccessError::Held(format!("{entity_id} is kept by {gear}")).into());
         }
+        refuse_dormant(&ontology, &entity_id)?;
 
         // Against the whole type, bases included — most of what a type requires
         // is declared on one of them.
@@ -1251,6 +1532,7 @@ impl DomainModelService {
             .await?;
         // A gear's record takes a person's change only in the fields no gear
         // writes: what an administrator added to the type beside the gear's.
+        refuse_dormant(&ontology, &entity_id)?;
         if let Some(gear) = ontology.held_by(&entity_id) {
             let open = ontology.open_own_fields(&entity_id);
             if let Some(field) = set
@@ -1351,6 +1633,7 @@ impl DomainModelService {
         if let Some(gear) = ontology.held_by(&entity_id) {
             return Err(AccessError::Held(format!("{entity_id} is kept by {gear}")).into());
         }
+        refuse_dormant(&ontology, &entity_id)?;
         let write = self
             .policy
             .access(ctx, access::WRITE, Some(&entity_id))
@@ -1838,51 +2121,157 @@ impl DomainModelService {
         Ok(read.retain(ctx, found).await)
     }
 
-    /// What a gear needs of one type, in one model version: the fields it
-    /// lacks, the relations it does not declare yet, and the gear's hold on
-    /// it and on its fields. Nothing missing writes nothing.
-    pub async fn take_in(
+    /// Record a linked gear's declaration separately from the organization
+    /// layer, and project its additive storage needs for existing readers.
+    pub async fn ensure_gear_type(
         &self,
         ctx: &SecurityContext,
-        entity: &str,
-        fields: &[FieldSpec],
-        relations: &[(String, String, String)],
-        hold: Option<(String, Vec<String>, bool)>,
+        need: &super::port::TypeNeed,
     ) -> anyhow::Result<usize> {
-        self.edit_entities(ctx, "take_in", "take in", |next| {
-            let mut changed = false;
-            let have: Vec<String> = next
-                .effective_properties(entity)
-                .into_iter()
-                .map(|p| p.name)
-                .collect();
-            for f in fields {
-                if !have.contains(&f.name) {
-                    next.add_field(entity, f.clone())
-                        .map_err(|e| anyhow::anyhow!("{e}"))?;
-                    changed = true;
-                }
-            }
-            for (name, target, verb) in relations {
-                changed |= next
-                    .add_relation(entity, name, target, verb)
-                    .map_err(|e| anyhow::anyhow!("{e}"))?;
-            }
-            if let Some((gear, names, searchable)) = &hold {
-                changed |= next
-                    .hold(entity, gear, names)
-                    .map_err(|e| anyhow::anyhow!("{e}"))?;
-                changed |= next
-                    .set_searchable(entity, *searchable)
-                    .map_err(|e| anyhow::anyhow!("{e}"))?;
-            }
+        // Nearly every call declares what the model already says: a gear
+        // asks again after each start, often from a read. Answered from the
+        // cached model, that is no head read, no version claim and no write;
+        // only a declaration that changes something takes the edit path.
+        let cached = self.model(ctx).await?;
+        if !(*cached).clone().declare_gear_type(need)? {
+            return Ok(0);
+        }
+        let flight = self
+            .declaring
+            .lock()
+            .map_err(|_| anyhow::anyhow!("declaration lock poisoned"))?
+            .entry(ctx.subject_tenant_id())
+            .or_default()
+            .clone();
+        let _flight = flight.lock().await;
+        // Whoever held the flight may have written this very declaration.
+        let cached = self.model(ctx).await?;
+        if !(*cached).clone().declare_gear_type(need)? {
+            return Ok(0);
+        }
+        self.edit_entities(ctx, "gear_declaration", "declare gear needs", |next| {
+            let changed = next.declare_gear_type(need)?;
             Ok(if changed {
-                vec![entity.to_owned()]
+                vec![need.id.clone()]
             } else {
                 Vec::new()
             })
         })
         .await
+    }
+
+    /// Make the caller's organization's model carry exactly kit `slug`'s
+    /// overlay at `version` (ADR-0067 §6): install, upgrade, or — with no
+    /// overlay — uninstall, keeping a type that still has objects
+    /// ([`super::kit_overlay::sync`]). One numbered, revertible version whose
+    /// patch names only the types it touched; nothing changed writes nothing.
+    pub async fn sync_kit_model(
+        &self,
+        ctx: &SecurityContext,
+        slug: &str,
+        version: &str,
+        overlay: Option<&super::kit_overlay::KitOverlay>,
+    ) -> anyhow::Result<super::kit_overlay::KitModelChange> {
+        self.ensure_persisted(ctx).await?;
+        for attempt in 0..EDIT_ATTEMPTS {
+            let current = self.model_current(ctx).await?;
+            // Which of the kit's types still have objects: those are kept.
+            let mut inhabited: Vec<String> = Vec::new();
+            for id in super::kit_overlay::own_types(&current, slug) {
+                let objects = self
+                    .store
+                    .list_objects(ctx, &[gts::node_type_id(&id)], None, Some(10))
+                    .await?;
+                if objects.iter().any(|n| super::store::is_live(&n.value)) {
+                    inhabited.push(id);
+                }
+            }
+            let mut next = (*current).clone();
+            let change = next.sync_kit_properties(slug, version, overlay, &|id: &str| {
+                inhabited.iter().any(|i| i == id)
+            })?;
+            if change.is_empty() {
+                return Ok(change);
+            }
+            let patch = json!(json_patch::diff(current.document(), next.document()));
+            let undo = json!(json_patch::diff(next.document(), current.document()));
+            let version_no = self.next_version(ctx)?;
+            let rev = Revision::new(
+                version_no,
+                ctx,
+                "kit",
+                slug,
+                format!(
+                    "kit {slug} {version}: {} added, {} changed, {} removed, {} kept",
+                    change.added.len(),
+                    change.updated.len(),
+                    change.removed.len(),
+                    change.kept.len()
+                ),
+            )
+            .with_patches(patch, undo);
+            if !self.claim_version(ctx, &rev).await? {
+                warn!(
+                    attempt,
+                    version = version_no,
+                    "studio-domain-model: model version taken, retrying the kit's overlay"
+                );
+                self.reload(ctx).await?;
+                continue;
+            }
+            // Every type that is new or changed is written; a removed one is
+            // simply no longer named by the model node (see `model_node`).
+            let mut nodes = Vec::new();
+            for e in next.entities() {
+                let Some(id) = e.get("id").and_then(Value::as_str) else {
+                    continue;
+                };
+                if current.entity(id) == Some(e) {
+                    continue;
+                }
+                let node = next
+                    .object_type_node(id)
+                    .ok_or_else(|| anyhow::anyhow!("unknown domain type: {id}"))?;
+                nodes.push(NodeUpsert {
+                    type_id: gts::META_OBJECT_TYPE.to_string(),
+                    node_key: gts::instance_id(gts::META_OBJECT_TYPE, id),
+                    name: Some(node.name.clone()),
+                    payload: node.payload.clone(),
+                    expected_version: None,
+                });
+            }
+            nodes.push(self.model_node(&next, version_no));
+            self.store.upsert_nodes(ctx, &nodes).await?;
+            if let Some(m) = self.tenants_lock()?.get_mut(&ctx.subject_tenant_id()) {
+                m.ontology = Arc::new(next);
+                m.version = version_no;
+                // A type may be new: graph-storage must know it before an
+                // object of it is written.
+                m.registered = false;
+            }
+            info!(
+                kit = slug,
+                version,
+                ?change,
+                "studio-domain-model: a kit's overlay applied"
+            );
+            return Ok(change);
+        }
+        Err(anyhow::anyhow!(
+            "the model is being edited concurrently — no version could be claimed in \
+             {EDIT_ATTEMPTS} attempts"
+        ))
+    }
+
+    /// The kits the caller's organization's model carries, with the version
+    /// each overlay was applied at.
+    pub async fn kit_models(
+        &self,
+        ctx: &SecurityContext,
+    ) -> anyhow::Result<std::collections::BTreeMap<String, String>> {
+        Ok(super::kit_overlay::carried(
+            &*self.model_current(ctx).await?,
+        ))
     }
 
     /// One versioned edit of some entities: `edit` changes a copy of the
@@ -1903,23 +2292,13 @@ impl DomainModelService {
             if touched.is_empty() {
                 return Ok(0);
             }
-            let mut patches = Vec::new();
-            let mut inverse = Vec::new();
-            for entity in &touched {
-                let index = next
-                    .entity_index(entity)
-                    .ok_or_else(|| anyhow::anyhow!("unknown domain type: {entity}"))?;
-                patches.push(json!({
-                    "op": "replace",
-                    "path": format!("/entities/{index}"),
-                    "value": next.entity(entity).cloned().unwrap_or(Value::Null),
-                }));
-                inverse.push(json!({
-                    "op": "replace",
-                    "path": format!("/entities/{index}"),
-                    "value": current.entity(entity).cloned().unwrap_or(Value::Null),
-                }));
-            }
+            // This edit can append a type and change its bucket order. An
+            // indexed `replace` cannot add an array element and an inverse
+            // with null would leave a malformed entity after a revert.
+            let patches =
+                serde_json::to_value(json_patch::diff(current.document(), next.document()))?;
+            let inverse =
+                serde_json::to_value(json_patch::diff(next.document(), current.document()))?;
             let version = self.next_version(ctx)?;
             let rev = Revision::new(
                 version,
@@ -1928,7 +2307,7 @@ impl DomainModelService {
                 &touched.join(","),
                 format!("{describe} {}", touched.join(", ")),
             )
-            .with_patches(Value::Array(patches), Value::Array(inverse));
+            .with_patches(patches, inverse);
             if !self.claim_version(ctx, &rev).await? {
                 warn!(
                     attempt,
@@ -1987,6 +2366,7 @@ impl DomainModelService {
         if let Some(gear) = ontology.held_by(&src) {
             return Err(AccessError::Held(format!("{src} is kept by {gear}")).into());
         }
+        refuse_dormant(&ontology, &src)?;
         // Relating is writing the source; it also reveals the target, so the
         // caller must be able to read it. Otherwise relating a person to a
         // project you cannot see would test whether it exists (ADR-0035 §5).
@@ -3113,6 +3493,34 @@ impl DomainModelService {
 }
 
 #[cfg(test)]
+impl DomainModelService {
+    /// Store `doc` as this tenant's model the way a build before the core
+    /// layer (ADR-0070 §5) left it: every type as an `object_type` node and
+    /// the model node, version 0. A new service over the same store is then
+    /// the next process starting on a legacy organization.
+    pub(in crate::domain_model) async fn store_legacy_for_test(
+        &self,
+        ctx: &SecurityContext,
+        doc: Value,
+    ) -> anyhow::Result<()> {
+        let legacy = Ontology::from_value(doc).map_err(|e| anyhow::anyhow!("{e}"))?;
+        anyhow::ensure!(!legacy.has_core_layer(), "a legacy model has no core layer");
+        self.tenants_lock()?.insert(
+            ctx.subject_tenant_id(),
+            TenantModel {
+                ontology: Arc::new(legacy),
+                persisted: false,
+                registered: false,
+                pinned: Vec::new(),
+                version: 0,
+            },
+        );
+        self.sync_model(ctx).await?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
 mod tests {
     //! The model is per tenant and lives in the store, so the two things worth
     //! asserting offline are that a tenant's edit stays its own and that a
@@ -3125,9 +3533,209 @@ mod tests {
     use crate::domain_model::store::{EdgeView, ObjectNode};
     use async_trait::async_trait;
 
+    #[tokio::test]
+    async fn a_sweep_that_adds_a_type_has_an_applicable_patch_and_a_complete_inverse() {
+        let service = DomainModelService::new(Arc::new(TenantScopedStore::default()));
+        let ctx = ctx_for(1);
+        let before = service.ontology_document(&ctx).await.unwrap();
+        service
+            .edit_entities(&ctx, "test-sweep", "add a file type", |next| {
+                next.add_entity(EntitySpec {
+                    id: "sweep-file".into(),
+                    name: "Sweep file".into(),
+                    extends: Some("file".into()),
+                    ..Default::default()
+                })?;
+                Ok(vec!["sweep-file".into()])
+            })
+            .await
+            .unwrap();
+        let after = service.ontology_document(&ctx).await.unwrap();
+        let revisions = service.revisions(&ctx).await.unwrap();
+        let revision = &revisions[0];
+        let mut replay = before.clone();
+        json_patch::patch(
+            &mut replay,
+            &serde_json::from_value::<json_patch::Patch>(revision.patch.clone()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(replay, after);
+        service.revert(&ctx, 0).await.unwrap();
+        assert_eq!(service.ontology_document(&ctx).await.unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn kit_property_layers_reload_replay_and_revert_without_resurrecting_org_removals() {
+        let store = Arc::new(TenantScopedStore::default());
+        let service = DomainModelService::new(store.clone());
+        let ctx = ctx_for(1);
+        let overlay = serde_json::from_value(json!({"fields": [
+            {"on": "project", "name": "effort", "type": "integer"}
+        ]}))
+        .unwrap();
+        service
+            .sync_kit_model(&ctx, "effort", "1", Some(&overlay))
+            .await
+            .unwrap();
+        let installed = service.ontology_document(&ctx).await.unwrap();
+        service
+            .edit_entities(&ctx, "test-remove", "remove effort", |o| {
+                o.entities_mut()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|e| e["id"] == "project")
+                    .unwrap()["properties"]
+                    .as_array_mut()
+                    .unwrap()
+                    .retain(|p| p["name"] != "effort");
+                Ok(vec!["project".into()])
+            })
+            .await
+            .unwrap();
+        let before_upgrade = service.ontology_document(&ctx).await.unwrap();
+        let target = service.cached_version(&ctx).unwrap();
+        let restored = DomainModelService::new(store);
+        restored
+            .sync_kit_model(&ctx, "effort", "2", Some(&overlay))
+            .await
+            .unwrap();
+        let upgraded = restored.ontology_document(&ctx).await.unwrap();
+        let project = upgraded["entities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["id"] == "project")
+            .unwrap();
+        assert!(
+            !project["properties"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|p| p["name"] == "effort")
+        );
+        let revisions = restored.revisions(&ctx).await.unwrap();
+        let mut replay = before_upgrade.clone();
+        json_patch::patch(
+            &mut replay,
+            &serde_json::from_value::<json_patch::Patch>(revisions[0].patch.clone()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(replay, upgraded);
+        restored.revert(&ctx, target).await.unwrap();
+        assert_eq!(
+            restored.ontology_document(&ctx).await.unwrap(),
+            before_upgrade
+        );
+        restored.revert(&ctx, 1).await.unwrap();
+        assert_eq!(restored.ontology_document(&ctx).await.unwrap(), installed);
+    }
+
+    #[tokio::test]
+    async fn concurrent_cold_screen_reads_share_one_type_registration() {
+        use std::sync::atomic::Ordering;
+        let store = Arc::new(TenantScopedStore::default());
+        *store.registration_delay.lock().unwrap() = Some(std::time::Duration::from_millis(25));
+        let service = Arc::new(DomainModelService::new(store.clone()));
+        let mut tasks = tokio::task::JoinSet::new();
+        for _ in 0..32 {
+            let service = service.clone();
+            tasks.spawn(async move {
+                service.ensure_types(&ctx_for(1)).await.unwrap();
+            });
+        }
+        while let Some(done) = tasks.join_next().await {
+            done.unwrap();
+        }
+        assert_eq!(store.registrations.load(Ordering::SeqCst), 1);
+        service.ensure_types(&ctx_for(1)).await.unwrap();
+        assert_eq!(store.registrations.load(Ordering::SeqCst), 1);
+        service.ensure_types(&ctx_for(2)).await.unwrap();
+        assert_eq!(store.registrations.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn type_registration_does_not_mark_a_replaced_generation_registered() {
+        use std::sync::atomic::Ordering;
+        let store = Arc::new(TenantScopedStore::default());
+        *store.registration_delay.lock().unwrap() = Some(std::time::Duration::from_millis(25));
+        let service = Arc::new(DomainModelService::new(store.clone()));
+        let ctx = ctx_for(1);
+        service.model(&ctx).await.unwrap();
+        let running = service.clone();
+        let registration = tokio::spawn(async move {
+            running.ensure_types(&ctx_for(1)).await.unwrap();
+        });
+        while store.registrations.load(Ordering::SeqCst) == 0 {
+            tokio::task::yield_now().await;
+        }
+        // An import or gear declaration swaps the Arc while registration awaits.
+        let mut replacement = Ontology::load();
+        replacement
+            .add_entity(EntitySpec {
+                id: "new-generation".into(),
+                name: "New generation".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        service
+            .tenants_lock()
+            .unwrap()
+            .get_mut(&ctx.subject_tenant_id())
+            .unwrap()
+            .ontology = Arc::new(replacement);
+        registration.await.unwrap();
+        assert_eq!(store.registrations.load(Ordering::SeqCst), 2);
+        assert!(service.tenants_lock().unwrap()[&ctx.subject_tenant_id()].registered);
+    }
+
+    /// What studio-dev did on every `/connections`: the head moved, the model
+    /// was reloaded with the same types, and the whole model was registered
+    /// again (with 55 refusals, one call each). A reload that brings no new
+    /// type must not register; one that does, must.
+    #[tokio::test]
+    async fn a_reload_with_the_same_types_does_not_register_them_again() {
+        use std::sync::atomic::Ordering;
+        let store = Arc::new(TenantScopedStore::default());
+        let service = Arc::new(DomainModelService::new(store.clone()));
+        let ctx = ctx_for(1);
+        service.ensure_types(&ctx).await.unwrap();
+        assert_eq!(store.registrations.load(Ordering::SeqCst), 1);
+
+        // A reload: the same model, a new `Arc`, and `registered` cleared.
+        {
+            let mut tenants = service.tenants_lock().unwrap();
+            let m = tenants.get_mut(&ctx.subject_tenant_id()).unwrap();
+            m.ontology = Arc::new((*m.ontology).clone());
+            m.registered = false;
+        }
+        service.ensure_types(&ctx).await.unwrap();
+        assert_eq!(store.registrations.load(Ordering::SeqCst), 1);
+        assert!(service.tenants_lock().unwrap()[&ctx.subject_tenant_id()].registered);
+
+        // A model with a type the last registration did not carry.
+        {
+            let mut tenants = service.tenants_lock().unwrap();
+            let m = tenants.get_mut(&ctx.subject_tenant_id()).unwrap();
+            let mut grown = (*m.ontology).clone();
+            grown
+                .add_entity(EntitySpec {
+                    id: "brand-new".into(),
+                    name: "Brand new".into(),
+                    ..Default::default()
+                })
+                .unwrap();
+            m.ontology = Arc::new(grown);
+            m.registered = false;
+        }
+        service.ensure_types(&ctx).await.unwrap();
+        assert_eq!(store.registrations.load(Ordering::SeqCst), 2);
+    }
+
     /// A store that keys everything by tenant, like the real graph does.
     #[derive(Default)]
     struct TenantScopedStore {
+        registrations: std::sync::atomic::AtomicUsize,
+        registration_delay: Mutex<Option<std::time::Duration>>,
         nodes: Mutex<HashMap<(Uuid, String), ObjectNode>>,
     }
 
@@ -3143,6 +3751,12 @@ mod tests {
             _node_types: &[NodeType],
             _edge_types: &[EdgeType],
         ) -> anyhow::Result<Vec<String>> {
+            self.registrations
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let delay = *self.registration_delay.lock().unwrap();
+            if let Some(delay) = delay {
+                tokio::time::sleep(delay).await;
+            }
             Ok(Vec::new())
         }
 
@@ -3372,7 +3986,7 @@ mod tests {
             .await
             .unwrap();
         let (_, v2) = service
-            .add_field(&ctx, "risk", field("mitigation_owner"))
+            .add_field(&ctx, "event", field("mitigation_owner"))
             .await
             .unwrap();
 
@@ -3383,7 +3997,7 @@ mod tests {
         let doc = service.ontology_document(&ctx).await.unwrap();
         // v1's change stands, v2's is gone.
         assert!(has_field(&doc, "team", "cost_center"));
-        assert!(!has_field(&doc, "risk", "mitigation_owner"));
+        assert!(!has_field(&doc, "event", "mitigation_owner"));
         // History is appended to, not rewritten.
         let versions: Vec<u64> = service
             .revisions(&ctx)
@@ -3397,7 +4011,7 @@ mod tests {
         // And the revert is itself reversible.
         service.revert(&ctx, 2).await.unwrap();
         let doc = service.ontology_document(&ctx).await.unwrap();
-        assert!(has_field(&doc, "risk", "mitigation_owner"));
+        assert!(has_field(&doc, "event", "mitigation_owner"));
     }
 
     #[tokio::test]
@@ -3439,14 +4053,14 @@ mod tests {
         // B's cache is a version behind and its first claim is taken; it
         // recomputes against A's model instead of overwriting it.
         let (_, vb) = b
-            .add_field(&ctx, "risk", field("mitigation_owner"))
+            .add_field(&ctx, "event", field("mitigation_owner"))
             .await
             .unwrap();
         assert_eq!((va, vb), (1, 2));
 
         let doc = b.ontology_document(&ctx).await.unwrap();
         assert!(has_field(&doc, "team", "cost_center"));
-        assert!(has_field(&doc, "risk", "mitigation_owner"));
+        assert!(has_field(&doc, "event", "mitigation_owner"));
     }
 
     #[tokio::test]
@@ -3482,6 +4096,100 @@ mod tests {
             .await
             .expect("not stuck on the abandoned number");
         assert_eq!(version, head + 2);
+    }
+
+    /// Store `service`'s current model as a model written before the core
+    /// layer existed; `extra` names a type the graph does not hold.
+    async fn store_as_legacy(
+        service: &DomainModelService,
+        store: &TenantScopedStore,
+        ctx: &SecurityContext,
+        extra: Option<&str>,
+    ) -> Ontology {
+        let current = service.model_current(ctx).await.unwrap();
+        let mut doc = current.document().clone();
+        doc.as_object_mut().unwrap().remove("core_layer");
+        let legacy = Ontology::from_value(doc).unwrap();
+        let mut node = service.model_node(&legacy, service.cached_version(ctx).unwrap());
+        if let Some(extra) = extra {
+            node.payload["entity_ids"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!(extra));
+        }
+        store.upsert_nodes(ctx, &[node]).await.unwrap();
+        legacy
+    }
+
+    #[tokio::test]
+    async fn a_legacy_stored_model_moves_onto_the_core_layer_once_and_cannot_be_reverted_past() {
+        let store = Arc::new(TenantScopedStore::default());
+        let ctx = ctx_for(11);
+        let service = DomainModelService::new(store.clone());
+        service.prepare_model(&ctx).await.unwrap();
+        service
+            .add_field(
+                &ctx,
+                "project",
+                FieldSpec {
+                    name: "cost_center".into(),
+                    type_name: "string".into(),
+                    description: None,
+                    required: false,
+                },
+            )
+            .await
+            .unwrap();
+        let legacy = store_as_legacy(&service, &store, &ctx, None).await;
+        let before = service.cached_version(&ctx).unwrap();
+
+        // A new process finds the legacy model and migrates it.
+        let next = DomainModelService::new(store.clone());
+        next.prepare_model(&ctx).await.unwrap();
+        let migrated = next.model_current(&ctx).await.unwrap();
+        assert!(migrated.has_core_layer());
+        assert_eq!(
+            migrated.entities(),
+            legacy.entities(),
+            "it reads what it read"
+        );
+        let top = next.revisions(&ctx).await.unwrap().remove(0);
+        assert_eq!(top.op, "core-layer-migration");
+        assert!(top.version > before);
+        let refused = next.revert(&ctx, before).await.unwrap_err().to_string();
+        assert!(refused.contains("cannot revert past"), "{refused}");
+
+        // Once on the layer, the same core writes nothing.
+        let head = next.cached_version(&ctx).unwrap();
+        assert_eq!(next.ensure_studio_types(&ctx).await.unwrap(), 0);
+        assert_eq!(next.cached_version(&ctx).unwrap(), head);
+    }
+
+    #[tokio::test]
+    async fn a_legacy_model_read_incompletely_is_not_migrated() {
+        let store = Arc::new(TenantScopedStore::default());
+        let ctx = ctx_for(12);
+        let service = DomainModelService::new(store.clone());
+        service.prepare_model(&ctx).await.unwrap();
+        store_as_legacy(&service, &store, &ctx, Some("ghost-type")).await;
+
+        let next = DomainModelService::new(store.clone());
+        let refused = next
+            .sync_core_layer(&ctx, &Ontology::running_core(), &Ontology::running_moves())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(refused.contains("ghost-type"), "{refused}");
+        // The start-up path keeps it on its stored model rather than failing.
+        next.ensure_studio_types(&ctx).await.unwrap();
+        assert!(!next.model_current(&ctx).await.unwrap().has_core_layer());
+        assert!(
+            next.revisions(&ctx)
+                .await
+                .unwrap()
+                .iter()
+                .all(|r| r.op != "core-layer-migration")
+        );
     }
 
     #[tokio::test]

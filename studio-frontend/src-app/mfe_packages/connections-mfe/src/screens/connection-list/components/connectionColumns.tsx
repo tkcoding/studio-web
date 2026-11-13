@@ -1,7 +1,7 @@
 import React from 'react';
 import type { DataGridTableColumn } from '@gears-frontx/ui-kit';
 import type { ScreenText } from '@constructor-studio/mfe-shared';
-import type { ConnectionRow } from '../../../shared/useConnectionList';
+import type { ConnectionRow } from '../../../model/connection';
 import { ProviderGlyph } from './ProviderGlyph';
 import { HealthInline } from './HealthInline';
 import { NoData } from './NoData';

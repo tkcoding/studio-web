@@ -14,9 +14,17 @@ import { freshNavigationHistory } from '@frontx-test-utils/memoryNavigationHisto
  * made inside a round, a replace, and two steps back taken one after another.
  */
 async function walk(history: NavigationHistory): Promise<string[]> {
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
   const start = history.location.position;
   const seen: string[] = [];
+  // A real window answers `go` with a popstate later; a loaded runner can take
+  // longer than any fixed pause. Wait for the steps instead, within a ceiling.
+  const settle = (steps: number) =>
+    new Promise<void>((resolve) => {
+      const deadline = Date.now() + 2000;
+      const check = () =>
+        seen.length >= steps || Date.now() > deadline ? resolve() : setTimeout(check, 5);
+      check();
+    });
   const unsubscribe = history.subscribe(({ kind, location }) => {
     seen.push(`${kind} ${location.path}${location.search ? `?${location.search}` : ''} @${location.position - start}`);
     if (kind === 'replace') history.push('/c?from=round');
@@ -24,9 +32,9 @@ async function walk(history: NavigationHistory): Promise<string[]> {
   history.push('/a');
   history.replace('/b');
   history.go(-1);
-  await settle();
+  await settle(4);
   history.go(-1);
-  await settle();
+  await settle(5);
   unsubscribe();
   return seen;
 }

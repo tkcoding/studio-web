@@ -1,0 +1,79 @@
+/*
+ * Organization › Constructor Research: what the Infrastructure screen's styles do not
+ * already give it -- the three steps and the grid of Research projects. Over
+ * the ui-kit's semantic tokens, as InfrastructureScreen.module.css.
+ */
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-width: 60rem;
+}
+
+.step {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.stepNumber {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+}
+
+.step_done {
+  background: var(--success, #15803d);
+  border-color: transparent;
+  color: var(--background);
+}
+
+.step_next {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.step_later {
+  opacity: 0.7;
+}
+
+.stepBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.places {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
+  gap: var(--space-3);
+}
+
+.placeActions {
+  display: inline-flex;
+  margin-left: auto;
+  gap: var(--space-1);
+}
+
+.inline {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}

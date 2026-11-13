@@ -20,13 +20,21 @@ use async_trait::async_trait;
 use serde_json::Value;
 use toolkit_security::SecurityContext;
 
-use super::ontology::{EntitySpec, FieldSpec};
+/// A kit's model overlay and what applying it changed (ADR-0067 §6): the
+/// format another gear (studio-kits) reads from a kit's manifest.
+pub use super::kit_overlay::{
+    KitModelChange, KitModelError, KitOverlay, OverlayType, kit_type_gts,
+    validate as validate_kit_overlay,
+};
 use super::service::{DomainModelService, WriteOptions};
 use super::validate::ValidateMode;
 
 /// A type a gear needs in the model, with the fields it writes.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct TypeNeed {
+    /// The linked gear declaring this need, also for types it leaves open.
+    pub declared_by: String,
     pub id: String,
     pub name: String,
     pub description: String,
@@ -189,6 +197,29 @@ pub trait DomainObjects: Send + Sync {
         anyhow::bail!("relation reads are not offered here")
     }
 
+    /// Make the caller's organization's model carry exactly kit `slug`'s
+    /// overlay at `version` (ADR-0067 §6): install or upgrade with an
+    /// overlay, uninstall with `None`. A conflict or a malformed overlay is a
+    /// [`KitModelError`] the error can be downcast to.
+    async fn sync_kit_model(
+        &self,
+        _ctx: &SecurityContext,
+        _slug: &str,
+        _version: &str,
+        _overlay: Option<&KitOverlay>,
+    ) -> anyhow::Result<KitModelChange> {
+        anyhow::bail!("kit models are not offered here")
+    }
+
+    /// The kits the caller's organization's model carries, with the version
+    /// each overlay was applied at.
+    async fn kit_models(
+        &self,
+        _ctx: &SecurityContext,
+    ) -> anyhow::Result<std::collections::BTreeMap<String, String>> {
+        Ok(Default::default())
+    }
+
     /// Objects of `entities` the text finds, best first, with their node type.
     async fn search(
         &self,
@@ -210,7 +241,10 @@ pub fn is_refusal(e: &anyhow::Error) -> bool {
     super::access::access_error(e).is_some_and(|a| {
         matches!(
             a,
-            super::access::AccessError::Denied | super::access::AccessError::Held(_)
+            super::access::AccessError::Denied
+                | super::access::AccessError::Held(_)
+                | super::access::AccessError::Dormant { .. }
+                | super::access::AccessError::NotInstalled { .. }
         )
     })
 }
@@ -305,46 +339,10 @@ impl DomainObjects for Objects {
     }
 
     async fn ensure_type(&self, ctx: &SecurityContext, need: &TypeNeed) -> anyhow::Result<()> {
+        self.0.ensure_gear_type(ctx, need).await?;
         if let Some(gear) = &need.held_by {
             crate::data_places::held(gear, &need.id);
         }
-        if !self.0.knows_type(ctx, &need.id).await? {
-            self.0
-                .add_type(
-                    ctx,
-                    EntitySpec {
-                        id: need.id.clone(),
-                        name: need.name.clone(),
-                        description: Some(need.description.clone()).filter(|d| !d.is_empty()),
-                        bucket: need.bucket.clone(),
-                        extends: need.extends.clone(),
-                        origin: Some("studio".to_string()),
-                    },
-                )
-                .await?;
-        }
-        // Fields, relations and the gear's hold in one model version: a gear
-        // taking in a type of twenty fields is one change, not twenty-two.
-        let fields: Vec<FieldSpec> = need
-            .fields
-            .iter()
-            .map(|(name, type_name, description)| FieldSpec {
-                name: name.clone(),
-                type_name: type_name.clone(),
-                description: Some(description.clone()).filter(|d| !d.is_empty()),
-                required: false,
-            })
-            .collect();
-        let hold = need.held_by.clone().map(|gear| {
-            (
-                gear,
-                need.fields.iter().map(|f| f.0.clone()).collect(),
-                need.searchable,
-            )
-        });
-        self.0
-            .take_in(ctx, &need.id, &fields, &need.relations, hold)
-            .await?;
         Ok(())
     }
 
@@ -416,6 +414,23 @@ impl DomainObjects for Objects {
 
     async fn entity_types(&self, ctx: &SecurityContext) -> anyhow::Result<Vec<(String, bool)>> {
         self.0.entity_kinds(ctx).await
+    }
+
+    async fn sync_kit_model(
+        &self,
+        ctx: &SecurityContext,
+        slug: &str,
+        version: &str,
+        overlay: Option<&KitOverlay>,
+    ) -> anyhow::Result<KitModelChange> {
+        self.0.sync_kit_model(ctx, slug, version, overlay).await
+    }
+
+    async fn kit_models(
+        &self,
+        ctx: &SecurityContext,
+    ) -> anyhow::Result<std::collections::BTreeMap<String, String>> {
+        self.0.kit_models(ctx).await
     }
 
     async fn claim(

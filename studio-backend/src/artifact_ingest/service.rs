@@ -144,7 +144,7 @@ pub struct KeptRepo {
 }
 
 /// What a prune forgot.
-#[derive(Debug, Clone, Copy, Default, serde::Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PruneSummary {
     /// Repository nodes.
     pub repos: usize,
@@ -225,6 +225,26 @@ impl SyncSummary {
     /// always serialize — and an empty document rather than a panic if not.
     fn as_detail(self) -> serde_json::Value {
         serde_json::to_value(self).unwrap_or_else(|_| serde_json::json!({}))
+    }
+}
+
+/// Put `repository` (the repository node's `full_path`) on each hit whose
+/// `repo` names one of `repos`.
+pub fn name_repositories(hits: &mut [GtsNode], repos: &[GtsNode]) {
+    for hit in hits {
+        let Some(repo) = hit.value.get("repo").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        let name = repos
+            .iter()
+            .find(|r| r.instance_id == repo)
+            .and_then(|r| r.value.get("full_path"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned);
+        if let (Some(name), Some(obj)) = (name, hit.value.as_object_mut()) {
+            obj.entry("repository".to_string())
+                .or_insert(serde_json::Value::String(name));
+        }
     }
 }
 
@@ -1912,6 +1932,25 @@ impl IngestService {
         .await
     }
 
+    /// Forget one repository of a project, by its path, through whichever
+    /// connection it was synced: the second half of detaching a source
+    /// (`artifact.source_detach`). The path is matched without regard to case,
+    /// as providers treat it.
+    pub async fn prune_repository(
+        &self,
+        ctx: &SecurityContext,
+        project_id: &str,
+        repo_full_path: &str,
+    ) -> anyhow::Result<PruneSummary> {
+        self.prune_repos(ctx, None, Some(project_id), |repo| {
+            repo.value
+                .get("full_path")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|p| p.eq_ignore_ascii_case(repo_full_path))
+        })
+        .await
+    }
+
     /// After a sync of `repo_full_path`: forget the same repository as it was
     /// synced in this scope through any OTHER connection.
     ///
@@ -2347,13 +2386,31 @@ impl IngestService {
     /// retrieval — it embeds the query with the same provider that embedded
     /// the nodes and fuses the vector and lexical arms; the in-memory fallback
     /// matches text.
+    /// Each hit that names its repository node (`repo`, an id) also carries
+    /// the repository's name, `repository` (`owner/name`, the node's
+    /// `full_path`), so a reader with checkouts opens the file in the right
+    /// one instead of looking for the path in every checkout.
     pub async fn search(
         &self,
         ctx: &SecurityContext,
         text: &str,
         limit: u32,
     ) -> anyhow::Result<Vec<GtsNode>> {
-        self.graph.search(ctx, text, limit).await
+        let mut hits = self.graph.search(ctx, text, limit).await?;
+        if hits.iter().any(|n| {
+            n.value
+                .get("repo")
+                .is_some_and(serde_json::Value::is_string)
+        }) {
+            // The repository nodes are few, and the listing is cached.
+            match self.graph.list(ctx, Some(super::gts::REPO_TYPE)).await {
+                Ok(repos) => name_repositories(&mut hits, &repos),
+                Err(error) => {
+                    tracing::warn!("artifact search: repository names not read: {error:#}");
+                }
+            }
+        }
+        Ok(hits)
     }
 
     /// Register a user-uploaded or Studio-generated project artifact after its
@@ -2981,6 +3038,28 @@ impl super::port::BuildRecords for IngestService {
             .map(|n| super::port::BuildRecord::of(&n.value)))
     }
 
+    async fn builds(
+        &self,
+        ctx: &SecurityContext,
+        project_id: &str,
+        limit: usize,
+    ) -> anyhow::Result<Vec<super::port::BuildRecord>> {
+        let mut nodes: Vec<serde_json::Value> = self
+            .graph
+            .list_in_scope(ctx, Some(super::gts::BUILD_TYPE), project_id)
+            .await?
+            .into_iter()
+            .map(|n| n.value)
+            .filter(|v| v.get("action").and_then(|a| a.as_str()) != Some("run"))
+            .collect();
+        nodes.sort_by_key(|v| std::cmp::Reverse(build_time(v)));
+        Ok(nodes
+            .iter()
+            .take(limit)
+            .map(super::port::BuildRecord::of)
+            .collect())
+    }
+
     async fn record(
         &self,
         ctx: &SecurityContext,
@@ -3015,6 +3094,16 @@ impl super::port::BuildRecords for IngestService {
             .map(|_| ())
             .map_err(|e| anyhow!("the build could not be recorded: {e:?}"))
     }
+}
+
+/// When a build node last moved, RFC 3339 (which sorts as text): its end,
+/// else its start, else nothing, which sorts last.
+fn build_time(v: &serde_json::Value) -> String {
+    ["finished_at", "started_at", "updated_at"]
+        .iter()
+        .find_map(|k| v.get(*k).and_then(|t| t.as_str()))
+        .unwrap_or_default()
+        .to_owned()
 }
 
 /// The same store read and the same scope rule as the count beside it — the
@@ -3177,6 +3266,30 @@ impl super::port::RepoFileReader for IngestService {
         IngestService::read_repo_files(self, workspace_id, repo_dir).await
     }
 
+    async fn checkout_revision(
+        &self,
+        workspace_id: &str,
+        repo_dir: &str,
+    ) -> Option<super::port::GitRevision> {
+        let dir = self.shared_checkout_dir(Some(workspace_id), Some(repo_dir))?;
+        revision_of(dir).await
+    }
+
+    async fn synced_clone_revision(
+        &self,
+        secret_ref: &str,
+        repo_full_path: &str,
+    ) -> Option<super::port::GitRevision> {
+        let dir = self
+            .work_root
+            .as_ref()?
+            .join(git_checkout::checkout_key(secret_ref, repo_full_path));
+        if !dir.join(".git").is_dir() {
+            return None;
+        }
+        revision_of(dir).await
+    }
+
     async fn read_synced_clone(
         &self,
         secret_ref: &str,
@@ -3272,6 +3385,20 @@ fn text_only(listing: Vec<(String, Option<String>)>) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The commit and branch a checkout is at, off the async runtime.
+async fn revision_of(dir: PathBuf) -> Option<super::port::GitRevision> {
+    tokio::task::spawn_blocking(move || {
+        let commit = git_checkout::head_commit(&dir)?;
+        Some(super::port::GitRevision {
+            commit,
+            git_ref: git_checkout::head_ref(&dir),
+        })
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 /// [`git_checkout::read_text_file`] off the async runtime.
 async fn read_one(dir: PathBuf, path: &str) -> anyhow::Result<Option<String>> {
     let path = path.to_owned();
@@ -3308,6 +3435,36 @@ fn item_link_edges(
         }
     }
     out
+}
+
+#[cfg(test)]
+mod search_hit_tests {
+    use super::super::graph::GtsNode;
+    use serde_json::json;
+
+    #[test]
+    fn a_search_hit_says_which_repository_its_file_is_in() {
+        let repos = vec![GtsNode {
+            type_id: super::super::gts::REPO_TYPE,
+            instance_id: "r1".into(),
+            value: json!({"full_path": "acme/web"}),
+        }];
+        let mut hits = vec![
+            GtsNode {
+                type_id: super::super::gts::FILE_TYPE,
+                instance_id: "f1".into(),
+                value: json!({"repo": "r1", "path": "docs/a.md"}),
+            },
+            GtsNode {
+                type_id: super::super::gts::FILE_TYPE,
+                instance_id: "f2".into(),
+                value: json!({"path": "uploaded.md"}),
+            },
+        ];
+        super::name_repositories(&mut hits, &repos);
+        assert_eq!(hits[0].value["repository"], "acme/web");
+        assert!(hits[1].value.get("repository").is_none());
+    }
 }
 
 #[cfg(test)]
@@ -3991,6 +4148,42 @@ mod prune_tests {
             *classifier.forgot.lock().expect("forgot"),
             vec![(Some(Uuid::parse_str(PROJECT).expect("uuid")), forgotten)]
         );
+    }
+
+    #[tokio::test]
+    async fn detaching_forgets_one_repository_through_every_connection_and_nothing_else() {
+        let (svc, graph, _) = service();
+        let mut nodes = Vec::new();
+        let current = synced(&mut nodes, Some(PROJECT), "conn-new", "org/studio-web");
+        let older = synced(&mut nodes, Some(PROJECT), "conn-old", "org/studio-web");
+        let other = synced(&mut nodes, Some(PROJECT), "conn-new", "org/other");
+        let sibling = synced(
+            &mut nodes,
+            Some(OTHER_PROJECT),
+            "conn-new",
+            "org/studio-web",
+        );
+        graph.upsert_nodes(&ctx(), &nodes).await.expect("upsert");
+
+        let summary = svc
+            .prune_repository(&ctx(), PROJECT, "Org/Studio-Web")
+            .await
+            .expect("prune");
+
+        assert_eq!((summary.repos, summary.nodes), (2, 2));
+        let left = ids(&graph).await;
+        for id in [&other.0, &other.1, &sibling.0, &sibling.1] {
+            assert!(left.contains(id), "{id} should have stayed");
+        }
+        for id in [&current.0, &current.1, &older.0, &older.1] {
+            assert!(!left.contains(id), "{id} should be gone");
+        }
+        // Asked again (a retried run), there is nothing left to forget.
+        let again = svc
+            .prune_repository(&ctx(), PROJECT, "org/studio-web")
+            .await
+            .expect("prune");
+        assert_eq!(again, PruneSummary::default());
     }
 
     #[tokio::test]

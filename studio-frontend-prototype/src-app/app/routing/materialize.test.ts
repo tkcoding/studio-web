@@ -1,0 +1,868 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FrontXApp } from '@gears-frontx/react';
+
+const { SCREEN_DOMAIN, mocks } = vi.hoisted(() => ({
+  SCREEN_DOMAIN: 'gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1',
+  mocks: {
+    mounted: [] as string[],
+    mountScreen: vi.fn(),
+    publish: vi.fn(),
+  },
+}));
+
+vi.mock('@gears-frontx/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@gears-frontx/react')>()),
+  screenDomain: { id: SCREEN_DOMAIN },
+}));
+vi.mock('@/app/mfe/mountScreen', () => ({
+  mountScreen: mocks.mountScreen,
+}));
+vi.mock('@/app/mfe/sharedContext', () => ({ publishStudioContext: mocks.publish }));
+vi.mock('@/app/mfe/domainOccupancy', () => ({ occupancyOf: () => ({ mounted: () => mocks.mounted }) }));
+
+import { freshNavigationHistory } from '@frontx-test-utils/memoryNavigationHistory';
+import { screen } from '@frontx-test-utils/screenFixture';
+import reducer, {
+  APP_CONTEXT_SLICE_KEY,
+  setContextWorkspaces,
+  setContextWorkspacesStatus,
+  type AppContextState,
+} from '@/app/slices/appContextSlice';
+import { createShellNavigation } from './navigation';
+import { levelOf, type StudioScreenExtension } from '@/app/mfe/screenLevels';
+import { groupScreens } from './screenTokens';
+import { TENANT_TYPES } from '@constructor-studio/mfe-shared';
+import type { EditorSession } from '@/app/effects/editorSessionEffects';
+import { createMaterializer } from './materialize';
+import { unresolvedScreenOf } from './unresolvedScreen';
+
+const screens = [
+  screen('org.workspaces', '/organization/workspaces', 'organization', { section: 'workspaces', order: 20 }),
+  screen('people', '/people', 'organization', { order: 30 }),
+  screen('gears', '/gears', 'organization', { order: 40 }),
+  screen('projects.main', '/projects', 'workspace', { order: 20 }),
+  screen('projects.overview', '/projects/overview', 'project', { section: 'overview', order: 10 }),
+  screen('projects.artifacts', '/projects/artifacts', 'project', { section: 'artifacts', order: 20 }),
+  screen('space.main', '/space', 'project', { placement: 'hidden' }),
+];
+
+const ORG = { id: 'o1', name: 'Org' };
+const WS = { id: 'w1', name: 'Work' };
+const WS2 = { id: 'w2', name: 'Other' };
+const ATLAS = { id: 'p1', name: 'Atlas' };
+
+function fakeApp(initial: Partial<AppContextState>, extensions: readonly StudioScreenExtension[] = screens) {
+  let state: AppContextState = { ...reducer(undefined, { type: '@@init' }), ...initial };
+  const registry = {
+    getExtensionsForDomain: () => extensions,
+  };
+  const app = {
+    store: {
+      dispatch: (action: unknown) => { state = reducer(state, action as never); },
+      getState: () => ({ [APP_CONTEXT_SLICE_KEY]: state }),
+    },
+    mfeRegistry: registry,
+  } as unknown as FrontXApp;
+  return { app, state: () => state };
+}
+
+function setup(url: string, initial: Partial<AppContextState>, extensions: readonly StudioScreenExtension[] = screens, session?: Pick<EditorSession, 'sync'>) {
+  const { history, adapter } = freshNavigationHistory(url);
+  const navigation = createShellNavigation(history);
+  const { app, state } = fakeApp(initial, extensions);
+  const groups = groupScreens(extensions);
+  const catalogs = {
+    loadOrganizations: vi.fn(),
+    loadWorkspaces: vi.fn(),
+    loadProjects: vi.fn(),
+    resolveProject: vi.fn(),
+  };
+  const warn = vi.fn();
+  const { materialize, transition, retry } = createMaterializer({ app, navigation, groups: () => groups, catalogs, warn, session });
+  // `transition` stands in for the observer's report: in production every
+  // `navigate` below would be followed by it.
+  return { materialize, transition, retry, adapter, state, catalogs, warn, navigation, app };
+}
+
+const ready = { org: ORG, orgs: [ORG], access: 'ready' as const, workspace: WS, workspaces: [WS], workspacesStatus: 'ready' as const };
+
+beforeEach(() => {
+  mocks.mounted = [];
+  mocks.mountScreen.mockImplementation(async (_registry: unknown, ext: StudioScreenExtension) => { mocks.mounted = [ext.id]; });
+});
+afterEach(() => vi.clearAllMocks());
+
+describe('materialize', () => {
+  it("opens the organization level's entry point on an empty address, written once with replace", () => {
+    const { materialize, adapter } = setup('/', ready);
+    materialize();
+    expect(adapter.url()).toBe('/?screen=organization;org=o1;section=workspaces');
+    expect(adapter.length()).toBe(1);
+    expect(mocks.mountScreen).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'org.workspaces' }));
+  });
+
+  // Reviewer finding (vasylcf, round 8): since the reducer picks nothing, this
+  // fallback is the only thing that chooses the first organization at a cold start.
+  it('picks the first organization at a cold start, once the list is known and nothing is in scope yet', () => {
+    const { materialize, adapter, state } = setup('/?screen=people', { orgs: [ORG], org: null, access: 'ready' });
+    materialize();
+    expect(adapter.url()).toBe('/?screen=people;org=o1');
+    expect(state().org).toEqual(ORG);
+    expect(adapter.length()).toBe(1);
+  });
+
+  // Review Focus 5
+  it('fills the default organization once and then stays quiet', () => {
+    const { materialize, adapter } = setup('/?screen=people', ready);
+    const writes = vi.spyOn(adapter, 'replaceState');
+    materialize();
+    expect(adapter.url()).toBe('/?screen=people;org=o1');
+    materialize();
+    materialize();
+    expect(writes).toHaveBeenCalledTimes(1);
+    expect(adapter.length()).toBe(1);
+  });
+
+  it("mounts the group's owner and opens the cached project at its section", () => {
+    const { materialize, state } = setup('/?screen=projects;org=o1;workspace=w1;project=p1;section=artifacts', {
+      ...ready, projects: [ATLAS],
+    });
+    materialize();
+    expect(mocks.mountScreen).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'projects.main' }));
+    expect(state().project).toEqual(ATLAS);
+    expect(state().section).toBe('artifacts');
+    expect(mocks.publish).toHaveBeenCalled();
+  });
+
+  describe('an artifact in the address', () => {
+    const IN_EDITOR = '/?screen=space;org=o1;workspace=w1;project=p1;artifact=n-1;repository=group%2Frepo;path=docs%2Fa.md;kind=file';
+    const ARTIFACT = { artifactId: 'n-1', repository: 'group/repo', path: 'docs/a.md', kind: 'file' };
+
+    it('mounts the editor in the open project and holds the artifact', () => {
+      const { materialize, state, adapter } = setup(IN_EDITOR, { ...ready, projects: [ATLAS] });
+      const writes = vi.spyOn(adapter, 'replaceState');
+      materialize();
+      expect(mocks.mountScreen).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'space.main' }));
+      expect(state().project).toEqual(ATLAS);
+      expect(state().artifact).toEqual(ARTIFACT);
+      expect(state().section).toBeNull();
+      expect(writes).not.toHaveBeenCalled();
+    });
+
+    it('tells the editor session of the editor with its project and file, and of leaving it', () => {
+      const session = { sync: vi.fn(), retry: vi.fn() };
+      const { materialize, transition, navigation } = setup(IN_EDITOR, { ...ready, projects: [ATLAS] }, screens, session);
+
+      materialize();
+      expect(session.sync).toHaveBeenLastCalledWith({ projectId: 'p1', orgId: 'o1', editor: true, artifact: ARTIFACT });
+
+      navigation.navigate({ token: 'projects', org: 'o1', workspace: 'w1', project: 'p1', section: 'artifacts' }, 'push');
+      transition();
+      expect(session.sync).toHaveBeenLastCalledWith({ projectId: 'p1', orgId: 'o1', editor: false, artifact: null });
+    });
+
+    it('clears the artifact when the address goes back to the artifact list', () => {
+      const { materialize, transition, state, navigation } = setup(IN_EDITOR, { ...ready, projects: [ATLAS] });
+      materialize();
+      navigation.navigate({ token: 'projects', org: 'o1', workspace: 'w1', project: 'p1', section: 'artifacts' }, 'push');
+      transition();
+      expect(state().artifact).toBeNull();
+      expect(state().project).toEqual(ATLAS);
+      expect(state().section).toBe('artifacts');
+      expect(mocks.mountScreen).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ id: 'projects.main' }));
+    });
+
+    it('drops an artifact from a screen that is not the editor, with a warning', () => {
+      const { materialize, state, adapter, warn } = setup(
+        '/?screen=projects;org=o1;workspace=w1;project=p1;section=artifacts;artifact=n-1;kind=file',
+        { ...ready, projects: [ATLAS] }
+      );
+      materialize();
+      expect(state().artifact).toBeNull();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('n-1'));
+      expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1;project=p1;section=artifacts');
+    });
+
+    it('holds an artifact whose kind carries no repository or path, and writes nothing', () => {
+      const { materialize, state, adapter } = setup('/?screen=space;org=o1;workspace=w1;project=p1;artifact=u-1;kind=user', {
+        ...ready, projects: [ATLAS],
+      });
+      const writes = vi.spyOn(adapter, 'replaceState');
+      materialize();
+      expect(state().artifact).toEqual({ artifactId: 'u-1', repository: '', path: '', kind: 'user' });
+      expect(adapter.url()).toBe('/?screen=space;org=o1;workspace=w1;project=p1;artifact=u-1;kind=user');
+      expect(writes).not.toHaveBeenCalled();
+    });
+
+    it('opens a Studio document a link names in the editor, its title as given, and writes nothing', () => {
+      const session = { sync: vi.fn(), retry: vi.fn() };
+      const { materialize, adapter } = setup(
+        '/?screen=space;org=o1;workspace=w1;project=p1;artifact=d-1;path=Payments%3B%20v2;kind=document',
+        { ...ready, projects: [ATLAS] },
+        screens,
+        session
+      );
+      const writes = vi.spyOn(adapter, 'replaceState');
+      materialize();
+      expect(session.sync).toHaveBeenLastCalledWith({
+        projectId: 'p1',
+        orgId: 'o1',
+        editor: true,
+        artifact: { artifactId: 'd-1', repository: '', path: 'Payments; v2', kind: 'document' },
+      });
+      expect(mocks.mountScreen).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'space.main' }));
+      expect(writes).not.toHaveBeenCalled();
+    });
+
+    it('dispatches the artifact once and keeps the same object while the address holds it', () => {
+      const { materialize, state } = setup(IN_EDITOR, { ...ready, projects: [ATLAS] });
+      materialize();
+      const held = state().artifact;
+      expect(held).toEqual(ARTIFACT);
+      materialize();
+      materialize();
+      expect(state().artifact).toBe(held);
+    });
+
+    // The editor means nothing without its artifact (shell-levels.md): an
+    // address that names the editor and no artifact it can open lands on the
+    // project's entry point instead, the way a failed mount falls back.
+    it('drops an artifact of a kind the editor does not know, with a warning, and leaves the editor', () => {
+      const { materialize, state, adapter, warn } = setup(
+        '/?screen=space;org=o1;workspace=w1;project=p1;artifact=n-1;kind=spec_finding',
+        { ...ready, projects: [ATLAS] }
+      );
+      materialize();
+      expect(state().artifact).toBeNull();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('n-1'));
+      expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1;project=p1;section=overview');
+      expect(mocks.mountScreen).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'projects.main' }));
+      expect(mocks.mountScreen).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'space.main' }));
+      expect(adapter.length()).toBe(1);
+    });
+
+    it('opens the project entry point when the editor address names no artifact at all', () => {
+      const { materialize, adapter } = setup('/?screen=space;org=o1;workspace=w1;project=p1', {
+        ...ready, projects: [ATLAS],
+      });
+      materialize();
+      expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1;project=p1;section=overview');
+      expect(mocks.mountScreen).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'space.main' }));
+    });
+
+    it('opens the workspace entry point when the editor address names no project, and says so', () => {
+      const { materialize, adapter, warn } = setup(
+        '/?screen=space;org=o1;workspace=w1;artifact=n-1;repository=group%2Frepo;path=docs%2Fa.md;kind=file',
+        ready
+      );
+      materialize();
+      expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1');
+      expect(mocks.mountScreen).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'space.main' }));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('project'));
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('nothing to open'));
+    });
+
+    it('says when there is no entry point to fall back to, and mounts the editor as it is', () => {
+      const stripped = screens.filter((candidate) => levelOf(candidate) === 'organization' || candidate.id === 'space.main');
+      const { materialize, adapter, warn } = setup('/?screen=space;org=o1;workspace=w1;project=p1', { ...ready, projects: [ATLAS] }, stripped);
+      materialize();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('no entry point'));
+      expect(adapter.url()).toBe('/?screen=space;org=o1;workspace=w1;project=p1');
+      expect(mocks.mountScreen).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'space.main' }));
+    });
+
+    it('says it once per address, however often the same address is applied again', () => {
+      const stripped = screens.filter((candidate) => levelOf(candidate) === 'organization' || candidate.id === 'space.main');
+      const { materialize, transition, warn } = setup('/?screen=space;org=o1;workspace=w1;project=p1', { ...ready, projects: [ATLAS] }, stripped);
+      materialize();
+      materialize();
+      expect(warn.mock.calls.filter(([text]) => String(text).includes('no entry point'))).toHaveLength(1);
+      transition();
+      expect(warn.mock.calls.filter(([text]) => String(text).includes('no entry point'))).toHaveLength(2);
+    });
+
+    it('leaves the editor, artifact and all, when the project turns out not to be one', async () => {
+      const { materialize, adapter, catalogs, state } = setup(
+        '/?screen=space;org=o1;workspace=w1;project=w1;artifact=n-1;repository=group%2Frepo;path=docs%2Fa.md;kind=file',
+        ready
+      );
+      catalogs.resolveProject.mockResolvedValue({ id: 'w1', name: 'Work', tenant_type: TENANT_TYPES.workspace, parent_id: 'o1' });
+      materialize();
+      // Held while the lookup is on its way: a reload must not lose the artifact.
+      expect(state().artifact).toEqual(ARTIFACT);
+      await vi.waitFor(() => expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1'));
+      expect(state().artifact).toBeNull();
+    });
+  });
+
+  it('waits for the workspace list before opening the project, then opens it', () => {
+    const { materialize, state, catalogs, adapter } = setup('/?screen=projects;org=o1;workspace=w1;project=p1', {
+      ...ready, workspace: null, workspaces: [], workspacesStatus: 'pending', projects: [ATLAS],
+    });
+    materialize();
+    expect(catalogs.loadWorkspaces).toHaveBeenCalledWith('o1');
+    expect(state().project).toBeNull();
+    // The project stays in the address while the list is on its way.
+    expect(adapter.url()).toContain('project=p1');
+    // Mount does not wait for a catalog.
+    expect(mocks.mountScreen).toHaveBeenCalledTimes(1);
+  });
+
+  // Reviewer finding (vasylcf, round 8): a link naming the project alone lost it
+  // on the first pass — the project step was gated on a workspace the pending
+  // list could not yet default.
+  it('keeps a project named without a workspace while the list is pending, and opens it once the list is ready', async () => {
+    const { materialize, adapter, state, catalogs, app } = setup('/?screen=projects;org=o1;project=p1', {
+      ...ready, workspace: null, workspaces: [], workspacesStatus: 'pending',
+    });
+    catalogs.resolveProject.mockResolvedValue({ id: 'p1', name: 'Atlas', tenant_type: TENANT_TYPES.project, parent_id: 'w1' });
+    materialize();
+    expect(adapter.url()).toContain('project=p1');
+    expect(state().project).toBeNull();
+    expect(catalogs.resolveProject).not.toHaveBeenCalled();
+
+    app.store.dispatch(setContextWorkspaces([WS]));
+    app.store.dispatch(setContextWorkspacesStatus('ready'));
+    materialize();
+    expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1;project=p1;section=overview');
+    await vi.waitFor(() => expect(state().project).toEqual(ATLAS));
+    expect(adapter.length()).toBe(1);
+  });
+
+  it("moves the address to the project's own workspace when the tenant says it lives in another one of the organization", async () => {
+    const { materialize, adapter, state, catalogs } = setup('/?screen=projects;org=o1;workspace=w1;project=p9', {
+      ...ready, workspaces: [WS, WS2],
+    });
+    catalogs.resolveProject.mockResolvedValue({ id: 'p9', name: 'Nine', tenant_type: TENANT_TYPES.project, parent_id: 'w2' });
+    materialize();
+    await vi.waitFor(() => expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w2;project=p9;section=overview'));
+    expect(state().workspace).toEqual(WS2);
+    await vi.waitFor(() => expect(state().project).toEqual({ id: 'p9', name: 'Nine' }));
+    expect(adapter.length()).toBe(1);
+  });
+
+  it('asks for a project it does not know, and closes it when the tenant is elsewhere', async () => {
+    const { materialize, adapter, catalogs, state } = setup('/?screen=projects;org=o1;workspace=w1;project=p9;section=overview', ready);
+    catalogs.resolveProject.mockResolvedValue({ id: 'p9', name: 'Nine', tenant_type: TENANT_TYPES.project, parent_id: 'w-other' });
+    materialize();
+    expect(state().project).toEqual({ id: 'p9', name: '' });
+    await vi.waitFor(() => expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1'));
+    expect(adapter.length()).toBe(1);
+  });
+
+  // Reviewer finding (coderabbit): a read that failed used to close the project
+  // and overwrite the pasted link, with nothing left to retry from.
+  it('keeps a project in the address when its read merely failed, and asks again on the next pass', async () => {
+    const { materialize, adapter, catalogs, state, warn } = setup('/?screen=projects;org=o1;workspace=w1;project=p9;section=overview', ready);
+    catalogs.resolveProject.mockResolvedValue('unavailable');
+    materialize();
+    expect(catalogs.resolveProject).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1;project=p9;section=overview');
+    expect(state().project).toEqual({ id: 'p9', name: '' });
+    expect(warn).not.toHaveBeenCalled();
+    const asked = catalogs.resolveProject.mock.calls.length;
+    materialize();
+    expect(catalogs.resolveProject).toHaveBeenCalledTimes(asked + 1);
+  });
+
+  // Reviewer finding (coderabbit): the same project id asked for under one
+  // workspace and answered under another must not be judged by the old scope.
+  it('judges a lookup by the scope that is current when it lands, not the one it was asked in', async () => {
+    const { materialize, transition, adapter, catalogs, state, navigation } = setup(
+      '/?screen=projects;org=o1;workspace=w1;project=p9',
+      { ...ready, workspaces: [WS, WS2] }
+    );
+    const nine = { id: 'p9', name: 'Nine', tenant_type: TENANT_TYPES.project, parent_id: 'w1' };
+    let first!: (tenant: unknown) => void;
+    let second!: (tenant: unknown) => void;
+    catalogs.resolveProject
+      .mockImplementationOnce(() => new Promise((resolve) => { first = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { second = resolve; }))
+      .mockResolvedValue(nine);
+    materialize();
+    expect(catalogs.resolveProject).toHaveBeenCalledTimes(1);
+
+    navigation.navigate({ token: 'projects', org: 'o1', workspace: 'w2', project: 'p9' }, 'push');
+    transition();
+    expect(state().workspace).toEqual(WS2);
+    first(nine);
+
+    // The stale answer is not applied under w2 — no name, no move — and the pass for w2 asks again.
+    await vi.waitFor(() => expect(catalogs.resolveProject).toHaveBeenCalledTimes(2));
+    expect(state().project).toEqual({ id: 'p9', name: '' });
+    expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w2;project=p9;section=overview');
+
+    // That answer says p9 lives under w1, another workspace of the organization:
+    // the address moves to the project's workspace rather than refusing it.
+    second(nine);
+    await vi.waitFor(() => expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1;project=p9;section=overview'));
+    await vi.waitFor(() => expect(state().project).toEqual({ id: 'p9', name: 'Nine' }));
+  });
+
+  // Review Focus 1
+  it('accepts a project whose parent is the organization', async () => {
+    const { materialize, catalogs, state } = setup('/?screen=projects;org=o1;workspace=w1;project=p9', ready);
+    catalogs.resolveProject.mockResolvedValue({ id: 'p9', name: 'Nine', tenant_type: TENANT_TYPES.project, parent_id: 'o1' });
+    materialize();
+    await vi.waitFor(() => expect(state().project).toEqual({ id: 'p9', name: 'Nine' }));
+  });
+
+  it('lists the workspace\'s projects for the switcher when it knows none', () => {
+    const { materialize, catalogs } = setup('/?screen=projects;org=o1;workspace=w1;project=p1', { ...ready, projects: [] });
+    catalogs.resolveProject.mockReturnValue(new Promise(() => undefined));
+    materialize();
+    expect(catalogs.loadProjects).toHaveBeenCalledWith('w1');
+  });
+
+  // Reviewer finding (vasylcf): an empty list was asked for again on every pass.
+  it('does not ask for the projects list again once it has been read or has failed', () => {
+    for (const projectsStatus of ['ready', 'failed'] as const) {
+      const { materialize, catalogs } = setup('/?screen=projects;org=o1;workspace=w1;project=p1', { ...ready, projects: [], projectsStatus });
+      catalogs.resolveProject.mockReturnValue(new Promise(() => undefined));
+      materialize();
+      expect(catalogs.loadProjects).not.toHaveBeenCalled();
+    }
+  });
+
+  it("drops an organization that is not the person's and keeps the first", () => {
+    const { materialize, adapter, warn } = setup('/?screen=people;org=stranger', ready);
+    materialize();
+    expect(adapter.url()).toBe('/?screen=people;org=o1');
+    expect(adapter.length()).toBe(1);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('drops a workspace not in the list, and the project with it', () => {
+    const { materialize, adapter, state } = setup('/?screen=projects;org=o1;workspace=w9;project=p1', { ...ready, projects: [ATLAS] });
+    materialize();
+    expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1');
+    expect(state().project).toBeNull();
+  });
+
+  it('refuses an unknown token and lands on the organization entry point', () => {
+    const { materialize, adapter, warn } = setup('/?screen=nowhere;org=o1', ready);
+    materialize();
+    expect(adapter.url()).toBe('/?screen=organization;org=o1;section=workspaces');
+    expect(warn).toHaveBeenCalled();
+  });
+
+  // Review Focus 4
+  it('does nothing for a person with no organization', () => {
+    const { materialize, adapter } = setup('/?screen=projects;org=o1;workspace=w1', { ...ready, orgs: [], org: null, access: 'unassigned' });
+    materialize();
+    expect(mocks.mountScreen).not.toHaveBeenCalled();
+    expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1');
+  });
+
+  it('closes the project when the address no longer names one', () => {
+    mocks.mounted = ['projects.main'];
+    const { materialize, state } = setup('/?screen=projects;org=o1;workspace=w1', { ...ready, project: ATLAS, projects: [ATLAS], section: 'artifacts' });
+    materialize();
+    expect(state().project).toBeNull();
+    expect(state().section).toBeNull();
+    expect(mocks.mountScreen).not.toHaveBeenCalled();
+  });
+
+  // Reviewer finding (MarinaLitueva): the default used to be the reducer's pick.
+  it('fills the workspace preference from the list at the organization level, without writing it to the address', () => {
+    const { materialize, adapter, state } = setup('/?screen=people;org=o1', { ...ready, workspace: null });
+    materialize();
+    expect(state().workspace).toEqual(WS);
+    expect(adapter.url()).toBe('/?screen=people;org=o1');
+    expect(mocks.publish).toHaveBeenCalled();
+  });
+
+  // Reviewer finding (vasylcf): the organization-level twin of the branch above had no test.
+  it('closes the project when an organization-level screen is opened over it', () => {
+    const { materialize, state } = setup('/?screen=people;org=o1', { ...ready, project: ATLAS, projects: [ATLAS], section: 'artifacts' });
+    materialize();
+    expect(state().project).toBeNull();
+    expect(state().section).toBeNull();
+    expect(mocks.mountScreen).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'people' }));
+  });
+
+  it('does not carry a workspace on an organization-level screen', () => {
+    const { materialize, adapter } = setup('/?screen=people;org=o1;workspace=w1', ready);
+    materialize();
+    expect(adapter.url()).toBe('/?screen=people;org=o1');
+  });
+
+  it('replaces an invalid section with the level\'s first one', () => {
+    const { materialize, adapter } = setup('/?screen=organization;org=o1;section=bogus', ready);
+    materialize();
+    expect(adapter.url()).toBe('/?screen=organization;org=o1;section=workspaces');
+  });
+
+  describe('a section family (the tabs the Studio domain model adds, ADR-0066)', () => {
+    const withModel = [
+      ...screens,
+      screen('model.attributes', '/model-workspace/attributes', 'workspace', { section: 'attributes', order: 30 }),
+      screen('model.types', '/model-workspace/types', 'workspace', {
+        section: 'type:',
+        sectionPrefix: true,
+        placement: 'hidden',
+        order: 999,
+      }),
+    ];
+
+    it('keeps a type:<name> section the generic screen answers, and mounts the group’s owner', () => {
+      const { materialize, adapter, state } = setup('/?screen=model-workspace;org=o1;workspace=w1;section=type:cost_centres', ready, withModel);
+      materialize();
+      expect(adapter.url()).toBe('/?screen=model-workspace;org=o1;workspace=w1;section=type:cost_centres');
+      expect(state().section).toBe('type:cost_centres');
+      expect(mocks.mountScreen).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'model.attributes' }));
+    });
+
+    it('opens the group’s first tab, not the family, when no section is named', () => {
+      const { materialize, adapter } = setup('/?screen=model-workspace;org=o1;workspace=w1', ready, withModel);
+      materialize();
+      expect(adapter.url()).toBe('/?screen=model-workspace;org=o1;workspace=w1;section=attributes');
+    });
+
+    it('still refuses a section neither member answers', () => {
+      const { materialize, adapter, warn } = setup('/?screen=model-workspace;org=o1;workspace=w1;section=typecost', ready, withModel);
+      materialize();
+      expect(adapter.url()).toBe('/?screen=model-workspace;org=o1;workspace=w1;section=attributes');
+      expect(warn).toHaveBeenCalled();
+    });
+  });
+
+  it("falls back to the level's entry point once when the mount fails", async () => {
+    mocks.mountScreen
+      .mockRejectedValueOnce(new Error('no such entry'))
+      .mockRejectedValueOnce(new Error('still no'));
+    const { materialize, adapter, warn } = setup('/?screen=people;org=o1', ready);
+    materialize();
+    await vi.waitFor(() => expect(adapter.url()).toBe('/?screen=organization;org=o1;section=workspaces'));
+    await vi.waitFor(() => expect(mocks.mountScreen).toHaveBeenCalledTimes(2));
+    expect(adapter.length()).toBe(1);
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops after one fallback when the chain resolves without mounting', async () => {
+    mocks.mountScreen.mockImplementation(async () => undefined);
+    const { materialize, transition, adapter, warn, navigation } = setup('/?screen=people;org=o1', ready);
+    materialize();
+    await vi.waitFor(() => expect(adapter.url()).toBe('/?screen=organization;org=o1;section=workspaces'));
+    await vi.waitFor(() => expect(mocks.mountScreen).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Catalog arrivals re-run the pass without a transition: nothing is tried again.
+    materialize();
+    materialize();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mocks.mountScreen).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(adapter.length()).toBe(1);
+
+    // A new address is a new chance.
+    navigation.navigate({ token: 'projects', org: 'o1', workspace: 'w1' }, 'push');
+    transition();
+    expect(mocks.mountScreen).toHaveBeenCalledTimes(3);
+  });
+
+  it('falls back once per address: a later failure elsewhere gets its own fallback', async () => {
+    mocks.mountScreen.mockImplementation(async () => undefined);
+    const { materialize, transition, adapter, warn, navigation } = setup('/?screen=people;org=o1', ready);
+    materialize();
+    await vi.waitFor(() => expect(mocks.mountScreen).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(adapter.url()).toBe('/?screen=organization;org=o1;section=workspaces');
+    expect(warn).toHaveBeenCalledTimes(2);
+
+    navigation.navigate({ token: 'gears', org: 'o1' }, 'push');
+    transition();
+    await vi.waitFor(() => expect(mocks.mountScreen).toHaveBeenCalledTimes(4));
+    expect(mocks.mountScreen.mock.calls[2][1]).toMatchObject({ id: 'gears' });
+    expect(mocks.mountScreen.mock.calls[3][1]).toMatchObject({ id: 'org.workspaces' });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(adapter.url()).toBe('/?screen=organization;org=o1;section=workspaces');
+    expect(adapter.length()).toBe(2);
+    expect(warn).toHaveBeenCalledTimes(4);
+  });
+
+  // mfes 0.4.0 takes the fallback and keeps the cause to itself, so the warning
+  // says which extension and route did not come up.
+  it('names the extension and its route when a mount fails', async () => {
+    mocks.mountScreen.mockRejectedValue(new Error('mount_ext on screen failed'));
+    const { materialize, warn } = setup('/?screen=organization;org=o1;section=workspaces', ready);
+    materialize();
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('org.workspaces'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('/organization/workspaces'));
+  });
+
+  // A pass that runs again while the mount is on its way asks again; the
+  // runtime joins both requests to one entry, and they fail together.
+  it('warns once when the requests of one visit fail together', async () => {
+    let fail!: (error: Error) => void;
+    const failing = new Promise<void>((_resolve, reject) => { fail = reject; });
+    mocks.mountScreen.mockReturnValue(failing);
+    const { materialize, warn } = setup('/?screen=organization;org=o1;section=workspaces', ready);
+    materialize();
+    materialize();
+    fail(new Error('mount_ext on screen failed'));
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back once when the requests of one visit fail together', async () => {
+    let fail!: (error: Error) => void;
+    const failing = new Promise<void>((_resolve, reject) => { fail = reject; });
+    mocks.mountScreen.mockReturnValueOnce(failing).mockReturnValueOnce(failing);
+    const { materialize, adapter, warn } = setup('/?screen=people;org=o1', ready);
+    materialize();
+    materialize();
+    fail(new Error('mount_ext on screen failed'));
+    await vi.waitFor(() => expect(adapter.url()).toBe('/?screen=organization;org=o1;section=workspaces'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(mocks.mountScreen).toHaveBeenCalledTimes(3);
+  });
+
+  // Reviewer finding (vasylcf, round 3): the stuck guard was keyed by a hash of
+  // the route, which a quick there-and-back reproduces — the abandoned attempt
+  // then looked like a failure of the current visit and blocked the address.
+  it('a mount abandoned by a quick there-and-back does not block the address when it fails', async () => {
+    let fail!: () => void;
+    mocks.mountScreen.mockImplementationOnce(
+      () => new Promise<void>((_resolve, reject) => { fail = () => reject(new Error('replaced')); })
+    );
+    const { materialize, transition, adapter, navigation } = setup('/?screen=people;org=o1', ready);
+    materialize();
+    navigation.navigate({ token: 'gears', org: 'o1' }, 'push');
+    transition();
+    navigation.navigate({ token: 'people', org: 'o1' }, 'push');
+    transition();
+
+    fail();
+    await vi.waitFor(() => expect(mocks.mounted).toEqual(['people']));
+    expect(mocks.mountScreen).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ id: 'people' }));
+    expect(adapter.url()).toBe('/?screen=people;org=o1');
+  });
+
+  it('a failure about an address since left does not block a later return to it', async () => {
+    mocks.mounted = ['gears'];
+    let fail!: () => void;
+    mocks.mountScreen.mockImplementationOnce(
+      () => new Promise<void>((_resolve, reject) => { fail = () => reject(new Error('no such entry')); })
+    );
+    const { materialize, transition, navigation } = setup('/?screen=people;org=o1', ready);
+    materialize();
+    expect(mocks.mountScreen).toHaveBeenCalledTimes(1);
+
+    navigation.navigate({ token: 'gears', org: 'o1' }, 'push');
+    transition();
+    // The chain failed before it evicted gears: nothing to mount for the current address.
+    fail();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mocks.mountScreen).toHaveBeenCalledTimes(1);
+
+    navigation.navigate({ token: 'people', org: 'o1' }, 'push');
+    transition();
+    expect(mocks.mountScreen).toHaveBeenCalledTimes(2);
+    expect(mocks.mountScreen.mock.calls[1][1]).toMatchObject({ id: 'people' });
+  });
+
+  // The runtime queues mounts and fails the one a newer request replaced.
+  it('a mount replaced by a newer one does not mark the address as stuck', async () => {
+    let replace!: (error: Error) => void;
+    mocks.mountScreen
+      .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { replace = reject; }))
+      .mockImplementation(async (_registry: unknown, ext: StudioScreenExtension) => { mocks.mounted = [ext.id]; });
+    const { materialize, transition, adapter, navigation, warn } = setup('/?screen=people;org=o1', ready);
+    materialize();
+
+    navigation.navigate({ token: 'gears', org: 'o1' }, 'push');
+    transition();
+    replace(new Error('was replaced in the occupancy queue by a newer request'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(warn).not.toHaveBeenCalled();
+    expect(mocks.mounted).toEqual(['gears']);
+    expect(adapter.url()).toBe('/?screen=gears;org=o1');
+  });
+
+  it('two quick navigations end on the last screen', async () => {
+    const lands: Record<string, () => void> = {};
+    mocks.mountScreen.mockImplementation(
+      (_registry: unknown, ext: StudioScreenExtension) =>
+        new Promise<void>((resolve) => {
+          lands[ext.id] = () => { mocks.mounted = [ext.id]; resolve(); };
+        })
+    );
+    const { materialize, transition, adapter, navigation, warn } = setup('/?screen=people;org=o1', ready);
+    materialize();
+    navigation.navigate({ token: 'gears', org: 'o1' }, 'push');
+    transition();
+
+    // In the runtime's order: the running mount lands, then the one queued behind it.
+    // The runtime starts the queued mount at once, and its container counts as mounted.
+    lands.people();
+    mocks.mounted = ['gears'];
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    lands.gears();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(mocks.mountScreen).toHaveBeenCalledTimes(2);
+    expect(mocks.mounted).toEqual(['gears']);
+    expect(warn).not.toHaveBeenCalled();
+    expect(adapter.url()).toBe('/?screen=gears;org=o1');
+  });
+
+  it('retries a stuck screen when asked to, once the slot is attached again', async () => {
+    mocks.mountScreen.mockImplementation(async () => undefined);
+    const { materialize, retry } = setup('/?screen=people;org=o1', ready);
+    materialize();
+    await vi.waitFor(() => expect(mocks.mountScreen).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    mocks.mountScreen.mockImplementation(async (_registry: unknown, ext: StudioScreenExtension) => { mocks.mounted = [ext.id]; });
+    retry();
+    expect(mocks.mountScreen).toHaveBeenCalledTimes(3);
+    expect(mocks.mounted).toEqual(['org.workspaces']);
+  });
+
+  // Reviewer finding: every workspace's parent is the organization too.
+  it('refuses a tenant that is not a project, even under the organization', async () => {
+    const { materialize, adapter, catalogs } = setup('/?screen=projects;org=o1;workspace=w1;project=w1', ready);
+    catalogs.resolveProject.mockResolvedValue({ id: 'w1', name: 'Work', tenant_type: TENANT_TYPES.workspace, parent_id: 'o1' });
+    materialize();
+    await vi.waitFor(() => expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1'));
+  });
+
+  // Reviewer finding: before this branch an organization change always loaded its
+  // workspaces; an organization-level screen must not leave the list pending.
+  it('loads the workspaces of the organization in scope on an organization-level screen too', () => {
+    const { materialize, catalogs } = setup('/?screen=people;org=o1', {
+      ...ready, workspace: null, workspaces: [], workspacesStatus: 'pending',
+    });
+    materialize();
+    expect(catalogs.loadWorkspaces).toHaveBeenCalledWith('o1');
+  });
+});
+
+/**
+ * Issue #1006: a kit's screens are registered after routing starts. An
+ * address naming one waits for the kits of its scope, opens it once it is
+ * registered, and is called unknown — keeping the address — once the kits are
+ * registered without it.
+ */
+describe('materialize: an address a kit may still answer', () => {
+  const kitScreen = screen('hello.main', '/hello-kit', 'project', { order: 90, kit: 'hello-kit' });
+
+  function setupRuntime(url: string, initial: Partial<AppContextState>, waitMs = 1000) {
+    const { history, adapter } = freshNavigationHistory(url);
+    const navigation = createShellNavigation(history);
+    const extensions: StudioScreenExtension[] = [...screens];
+    const { app, state } = fakeApp(initial, extensions);
+    let groups = groupScreens(extensions);
+    const settled = new Set<string>();
+    const runtime = { isSettled: (scope: string) => settled.has(scope) };
+    const catalogs = { loadOrganizations: vi.fn(), loadWorkspaces: vi.fn(), loadProjects: vi.fn(), resolveProject: vi.fn() };
+    const warn = vi.fn();
+    const materializer = createMaterializer({ app, navigation, groups: () => groups, catalogs, warn, runtime, waitMs });
+    const unresolved = () => unresolvedScreenOf(app.mfeRegistry!).get();
+    /** What `startRouting` does when the runtime kits register a package. */
+    const register = (extension: StudioScreenExtension) => {
+      extensions.push(extension);
+      groups = groupScreens(extensions);
+    };
+    const unregister = (id: string) => {
+      extensions.splice(extensions.findIndex((ext) => ext.id === id), 1);
+      groups = groupScreens(extensions);
+    };
+    return { ...materializer, adapter, state, warn, settled, unresolved, register, unregister };
+  }
+
+  const LINK = '/?screen=hello-kit;org=o1;workspace=w1;project=p1';
+  const inProject = { ...ready, projects: [ATLAS] };
+
+  afterEach(() => vi.useRealTimers());
+
+  it('waits on a cold deep link, applying its context and keeping the address', () => {
+    const { materialize, adapter, state, warn, unresolved } = setupRuntime(LINK, inProject);
+    materialize();
+    expect(unresolved()).toEqual({ token: 'hello-kit', status: 'waiting', level: 'project' });
+    expect(adapter.url()).toBe(LINK);
+    // The project is opened, so the loader reads the project's kits.
+    expect(state().project).toEqual(ATLAS);
+    expect(mocks.mountScreen).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('opens the kit screen once its kit registers it, and clears the wait', () => {
+    const { materialize, adapter, settled, unresolved, register } = setupRuntime(LINK, inProject);
+    materialize();
+    register(kitScreen);
+    settled.add('project:p1');
+    materialize();
+    expect(mocks.mountScreen).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'hello.main' }));
+    expect(unresolved()).toBeNull();
+    expect(adapter.url()).toBe(LINK);
+  });
+
+  it('calls the address unknown once the kits of its scope are registered without it, and keeps it', () => {
+    const { materialize, adapter, settled, unresolved, warn } = setupRuntime(LINK, inProject);
+    materialize();
+    settled.add('project:p1');
+    materialize();
+    expect(unresolved()).toEqual({ token: 'hello-kit', status: 'unknown', level: 'project' });
+    expect(adapter.url()).toBe(LINK);
+    expect(mocks.mountScreen).not.toHaveBeenCalled();
+    materialize();
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('judges by the scope the address names: an organization settled says nothing of a project in it', () => {
+    const { materialize, settled, unresolved } = setupRuntime(LINK, inProject);
+    settled.add('organization:o1');
+    materialize();
+    expect(unresolved()?.status).toBe('waiting');
+  });
+
+  it('stops waiting when the kits never settle', () => {
+    vi.useFakeTimers();
+    const { materialize, unresolved } = setupRuntime(LINK, inProject, 500);
+    materialize();
+    expect(unresolved()?.status).toBe('waiting');
+    vi.advanceTimersByTime(500);
+    expect(unresolved()?.status).toBe('unknown');
+  });
+
+  it('a wait from an address since left does not end the next one', () => {
+    vi.useFakeTimers();
+    const { materialize, transition, unresolved } = setupRuntime(LINK, inProject, 500);
+    materialize();
+    vi.advanceTimersByTime(400);
+    transition();
+    vi.advanceTimersByTime(200);
+    expect(unresolved()?.status).toBe('waiting');
+    vi.advanceTimersByTime(400);
+    expect(unresolved()?.status).toBe('unknown');
+  });
+
+  it('falls back gracefully when the kit of the screen on display is removed', () => {
+    const { materialize, settled, unresolved, register, unregister } = setupRuntime(LINK, inProject);
+    register(kitScreen);
+    settled.add('project:p1');
+    materialize();
+    expect(unresolved()).toBeNull();
+    unregister('hello.main');
+    materialize();
+    expect(unresolved()).toEqual({ token: 'hello-kit', status: 'unknown', level: 'project' });
+  });
+
+  it('keeps a section the address names while nobody can say whose it is', () => {
+    const { materialize, adapter } = setupRuntime(`${LINK};section=notes`, inProject);
+    materialize();
+    expect(adapter.url()).toBe(`${LINK};section=notes`);
+  });
+
+  it('still opens a built-in screen at once, settled or not', () => {
+    const { materialize, unresolved } = setupRuntime('/?screen=people;org=o1', ready);
+    materialize();
+    expect(mocks.mountScreen).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'people' }));
+    expect(unresolved()).toBeNull();
+  });
+});

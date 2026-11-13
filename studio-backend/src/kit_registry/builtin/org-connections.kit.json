@@ -1,0 +1,26 @@
+{
+  "manifest_version": "1",
+  "slug": "org-connections",
+  "name": "Connections",
+  "description": "An organization's connections to Git hosts, clusters, registries and model providers, and Admin's view of all of them.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "organization"
+  ],
+  "model": {
+    "properties": [
+      {
+        "on": "organization",
+        "property": {
+          "name": "connectors",
+          "type": "connector",
+          "relation": "connector",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Connections",
+          "description": "A tab of the organization: what it shows."
+        }
+      }
+    ]
+  }
+}

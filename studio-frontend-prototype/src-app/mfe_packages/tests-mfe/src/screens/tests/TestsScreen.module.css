@@ -1,0 +1,153 @@
+/*
+ * Project › Tests over ui-kit semantic tokens (see theme.css in
+ * @gears-frontx/ui-kit). No Tailwind: inside the shadow root the re-anchored
+ * kit tokens shadow the shell's HSL triplets.
+ */
+
+.screen {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 100%;
+  padding: var(--space-6);
+  color: var(--foreground);
+}
+
+/* The kit's theme.css paints `[data-theme]`; the shell's screen keeps its own. */
+.screen[data-theme] {
+  background: transparent;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-heading-1-size);
+  line-height: var(--text-heading-1-line-height);
+  font-weight: var(--text-heading-1-weight);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.about {
+  margin: 0;
+  max-width: 60rem;
+  color: var(--muted-foreground);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-4);
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.big {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.failed {
+  color: var(--destructive);
+  font-size: 0.875rem;
+}
+
+.error {
+  margin: 0;
+  color: var(--destructive);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* One square per day: green, red, or a gap. */
+.strip {
+  display: flex;
+  gap: 3px;
+}
+
+.day {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--muted);
+}
+
+.green {
+  background: var(--success, #16a34a);
+}
+
+.red {
+  background: var(--destructive);
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.job {
+  background: var(--muted);
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.wide {
+  min-width: 15rem;
+}
+
+.commit {
+  max-width: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skeleton {
+  height: 2rem;
+  width: 16rem;
+}
+
+.link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.link:hover {
+  text-decoration: underline;
+}

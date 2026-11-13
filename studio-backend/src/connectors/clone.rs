@@ -477,6 +477,20 @@ pub fn head_commit(dir: &Path) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// The branch a checkout has checked out (`main`), or `None` on a detached
+/// HEAD or when the directory is not a checkout. Blocking.
+pub fn head_ref(dir: &Path) -> Option<String> {
+    Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["symbolic-ref", "--short", "-q", "HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 /// Walk a checkout depth-first, skipping `.git` and symlinks, reading the
 /// content of the text files `read_text` names by their repo-relative path.
 /// Blocking — call under `spawn_blocking`.

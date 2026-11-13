@@ -1,0 +1,166 @@
+/*
+ * The Product kit over ui-kit semantic tokens (see theme.css in
+ * @gears-frontx/ui-kit). No Tailwind: inside the shadow root the re-anchored
+ * kit tokens shadow the shell's HSL triplets. Shared by every part of the
+ * page; a part with more of its own keeps its own module beside it.
+ */
+
+.screen {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 100%;
+  padding: var(--space-6);
+  color: var(--foreground);
+  font-size: 0.875rem;
+}
+
+/* The kit's theme.css paints `[data-theme]`; the shell's screen keeps its own. */
+.screen[data-theme] {
+  background: transparent;
+}
+
+.skeleton {
+  height: 12rem;
+  width: 100%;
+}
+
+.card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 0.5rem);
+  background: var(--card);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.grow {
+  flex: 1;
+}
+
+.muted {
+  color: var(--muted-foreground);
+}
+
+.small {
+  font-size: 0.75rem;
+}
+
+.error {
+  color: var(--destructive);
+}
+
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+.pre {
+  margin: 0;
+  padding: var(--space-3);
+  overflow: auto;
+  max-height: 32rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+  background: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  white-space: pre;
+}
+
+.link {
+  color: var(--primary);
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+}
+
+.chipButton {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.pageHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.pageHeaderMain {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.info {
+  display: grid;
+  gap: var(--space-1);
+  max-width: 60rem;
+  color: var(--muted-foreground);
+}
+
+.info p {
+  margin: 0;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-1);
+}
+
+.dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: var(--space-1);
+  border-radius: 9999px;
+}
+
+.dot_ok {
+  background: var(--success, #16a34a);
+}
+
+.dot_warn {
+  background: var(--warning, #d97706);
+}
+
+.dot_danger {
+  background: var(--destructive, #dc2626);
+}
+
+.dot_info,
+.dot_running,
+.dot_neutral {
+  background: var(--muted-foreground);
+}

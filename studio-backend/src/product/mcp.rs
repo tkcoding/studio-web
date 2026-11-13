@@ -160,6 +160,123 @@ pub fn tools() -> Vec<Tool> {
             },
         },
         Tool {
+            name: "product_infra",
+            description: "The product's infra services (PostgreSQL, Keycloak, …) as its \
+                description says them: each the catalogue's passport with what the \
+                description chose over it, and the environment's side (its copy of the image, \
+                the public address); `services` are the `use_service(...)` calls as written and \
+                `revision` the description revision they were read from.",
+            input_schema: project_only,
+            effect: Effect::Read,
+            experimental: false,
+            run: Run::Get("/studio-product/v1/product-infra"),
+        },
+        Tool {
+            name: "product_description_edit",
+            description: "Edit the product's description by operation and save the next \
+                revision: `set_infra` (the whole `infra` list; empty takes it out), \
+                `put_infra_service` (one service, replacing the one of its name or added at the \
+                end), `remove_infra_service` (by `name`). A service's `source` and \
+                `profile_config` default to what the description says of it, else the \
+                product's own repository; the rest of the text is kept as written. \
+                `dry_run` answers the text without saving. Pass `base_revision` from \
+                `product_description`: a save against an older one is refused with both texts.",
+            input_schema: || {
+                let service = json!({ "type": "object",
+                    "properties": {
+                        "name": { "type": "string" },
+                        "source": { "type": "string" },
+                        "image": { "type": "string" },
+                        "chart": { "type": "string" },
+                        "chart_version": { "type": "string" },
+                        "config": { "type": "object", "additionalProperties": { "type": "string" } },
+                        "profile_config": { "type": "string",
+                            "description": "The `profile_config` argument as Starlark text." }
+                    },
+                    "required": ["name"] });
+                object(
+                    json!({
+                        "project_id": project_id(),
+                        "base_revision": { "type": "integer" },
+                        "dry_run": { "type": "boolean" },
+                        "ops": { "type": "array", "minItems": 1, "items": { "type": "object",
+                            "properties": {
+                                "op": { "type": "string",
+                                    "enum": ["set_infra", "put_infra_service", "remove_infra_service"] },
+                                "services": { "type": "array", "items": service },
+                                "service": service,
+                                "name": { "type": "string" }
+                            },
+                            "required": ["op"] } }
+                    }),
+                    &["project_id", "ops"],
+                )
+            },
+            effect: Effect::Write,
+            experimental: true,
+            run: Run::Post {
+                path: "/studio-product/v1/product-description-edits",
+                query: &["project_id"],
+            },
+        },
+        Tool {
+            name: "product_description_outline",
+            description: "What a product description says, without its text: its infra \
+                services, the profiles it declares, the source its own repository is, and \
+                which lines say which part of the product (`gear:<key>`, `mfe:<path>`, \
+                `shell`, `infra:postgres`). Reads `text` when given, else `revision`, else the \
+                latest revision.",
+            input_schema: || {
+                object(
+                    json!({
+                        "project_id": project_id(),
+                        "revision": { "type": "integer", "minimum": 1 },
+                        "text": { "type": "string" }
+                    }),
+                    &["project_id"],
+                )
+            },
+            effect: Effect::Read,
+            experimental: false,
+            run: Run::Post {
+                path: "/studio-product/v1/product-description-outlines",
+                query: &["project_id"],
+            },
+        },
+        Tool {
+            name: "product_kind",
+            description: "What the product is: the kind Studio proposes from the project's \
+                specs (`gear_product`, `gear_service`, `frontx_app`, `source_built`) with its \
+                reasons and what could not be read, and the kind a member confirmed. \
+                Experimental: word matches and counts.",
+            input_schema: project_only,
+            effect: Effect::Read,
+            experimental: true,
+            run: Run::Get("/studio-product/v1/product-kind"),
+        },
+        Tool {
+            name: "product_kind_confirm",
+            description: "Confirm what the product is, kept in the project's configuration \
+                with what Studio proposed at that moment. Shared by the whole project: say \
+                what you decide first.",
+            input_schema: || {
+                object(
+                    json!({
+                        "project_id": project_id(),
+                        "kind": { "type": "string",
+                            "enum": ["gear_product", "gear_service", "frontx_app", "source_built"] }
+                    }),
+                    &["project_id", "kind"],
+                )
+            },
+            effect: Effect::Write,
+            experimental: true,
+            run: Run::Put {
+                path: "/studio-product/v1/product-kind",
+                query: &["project_id"],
+            },
+        },
+        Tool {
             name: "gdl_file",
             description: "A component's description file as the server's checkout holds it: \
                 a gear's `gear.gdl` (`gear`: engine id or crate name), or the `.gdl` at `path` \

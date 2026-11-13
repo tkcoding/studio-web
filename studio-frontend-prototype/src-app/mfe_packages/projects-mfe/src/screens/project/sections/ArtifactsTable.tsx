@@ -1,0 +1,176 @@
+import React from 'react';
+import {
+  Button,
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@gears-frontx/ui-kit';
+import { ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import type { ArtifactRow } from '../../../model/artifact';
+import type { ArtifactColumn } from './artifactColumns';
+import styles from './ArtifactsSection.module.css';
+
+export interface ArtifactsTableLabels {
+  table: string;
+  previous: string;
+  next: string;
+  sortedNewest: string;
+  range: (from: number, to: number, total: number) => string;
+  page: (index: number) => string;
+}
+
+interface ArtifactsTableProps {
+  rows: readonly ArtifactRow[];
+  columns: readonly ArtifactColumn[];
+  labels: ArtifactsTableLabels;
+  empty: React.ReactNode;
+  offset: number;
+  total: number;
+  pageSize: number;
+  onOffsetChange: (offset: number) => void;
+  /** Rows are on the way: skeleton rows in the body, header and paginator stay. */
+  loading?: boolean;
+}
+
+const MAX_PAGES_SHOWN = 4;
+const MIN_SKELETON_ROWS = 3;
+
+function pageWindow(current: number, count: number): number[] {
+  if (count <= MAX_PAGES_SHOWN) return Array.from({ length: count }, (_, i) => i);
+  const half = Math.floor(MAX_PAGES_SHOWN / 2);
+  const start = Math.min(Math.max(0, current - half), count - MAX_PAGES_SHOWN);
+  return Array.from({ length: MAX_PAGES_SHOWN }, (_, i) => start + i);
+}
+
+// @cpt-dod:cpt-studiofrontend-dod-project-artifacts-table:p1
+// @cpt-dod:cpt-studiofrontend-dod-project-artifacts-page:p1
+export const ArtifactsTable: React.FC<ArtifactsTableProps> = ({
+  rows,
+  columns,
+  labels,
+  empty,
+  offset,
+  total,
+  pageSize,
+  onOffsetChange,
+  loading = false,
+}) => {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const current = Math.min(Math.floor(offset / pageSize), pageCount - 1);
+  // As many skeleton rows as the page that is being replaced, so the table
+  // keeps its height.
+  const [shown, setShown] = React.useState(rows.length);
+  if (!loading && shown !== rows.length) setShown(rows.length);
+  const skeletonRows = Math.min(pageSize, Math.max(shown, MIN_SKELETON_ROWS));
+
+  return (
+    <>
+      <Table label={labels.table} density="compact" className={styles.table}>
+        <TableHeader>
+          <TableRow>
+            {columns.map((column) => (
+              <TableHead key={column.key} className={column.className}>
+                {column.sorted ? (
+                  <span className={styles.sortMark} title={labels.sortedNewest}>
+                    {column.label}
+                    <ArrowDown size={14} strokeWidth={1.5} aria-hidden="true" />
+                  </span>
+                ) : (
+                  column.label
+                )}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody aria-busy={loading || undefined}>
+          {loading ? (
+            Array.from({ length: skeletonRows }, (_, index) => (
+              <TableRow key={index}>
+                {columns.map((column) => (
+                  <TableCell key={column.key} className={column.className}>
+                    {column.label && <Skeleton className={styles.cellSkeleton} />}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
+          ) : rows.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={columns.length}>
+                {empty}
+              </TableCell>
+            </TableRow>
+          ) : (
+            rows.map((row) => (
+              <TableRow key={row.id}>
+                {columns.map((column) => (
+                  <TableCell key={column.key} className={column.className}>
+                    {column.render(row)}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+
+      <div className={styles.footer}>
+        <span className={styles.range}>
+          {loading ? (
+            <Skeleton className={styles.rangeSkeleton} />
+          ) : (
+            labels.range(total === 0 ? 0 : offset + 1, offset + rows.length, total)
+          )}
+        </span>
+        <Pagination className={styles.pagination}>
+          <PaginationContent>
+            <PaginationItem>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={styles.pageStep}
+                aria-label={labels.previous}
+                disabled={current === 0}
+                onClick={() => onOffsetChange((current - 1) * pageSize)}
+                icon={<ChevronLeft size={16} strokeWidth={1.5} />}
+              />
+            </PaginationItem>
+            {pageWindow(current, pageCount).map((index) => (
+              <PaginationItem key={index}>
+                <Button
+                  variant={index === current ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className={styles.pageNumber}
+                  aria-label={labels.page(index + 1)}
+                  aria-current={index === current ? 'page' : undefined}
+                  onClick={() => onOffsetChange(index * pageSize)}
+                >
+                  {index + 1}
+                </Button>
+              </PaginationItem>
+            ))}
+            <PaginationItem>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={styles.pageStep}
+                aria-label={labels.next}
+                disabled={current >= pageCount - 1}
+                onClick={() => onOffsetChange((current + 1) * pageSize)}
+                icon={<ChevronRight size={16} strokeWidth={1.5} />}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      </div>
+    </>
+  );
+};
+
+ArtifactsTable.displayName = 'ArtifactsTable';

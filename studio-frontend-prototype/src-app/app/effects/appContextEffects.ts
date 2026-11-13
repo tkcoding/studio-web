@@ -1,0 +1,307 @@
+/**
+ * App Context Effects — events in, routes out (ADR-0028).
+ *
+ * Nothing here decides what is in scope. A person's action arrives as an
+ * event, the handler computes the route it means and writes it with
+ * `navigate`; the router reports the transition and `materialize` moves the
+ * slice and the screen. The handlers read the *current route* for the context
+ * they carry forward, and fall back to the slice only before the first
+ * address is written. The catalogs (organizations, workspaces, projects) are
+ * data, fetched in `contextCatalogs.ts` and stored before any navigation.
+ */
+import { eventBus, screenDomain, type FrontXApp } from '@gears-frontx/react';
+import {
+  answersSection,
+  isAboveWorkspace,
+  levelOf,
+  placementOf,
+  sectionOf,
+  type ScreenLevel,
+  type StudioScreenExtension,
+} from '@/app/mfe/screenLevels';
+import { createContextCatalogs } from '@/app/effects/contextCatalogs';
+import type { EditorSession } from '@/app/effects/editorSessionEffects';
+import { startRouting, type RoutingHandle } from '@/app/routing/startRouting';
+import { entryTokenOf, groupOfToken, tokenOf } from '@/app/routing/screenTokens';
+import { EDITOR_SCREEN_TOKEN, type ShellRoute } from '@/app/routing/route';
+import { openOnMyDesktop } from '@/app/desktop/openOnMyDesktop';
+import { showNotice } from '@/app/mfe/notifyAction';
+import { readSessionProfile } from '@/app/slices/appSessionSlice';
+import { readEditorSession } from '@/app/slices/editorSessionSlice';
+import {
+  addContextWorkspace,
+  readAppContext,
+  rememberProject,
+  setContextProjects,
+  setContextWorkspace,
+} from '@/app/slices/appContextSlice';
+
+/** Long enough for an aborted duplicate to have settled. */
+const WORKSPACE_RETRY_DELAY_MS = 400;
+
+// @cpt-dod:cpt-studiofrontend-dod-workspace-scope-claim:p1
+/**
+ * Whether an announcement belongs to a scope the session has left. An
+ * unclaimed scope (`undefined`) is never stale; only a sender that named its
+ * scope can be found to have named the wrong one.
+ */
+function staleScope(current: string | null, claimed: string | undefined): boolean {
+  return claimed !== undefined && claimed !== current;
+}
+
+/** `editorSession` is handed in by `main.tsx`, which also gives its frame hook to the iframe handler: one session, never two. */
+export function registerAppContextEffects(app: FrontXApp, editorSession: EditorSession): void {
+  const dispatch = app.store.dispatch;
+  const context = () => readAppContext(app);
+
+  let routing: RoutingHandle | null = null;
+  const catalogs = createContextCatalogs(app, () => routing?.materialize());
+
+  const screens = (): StudioScreenExtension[] =>
+    (app.mfeRegistry?.getExtensionsForDomain(screenDomain.id) ?? []) as StudioScreenExtension[];
+
+  /** The route for `token` at `level`, carrying what the address (or, before one exists, the slice) knows. */
+  const routeFor = (token: string, level: ScreenLevel, overrides: Partial<ShellRoute> = {}): ShellRoute => {
+    const current = routing?.navigation.currentRoute() ?? null;
+    const slice = context();
+    const route: ShellRoute = { token };
+    const org = overrides.org ?? current?.org ?? slice.org?.id;
+    if (org) route.org = org;
+    if (!isAboveWorkspace(level)) {
+      const workspace = overrides.workspace ?? current?.workspace ?? slice.workspace?.id;
+      if (workspace) route.workspace = workspace;
+    }
+    if (level === 'project') {
+      const project = overrides.project ?? current?.project ?? slice.project?.id;
+      if (project) route.project = project;
+    }
+    if (overrides.section) route.section = overrides.section;
+    if (overrides.artifact) {
+      route.artifact = overrides.artifact;
+      route.repository = overrides.repository;
+      route.path = overrides.path;
+      route.kind = overrides.kind;
+    }
+    return route;
+  };
+
+  /** The token a context switch carries forward: the current screen's, unless it is hidden  */
+
+  const tokenToKeep = (current: ShellRoute, level: ScreenLevel): string | undefined => {
+    const owner = routing && groupOfToken(routing.groups(), current.token)?.owner;
+    return owner && placementOf(owner) === 'hidden' ? entryTokenOf(screens(), level) : current.token;
+  };
+
+  const currentGroupLevel = (): ScreenLevel | undefined => {
+    const current = routing?.navigation.currentRoute();
+    const group = routing && current ? groupOfToken(routing.groups(), current.token) : undefined;
+    return group ? levelOf(group.owner) : undefined;
+  };
+
+  const currentOrgId = (): string | null =>
+    routing?.navigation.currentRoute()?.org ?? context().org?.id ?? null;
+  const currentWorkspaceId = (): string | null =>
+    routing?.navigation.currentRoute()?.workspace ?? context().workspace?.id ?? null;
+
+  eventBus.on('app/routing/start', () => {
+    if (routing) {
+      // The slot re-attached: whatever failed to mount before has a root again.
+      routing.retry();
+      return;
+    }
+    routing = startRouting(app, catalogs, undefined, editorSession);
+  });
+
+  eventBus.on('app/context/fetch', () => {
+    void catalogs.loadOrganizations();
+  });
+
+  eventBus.on('app/context/level/requested', ({ level }) => {
+    if (!routing) return;
+    const token = entryTokenOf(screens(), level);
+    if (!token) return;
+    const route = routeFor(token, level);
+    if (level === 'project' && !route.project) return;
+    routing.navigation.navigate(route, 'push');
+  });
+
+  // @cpt-begin:cpt-studiofrontend-algo-shell-levels-click:p1:inst-1
+  eventBus.on('app/context/screen/requested', ({ extensionId, section: asked }) => {
+    if (!routing) return;
+    const target = screens().find((candidate) => candidate.id === extensionId);
+    const token = target ? tokenOf(target) : undefined;
+    if (!target || !token) return;
+    // A section asked for by name only where the screen answers it: a tab the
+    // Studio domain model adds is a section under a generic screen's prefix.
+    const section = asked && answersSection(target, asked) ? asked : sectionOf(target);
+    routing.navigation.navigate(routeFor(token, levelOf(target), section ? { section } : {}), 'push');
+  });
+  // @cpt-end:cpt-studiofrontend-algo-shell-levels-click:p1:inst-1
+
+  eventBus.on('app/context/org/changed', ({ orgId }) => {
+    if (!routing) return;
+    if (currentOrgId() === orgId) {
+      if (context().workspacesStatus === 'failed') catalogs.loadWorkspaces(orgId);
+      return;
+    }
+    const current = routing.navigation.currentRoute();
+    const stays = current !== null && currentGroupLevel() === 'organization';
+    const token = stays ? tokenToKeep(current, 'organization') : entryTokenOf(screens(), 'organization');
+    if (!token) return;
+    const route: ShellRoute = { token, org: orgId };
+    if (stays && token === current.token && current.section) route.section = current.section;
+    routing.navigation.navigate(route, 'push');
+  });
+
+  eventBus.on('app/context/workspace/changed', ({ workspaceId, name, organizationId, enter }) => {
+    if (!routing) return;
+    if (staleScope(currentOrgId(), organizationId)) return;
+    if (name !== undefined) dispatch(addContextWorkspace({ id: workspaceId, name }));
+    if (!enter && isAboveWorkspace(currentGroupLevel())) {
+      // Below the organization the address decides; at its level the workspace
+      // is a preference the slice keeps for the next descent (ADR-0028).
+      dispatch(setContextWorkspace(workspaceId));
+      routing.materialize();
+      return;
+    }
+    const current = routing.navigation.currentRoute();
+    const token = enter || !current ? entryTokenOf(screens(), 'workspace') : tokenToKeep(current, 'workspace');
+    if (!token) return;
+    routing.navigation.navigate(routeFor(token, 'workspace', { workspace: workspaceId }), 'push');
+  });
+
+  eventBus.on('app/context/workspace/created', ({ id, name, organizationId }) => {
+    if (!routing) return;
+    if (staleScope(currentOrgId(), organizationId)) return;
+    dispatch(addContextWorkspace({ id, name }));
+    const current = routing.navigation.currentRoute();
+    if (current && !isAboveWorkspace(currentGroupLevel())) {
+      routing.navigation.navigate(routeFor(current.token, 'workspace', { workspace: id }), 'push');
+    } else {
+      routing.materialize();
+    }
+  });
+
+  eventBus.on('app/context/workspace/scoped', () => {
+    const slice = context();
+    if (slice.workspacesStatus === 'failed' && slice.org) catalogs.loadWorkspaces(slice.org.id);
+  });
+
+  eventBus.on('app/context/workspaces/failed', () => {
+    window.setTimeout(() => {
+      const slice = context();
+      if (slice.workspacesStatus !== 'failed' || !slice.org) return;
+      catalogs.loadWorkspaces(slice.org.id, true);
+    }, WORKSPACE_RETRY_DELAY_MS);
+  });
+
+  // @cpt-dod:cpt-studiofrontend-dod-shell-levels-artifact-address:p1
+  eventBus.on('app/context/artifact/requested', async ({ projectId, artifactId, repository, path, kind }) => {
+    if (!routing) return;
+    // A file of a project the member has open on their own desktop opens there
+    // (ADR-0027 §5), unless this tab's editor already has the project up: that
+    // is the editor they are at, and the desktop is a minute faster than a session.
+    const editor = readEditorSession(app);
+    const editorUp = editor.phase === 'ready' && context().project?.id === projectId;
+    if (kind === 'file' && path && !editorUp) {
+      const device = await openOnMyDesktop(projectId, path, readSessionProfile(app)?.id);
+      if (device) {
+        showNotice({ kind: 'info', text: app.i18nRegistry.t('shell:editor_desktop_opened', { device }) });
+        return;
+      }
+      if (!routing) return;
+    }
+    if (!groupOfToken(routing.groups(), EDITOR_SCREEN_TOKEN)) {
+      console.warn(`[shell] artifact open: no screen answers to "${EDITOR_SCREEN_TOKEN}"`);
+      return;
+    }
+    const route = routeFor(EDITOR_SCREEN_TOKEN, 'project', {
+      project: projectId,
+      artifact: artifactId,
+      repository,
+      path,
+      kind,
+    });
+    routing.navigation.navigate(route, 'push');
+  });
+
+  //  Published by whoever owns projects (projects-mfe)
+
+  eventBus.on('app/context/projects', ({ items, workspaceId }) => {
+    if (staleScope(currentWorkspaceId(), workspaceId)) return;
+    dispatch(setContextProjects(items));
+  });
+
+  eventBus.on('app/context/project/opened', ({ id, name, workspaceId }) => {
+    if (!routing) return;
+    if (staleScope(currentWorkspaceId(), workspaceId)) return;
+    dispatch(rememberProject({ id, name }));
+    const token = routing.navigation.currentRoute()?.token ?? entryTokenOf(screens(), 'workspace');
+    if (!token) return;
+    routing.navigation.navigate(routeFor(token, 'project', { workspace: workspaceId, project: id }), 'push');
+  });
+
+  eventBus.on('app/context/project/changed', ({ projectId }) => {
+    if (!routing) return;
+    const current = routing.navigation.currentRoute();
+    if (!current || (current.project ?? context().project?.id) === projectId) return;
+    const token = tokenToKeep(current, 'project');
+    if (!token) return;
+    routing.navigation.navigate(routeFor(token, 'project', { project: projectId }), 'push');
+  });
+
+  eventBus.on('app/context/project/closed', () => {
+    if (!routing) return;
+    const current = routing.navigation.currentRoute();
+    const token = current ? tokenToKeep(current, 'workspace') : undefined;
+    if (!token) return;
+    routing.navigation.navigate(routeFor(token, 'workspace'), 'push');
+  });
+
+  // A pin keeps a whole address, so opening one is a navigation like any
+  // other: the router reports it and `materialize` moves the slice, the
+  // switchers and the screen — or falls back, if the place is gone.
+  eventBus.on('app/pins/open', ({ route }) => {
+    if (!routing || !route.token) return;
+    routing.navigation.navigate({ ...route }, 'push');
+  });
+
+  // A place found elsewhere (Search): the whole address is known, so it is
+  // one navigation, and `materialize` resolves the names and the level.
+  eventBus.on('app/context/place/requested', ({ organizationId, workspaceId, projectId }) => {
+    if (!routing) return;
+    const level: ScreenLevel = projectId ? 'project' : workspaceId ? 'workspace' : 'organization';
+    const token = entryTokenOf(screens(), level);
+    if (!token) return;
+    const route: ShellRoute = { token, org: organizationId };
+    if (workspaceId) route.workspace = workspaceId;
+    if (projectId) route.project = projectId;
+    routing.navigation.navigate(route, 'push');
+  });
+
+  eventBus.on('app/editor/session/retry', () => editorSession.retry());
+  eventBus.on('app/editor/session/reload', () => editorSession.reload());
+  eventBus.on('app/editor/session/stop', ({ done }) => {
+    void editorSession.stop().then(
+      () => done?.(),
+      (error: unknown) => {
+        console.warn('[editor-session] stop failed:', error);
+        done?.();
+      }
+    );
+  });
+
+  // @cpt-begin:cpt-studiofrontend-flow-shell-levels-section:p1:inst-4
+  // @cpt-begin:cpt-studiofrontend-flow-shell-levels-section:p1:inst-5
+  // The MFE's own report of the section it moved to, written without a
+  // history entry: the person did not navigate, the screen did. The tabs
+  // follow it from the address, like every other section.
+  eventBus.on('app/context/project/section', ({ section }) => {
+    if (!routing) return;
+    const current = routing.navigation.currentRoute();
+    if (!current) return;
+    routing.navigation.navigate({ ...current, section: section ?? undefined }, 'replace');
+  });
+  // @cpt-end:cpt-studiofrontend-flow-shell-levels-section:p1:inst-5
+  // @cpt-end:cpt-studiofrontend-flow-shell-levels-section:p1:inst-4
+}

@@ -209,6 +209,7 @@ fn need(
     fields: Vec<(String, String)>,
 ) -> TypeNeed {
     TypeNeed {
+        declared_by: gear.to_owned(),
         id: entity.to_owned(),
         name: name.to_owned(),
         description: description.to_owned(),

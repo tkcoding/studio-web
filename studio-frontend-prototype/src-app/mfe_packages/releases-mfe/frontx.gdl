@@ -1,0 +1,28 @@
+# This micro-frontend's passport: everything a tool that assembles a product
+# from FrontX packages (Gearbox, Constructor Studio) needs to know about it, in
+# one file. It restates what package.json and mfe.json say, and those tools
+# check that they agree, so keep them in step when either changes.
+#
+# The Releases kit, `product-releases`: a built-in kit (ADR-0068 §7), a base
+# kit by default (ADR-0069 §4). Its one screen is Project › Releases
+# (ADR-0056 §4): the environments ladder the product climbs with what runs in
+# each, its builds (ADR-0045) and its deploys (ADR-0043), carried over from
+# the prototype (ADR-0069 §5).
+gdl_version = "1.5"
+
+mfe(
+    name = "@constructor-studio/releases-mfe",
+    version = "0.2.0-alpha.0",
+
+    # The backend gears its screen calls, by gear id.
+    requires = ["studio-environments", "studio-artifact-ingest", "studio-product", "studio-connector", "studio-tasks", "account-management"],
+
+    screens = ["Releases"],
+    mounts = ["/releases"],
+
+    frontx = "0.2.0-alpha.15",
+
+    roles = [],
+
+    preview = ["/releases"],
+)

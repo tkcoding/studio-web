@@ -3,7 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import en from '../i18n/en.json';
 import { connectionColumns } from './connectionColumns';
-import type { ConnectionRow } from '../../../shared/useConnectionList';
+import type { ConnectionRow } from '../../../model/connection';
 
 /**
  * The row, without any HTTP. The health cell is the one part that would reach

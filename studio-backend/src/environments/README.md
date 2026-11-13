@@ -50,7 +50,9 @@ answer's `checks`. A missing one does not fail the test.
 | `GET`/`PUT /image-retention` | member (project) / admin (organization) | `keep_last`, `keep_days`; the daily `environments.image_sweep` applies it |
 | `GET /registries`, `…/{connection_id}/repositories`, `…/repositories/{repo}/tags`, `DELETE …/versions/{digest}`, `…/orphans` | admin | the organization's registries as they are, against the records (ADR-0062 §5) |
 | `GET`/`PUT /namespace-assignments` | admin | the namespace each project was given in each environment; an administrator assigns one on a cluster that gives namespaces |
-| `GET /deployments` | member | the history, newest first; filter by `project_id`, `environment_id` |
+| `GET /deployments` | member | the history, newest first; filter by `project_id`, `environment_id`; a failed one carries its `cause` (`failure.rs`, #1054), a Research one `research` and its `public_url` |
+| `GET /project-path?project_id=` | member | the project's path to running (#1050): Product, Build, Image, Environment, Running, each with its state, reason, checklist (bound profile, missing configuration secrets, the caller's Research sign-in), one action and a failure's cause; decided in `path.rs` from the records, the cluster not asked |
+| `GET /research/my-projects?project_id=`, `…/my-projects/{research_project}/hardware` | member | the Research projects and hardware of the caller's own sign-in: the Research target of the one deploy dialog (#1053); `KIT_NOT_INSTALLED` without the kit, `ENVIRONMENT_RESEARCH_NOT_SIGNED_IN` before a sign-in |
 | `DELETE /previews/{deployment_id}?project_id=` | member | remove a preview before it expires: a sweep of it alone deletes its namespace (ADR-0055); 202 with the run |
 | `POST /deployments/{deployment_id}/decisions` | admin | `approve` or `decline` (with a reason) a deploy to a protected environment |
 | `GET /deployments/{deployment_id}/status` | member | the release's workloads and ingress hosts, read from the cluster now |
@@ -234,6 +236,12 @@ once the run ends.
   pattern, registry, the history's trimming, image values). No I/O.
 - `store.rs` — the metadata rows and the service identity.
 - `service.rs` — who may, in which order.
+- `failure.rs` — why a build or a deploy failed, read from its failure or
+  outcome text, and the actions that fix it (#1054): a gear that did not
+  build, a missing secret, a quota or hardware limit, an expired Research
+  sign-in, an image pull, an unreachable cluster, a crashing application.
+- `path.rs` — a project's path to running (#1050), plain functions;
+  `service_path.rs` reads what it is decided from, `rest_path.rs` answers it.
 - `readiness.rs` — what a build or a deploy checks before it is queued: the
   connections read as the run reads them, the cluster's namespace and rights
   asked of the cluster; the decisions are plain functions.

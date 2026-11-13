@@ -23,6 +23,7 @@ export interface WorkspaceProjects {
   projects: Tenant[];
   loading: boolean;
   failed: boolean;
+  refetch: () => void;
 }
 
 const EMPTY: WorkspaceProjects = {
@@ -31,6 +32,7 @@ const EMPTY: WorkspaceProjects = {
   projects: [],
   loading: true,
   failed: false,
+  refetch: () => undefined,
 };
 
 const ProjectsContext = createContext<WorkspaceProjects>(EMPTY);
@@ -54,7 +56,7 @@ const WithWorkspace: React.FC<{
   children: ReactNode;
 }> = ({ org, workspace, children }) => {
   const accounts = apiRegistry.getService(AccountsApiService);
-  const { data, isLoading, isError } = useApiQuery(
+  const { data, isLoading, isError, refetch } = useApiQuery(
     accounts.getProjects({ parentId: workspace.id })
   );
 
@@ -66,8 +68,9 @@ const WithWorkspace: React.FC<{
       projects: data?.items ?? [],
       loading: isLoading,
       failed: isError,
+      refetch: () => void refetch(),
     };
-  }, [org, workspace, data, isLoading, isError]);
+  }, [org, workspace, data, isLoading, isError, refetch]);
 
   return <ProjectsContext.Provider value={value}>{children}</ProjectsContext.Provider>;
 };

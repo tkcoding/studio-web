@@ -1,5 +1,5 @@
 //! The requirements a project's documents define, and what each one states it
-//! rests on (`docs/spec-domain-model.md`, "Requirements and their basis").
+//! rests on (`docs/project-domain-model.md`, "Requirements and their basis").
 //!
 //! Read as written: a requirement is whatever a document defines with a label
 //! (`**ID**: \`x\``), and its basis is inferred from its own block — what it

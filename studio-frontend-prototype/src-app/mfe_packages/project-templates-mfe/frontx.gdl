@@ -1,0 +1,26 @@
+# This micro-frontend's passport: everything a tool that assembles a product
+# from FrontX packages (Gearbox, Constructor Studio) needs to know about it, in
+# one file. It restates what package.json and mfe.json say, and those tools
+# check that they agree, so keep them in step when either changes.
+#
+# Workspace › Project templates, in the Project lifecycle kit
+# (`project-lifecycle`, ADR-0068 §7): what a new project may start from,
+# carried over from the prototype (ADR-0069 §5).
+gdl_version = "1.5"
+
+mfe(
+    name = "@constructor-studio/project-templates-mfe",
+    version = "0.2.0-alpha.0",
+
+    # The backend gears its screen calls, by gear id.
+    requires = ["studio-organizations", "studio-kits"],
+
+    screens = ["ProjectTemplates"],
+    mounts = ["/project-templates"],
+
+    frontx = "0.2.0-alpha.15",
+
+    roles = [],
+
+    preview = ["/project-templates"],
+)

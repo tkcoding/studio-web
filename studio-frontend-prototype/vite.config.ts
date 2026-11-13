@@ -1,82 +1,101 @@
-import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
-import type { Plugin } from "vite";
-import react from "@vitejs/plugin-react";
+import { defineConfig, loadEnv, type Plugin, type PreviewServer, type ViteDevServer } from 'vite';
+import react from '@vitejs/plugin-react';
+import { federation } from '@module-federation/vite';
+import path from 'path';
+import { renderRuntimeEnv, resolveStand, standProxy, type Stand } from './scripts/lib/stands';
 
-// Shared with scripts/check-api-usage.mjs: one reader of the prototype's calls.
-import { buildPrototypeMap } from "../scripts/prototype-api-map.mjs";
-
-/** The commit this bundle is built from: CI sets STUDIO_BUILD_COMMIT; a local
- *  build asks git, and a build context without .git (Dockerfile.src) has none. */
-function buildCommit(): string | null {
-  const set = process.env.STUDIO_BUILD_COMMIT?.trim();
-  if (set) return set;
-  try {
-    return execFileSync("git", ["rev-parse", "HEAD"], { stdio: ["ignore", "pipe", "ignore"] })
-      .toString()
-      .trim() || null;
-  } catch {
-    return null;
-  }
+/**
+ * The dev server stands in for the container (ADR-0031): what nginx and
+ * `docker/10-runtime-env.sh` do for a deployed portal — carry the backend
+ * paths to a backend, and tell the bundle which IdP to sign in against — Vite
+ * does here for the stand `STUDIO_STAND` names (`scripts/lib/stands.ts`). The
+ * proxy is `standProxy`; this plugin is the `/env.js`, served ahead of the
+ * placeholder in `public/env.js` — which stays, for `vite build`.
+ *
+ * `vite preview` gets both as well: Vite resolves it as `serve` and hands it
+ * `server.proxy`, so a built bundle previewed here faces the same stand the
+ * dev server would, with the issuer to match rather than the placeholder's
+ * none.
+ */
+function standRuntimeEnv(stand: Stand, shadowed: string[]): Plugin {
+  const serve = (server: ViteDevServer | PreviewServer) => {
+    server.middlewares.use('/env.js', (_req, res) => {
+      res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(renderRuntimeEnv(stand));
+    });
+    const printUrls = server.printUrls.bind(server);
+    server.printUrls = () => {
+      printUrls();
+      server.config.logger.info(`  ➜  Stand:   ${stand.name} → ${stand.url} (issuer ${stand.issuer})`);
+      if (shadowed.length) {
+        server.config.logger.warn(
+          `  ➜  ${shadowed.join(', ')} set but not read: /env.js carries the stand's issuer and client id`,
+        );
+      }
+    };
+  };
+  return { name: 'studio-stand-runtime-env', apply: 'serve', configureServer: serve, configurePreviewServer: serve };
 }
 
-/** `architecture/prototype-map.json`: which screen calls which backend path,
- *  read from src/ by the same build that bundles src/ (see /architecture/). */
-function prototypeMap(): Plugin {
-  const srcDir = fileURLToPath(new URL("./src", import.meta.url));
-  const json = () => JSON.stringify(buildPrototypeMap({ srcDir, commit: buildCommit() }));
+// https://vitejs.dev/config/
+export default defineConfig(({ command, mode }) => {
+  // STUDIO_* from the shell and from .env / .env.local; `envPrefix` stays
+  // VITE_, so none of it reaches the bundle. A server has a stand — the dev
+  // server, and preview; a build is pointed at one by the container it ends
+  // up in. A VITE_OIDC_* value would reach the bundle only to be shadowed by
+  // /env.js, so the server says when it sees one.
+  const stand = command === 'serve' ? resolveStand(loadEnv(mode, __dirname, 'STUDIO_')) : null;
+  const shadowed = stand ? Object.keys(loadEnv(mode, __dirname, 'VITE_OIDC_')) : [];
+
   return {
-    name: "studio-prototype-map",
-    configureServer(server) {
-      server.middlewares.use("/architecture/prototype-map.json", (_req, res) => {
-        res.setHeader("Content-Type", "application/json");
-        res.end(json());
-      });
+    server: {
+      port: 5173,
+      proxy: stand ? standProxy(stand) : undefined,
     },
-    generateBundle() {
-      this.emitFile({ type: "asset", fileName: "architecture/prototype-map.json", source: json() });
+    plugins: [
+      react(),
+      ...(stand ? [standRuntimeEnv(stand, shadowed)] : []),
+      federation({
+        name: 'host',
+        shared: {
+          react: { singleton: true, requiredVersion: '^19.0.0' },
+          'react-dom': { singleton: true, requiredVersion: '^19.0.0' },
+          // Same React Query instance as the host when remotes use federation scope;
+          // separately mounted MFEs still receive the host QueryClient via runtime mount context.
+          '@tanstack/react-query': {
+            singleton: true,
+            requiredVersion: '^5.90.0',
+          },
+        },
+      }),
+    ],
+    resolve: {
+      alias: [
+        { find: '@', replacement: path.resolve(__dirname, './src-app') },
+        // Every entry of use-sync-external-store (shim, with-selector, both)
+        // is served by ESM on React 19's own hook. Bundled as CommonJS it
+        // blanks the portal; see src-app/app/lib/syncExternalStore.ts.
+        {
+          find: /^use-sync-external-store(\/shim)?(\/index|\/with-selector)?(\.js)?$/,
+          replacement: path.resolve(__dirname, './src-app/app/lib/syncExternalStore.ts'),
+        },
+        // CommonJS lodash does not tree-shake: two named imports in
+        // @gears-frontx/studio pulled in the whole library. Bare `lodash`
+        // only — `lodash/clamp` and the like stay what they are.
+        { find: /^lodash$/, replacement: path.resolve(__dirname, './src-app/app/lib/lodash.ts') },
+      ],
+      dedupe: ['@gears-frontx/api', '@gears-frontx/framework', '@gears-frontx/react'],
+    },
+    optimizeDeps: {
+      include: ['react', 'react-dom', 'react/jsx-runtime', '@globaltypesystem/gts-ts'],
+    },
+    build: {
+      target: 'esnext',
+      // No manualChunks: @module-federation/vite ignores them in a federated
+      // build ("conflicts with module federation"), so the chunks are its own.
+      // Increase chunk size warning limit or disable it
+      chunkSizeWarningLimit: 500,
     },
   };
-}
-
-// Dev proxy: the backend (studio-backend) serves REST under /cf on :8090.
-// In production the same /cf prefix is proxied by nginx (see nginx.conf).
-export default defineConfig({
-  // Keep asset URLs relative so the same immutable image works at `/` on the
-  // dedicated POC host and with the legacy `/prototype/` container mount.
-  base: "./",
-  plugins: [react(), prototypeMap()],
-  build: {
-    rollupOptions: {
-      // The portal, the backend's API reference grouped by component
-      // (/api-docs/, see src/api-docs.ts), and how the running backend is
-      // built (/architecture/, see src/architecture.ts).
-      input: {
-        main: fileURLToPath(new URL("./index.html", import.meta.url)),
-        apiDocs: fileURLToPath(new URL("./api-docs/index.html", import.meta.url)),
-        architecture: fileURLToPath(new URL("./architecture/index.html", import.meta.url)),
-      },
-    },
-  },
-  server: {
-    port: 5173,
-    // "Connect a cluster" shows the cluster's bootstrap manifest from
-    // ../deploy, outside this root, which the dev server refuses by default.
-    fs: { allow: [".", "../deploy/k8s/studio-environments"] },
-    // The repo lives on the Windows FS (/mnt/c) while vite runs in WSL:
-    // inotify events don't cross that boundary, so file edits made on the
-    // Windows side are never picked up and HMR silently serves stale code.
-    // Polling trades a little CPU for reliable change detection.
-    watch: {
-      usePolling: true,
-      interval: 400,
-    },
-    proxy: {
-      "/cf": {
-        target: process.env.STUDIO_BACKEND_URL ?? "http://127.0.0.1:8090",
-        changeOrigin: true,
-      },
-    },
-  },
 });

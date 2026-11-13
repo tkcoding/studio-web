@@ -1,0 +1,187 @@
+{
+  "manifest_version": "1",
+  "slug": "org-reports",
+  "name": "Reports",
+  "description": "Every report Studio draws, configured once for the organization.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "organization"
+  ],
+  "model": {
+    "types": [
+      {
+        "name": "report",
+        "id": "report",
+        "label": "Report",
+        "description": "The durable result of a validator or reviewer's work over a scope: a versioned aggregate composing the Findings it surfaced and the Checks it performed, with overall status and evidence.",
+        "entity": {
+          "id": "report",
+          "bucket": "automation",
+          "name": "Report",
+          "kind": "validation result aggregate",
+          "description": "The durable result of a validator or reviewer's work over a scope: a versioned aggregate composing the Findings it surfaced and the Checks it performed, with overall status and evidence.",
+          "meta": {
+            "relationship": "control-loop",
+            "priority": "P2",
+            "level": 3,
+            "badge": "",
+            "note": "",
+            "badge-style": "neutral",
+            "profiles": [
+              "Arch",
+              "Dev",
+              "QA",
+              "Sec",
+              "StudioAdmin"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "EntityId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "scope_ref",
+              "type": "EntityRef",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "report_kind",
+              "type": "automated | manual_review | mixed",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "status",
+              "type": "running | completed | failed",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "producer_ref",
+              "type": "EntityId?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "summary",
+              "type": "string?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "started_at",
+              "type": "timestamp",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "completed_at",
+              "type": "timestamp?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "contains",
+              "type": "Finding",
+              "description": "",
+              "relation": "finding",
+              "relationType": "composes",
+              "relationLabel": "contains",
+              "required": false,
+              "cardinality": "1:N",
+              "extends": "edge"
+            },
+            {
+              "name": "contains_2",
+              "type": "Check",
+              "description": "",
+              "relation": "check",
+              "relationType": "composes",
+              "relationLabel": "contains",
+              "required": false,
+              "cardinality": "1:N",
+              "extends": "edge"
+            },
+            {
+              "name": "records",
+              "type": "Evidence",
+              "description": "",
+              "relation": "evidence",
+              "relationType": "derives",
+              "relationLabel": "records",
+              "required": false,
+              "extends": "link",
+              "override": true
+            }
+          ],
+          "methods": [
+            {
+              "name": "list_findings",
+              "description": "",
+              "input": "",
+              "result": "Finding[]"
+            },
+            {
+              "name": "list_checks",
+              "description": "",
+              "input": "",
+              "result": "Check[]"
+            },
+            {
+              "name": "overall_result",
+              "description": "",
+              "input": "",
+              "result": "pass | fail | mixed"
+            },
+            {
+              "name": "to_evidence",
+              "description": "",
+              "input": "",
+              "result": "Evidence"
+            }
+          ],
+          "examples": [
+            "A governance-engine compare_objects run reporting contradiction/gap/bloat findings between a Feature Spec and its Design",
+            "A CI-triggered AI-skill review report attached to a Pull Request",
+            "A manual architecture review report"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "managed-object"
+        }
+      }
+    ],
+    "properties": [
+      {
+        "on": "organization",
+        "property": {
+          "name": "reports",
+          "type": "report",
+          "relation": "report",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Reports",
+          "description": "A tab of the organization: what it shows."
+        }
+      }
+    ]
+  }
+}

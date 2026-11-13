@@ -1,0 +1,32 @@
+{
+  "manifest_version": "1",
+  "slug": "constructor-research",
+  "name": "Constructor Research",
+  "description": "Build a project's product in Constructor Research and run it there as one of its applications.",
+  "publisher": "Constructor Fabric",
+  "levels": ["organization", "project"],
+  "inbox": [
+    {
+      "id": "deploy-failed",
+      "label": "A Research deploy you asked for failed",
+      "kind": "endpoint",
+      "path": "/studio-environments/v1/research/inbox/deploys"
+    },
+    {
+      "id": "sign-in-expires",
+      "label": "Your Constructor Research sign-in runs out",
+      "kind": "endpoint",
+      "path": "/studio-environments/v1/research/inbox/sign-in"
+    }
+  ],
+  "mcp_tools": [
+    { "name": "research_projects", "description": "The Research projects a sign-in may run products in" },
+    { "name": "research_hardware", "description": "The hardware a Research project's services may run on" }
+  ],
+  "permissions": {
+    "reads": [
+      "GET /studio-environments/v1/research/inbox/deploys",
+      "GET /studio-environments/v1/research/inbox/sign-in"
+    ]
+  }
+}

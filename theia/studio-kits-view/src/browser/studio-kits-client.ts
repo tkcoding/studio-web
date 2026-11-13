@@ -69,7 +69,7 @@ export class StudioKitsClient {
     }
 
     async catalog(): Promise<KitCatalogEntry[]> {
-        return this.items<KitCatalogEntry>(studioApiUrl('studio-kits/v1/catalog?limit=200'));
+        return this.items<KitCatalogEntry>(studioApiUrl('studio-kits/v1/catalog?shelf=official&limit=200'));
     }
 
     async installations(projectId: string): Promise<KitInstallationRow[]> {

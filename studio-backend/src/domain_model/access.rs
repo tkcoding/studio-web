@@ -18,6 +18,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use authz_resolver_sdk::pep::{AccessRequest, EnforcerError, PolicyEnforcer, ResourceType};
@@ -44,6 +45,12 @@ pub enum AccessError {
     Unavailable(String),
     /// The type's objects are a gear's records: only that gear writes them.
     Held(String),
+    /// The kit that brought the type is gone: its objects stay, read-only
+    /// (ADR-0070 §4).
+    Dormant { entity: String, kit: String },
+    /// The type is dormant and the caller does not administer the model: for
+    /// them the kit's type is not installed.
+    NotInstalled { entity: String, kit: String },
 }
 
 impl std::fmt::Display for AccessError {
@@ -52,6 +59,14 @@ impl std::fmt::Display for AccessError {
             Self::Denied => f.write_str("not permitted on domain objects"),
             Self::Unavailable(m) => write!(f, "authorization unavailable: {m}"),
             Self::Held(m) => write!(f, "{m}: change it through that gear"),
+            Self::Dormant { entity, kit } => write!(
+                f,
+                "`{entity}` was left by kit `{kit}`, which is not installed: its objects are kept read-only; install the kit again to change them"
+            ),
+            Self::NotInstalled { entity, kit } => write!(
+                f,
+                "`{entity}` comes with kit `{kit}`, which is not installed in this organization"
+            ),
         }
     }
 }
@@ -126,15 +141,84 @@ pub trait TenantParents: Send + Sync {
     async fn parent_of(&self, ctx: &SecurityContext, tenant: Uuid) -> Option<Uuid>;
 }
 
+/// How long a tenant chain read for one caller answers its later requests.
+/// The tree changes when a project is created or moved, rarely; a project
+/// moved under another parent shows within this.
+const CHAIN_KEPT_FOR: Duration = Duration::from_secs(45);
+
+/// The most chains kept at once; past it the oldest goes.
+const CHAINS_KEPT_MAX: usize = 4096;
+
+/// Tenant chains read across requests (#1041). A cold project screen asks
+/// for objects of some 25 owners in each of several concurrent requests, and
+/// each request walked every owner's chain through account-management again.
+///
+/// Only the ancestry is kept, never a PDP answer: every request still asks
+/// the PDP and applies its constraints to the chain. Keyed by the caller
+/// (subject and its tenant) as well as the owner, because a parent is read
+/// with the caller's context and a tenant the caller cannot read ends its
+/// chain: one caller's reading is never another's answer. A chain that found
+/// no parent at all is not kept: that may be a failed read, which only
+/// excludes, and it is asked again next request rather than excluding for the
+/// whole time a chain is kept.
+#[derive(Debug, Default)]
+pub struct TenantChains {
+    kept: Mutex<HashMap<ChainKey, KeptChain>>,
+}
+
+/// The caller's subject, the caller's tenant, and the owner tenant.
+type ChainKey = (Uuid, Uuid, Uuid);
+/// When the chain was read, and the owner's ancestry it found.
+type KeptChain = (Instant, Vec<Uuid>);
+
+impl TenantChains {
+    fn key(ctx: &SecurityContext, tenant: Uuid) -> (Uuid, Uuid, Uuid) {
+        (ctx.subject_id(), ctx.subject_tenant_id(), tenant)
+    }
+
+    fn get(&self, ctx: &SecurityContext, tenant: Uuid) -> Option<Vec<Uuid>> {
+        let kept = self.kept.lock().ok()?;
+        kept.get(&Self::key(ctx, tenant))
+            .filter(|(at, _)| at.elapsed() < CHAIN_KEPT_FOR)
+            .map(|(_, chain)| chain.clone())
+    }
+
+    fn put(&self, ctx: &SecurityContext, tenant: Uuid, chain: &[Uuid]) {
+        if chain.len() < 2 {
+            return;
+        }
+        let Ok(mut kept) = self.kept.lock() else {
+            return;
+        };
+        let key = Self::key(ctx, tenant);
+        if kept.len() >= CHAINS_KEPT_MAX && !kept.contains_key(&key) {
+            kept.retain(|_, (at, _)| at.elapsed() < CHAIN_KEPT_FOR);
+            let oldest = (kept.len() >= CHAINS_KEPT_MAX)
+                .then(|| kept.iter().min_by_key(|(_, (at, _))| *at).map(|(k, _)| *k))
+                .flatten();
+            if let Some(oldest) = oldest {
+                kept.remove(&oldest);
+            }
+        }
+        kept.insert(key, (Instant::now(), chain.to_vec()));
+    }
+}
+
 /// The PDP-backed policy.
 pub struct PdpPolicy {
     enforcer: PolicyEnforcer,
     tenants: Arc<dyn TenantParents>,
+    /// Tenant chains shared by this policy's requests, for a while.
+    chains: Arc<TenantChains>,
 }
 
 impl PdpPolicy {
     pub fn new(enforcer: PolicyEnforcer, tenants: Arc<dyn TenantParents>) -> Self {
-        Self { enforcer, tenants }
+        Self {
+            enforcer,
+            tenants,
+            chains: Arc::new(TenantChains::default()),
+        }
     }
 }
 
@@ -169,7 +253,8 @@ impl ObjectPolicy for PdpPolicy {
         if scope.is_deny_all() {
             return Err(AccessError::Denied);
         }
-        Ok(Access::new(ctx, scope, Some(self.tenants.clone())))
+        let access = Access::new(ctx, scope, Some(self.tenants.clone()));
+        Ok(access.sharing_chains(self.chains.clone()))
     }
 }
 
@@ -180,6 +265,9 @@ pub struct Access {
     tenants: Option<Arc<dyn TenantParents>>,
     /// Each tenant's chain to the root, itself first, read once per request.
     chains: Mutex<HashMap<Uuid, Vec<Uuid>>>,
+    /// Chains read by this caller's earlier requests, when the policy keeps
+    /// them ([`TenantChains`]).
+    shared: Option<Arc<TenantChains>>,
 }
 
 impl Access {
@@ -193,7 +281,15 @@ impl Access {
             org: ctx.subject_tenant_id(),
             tenants,
             chains: Mutex::new(HashMap::new()),
+            shared: None,
         }
+    }
+
+    /// Read and keep tenant chains in `shared` as well, across requests.
+    #[must_use]
+    pub(super) fn sharing_chains(mut self, shared: Arc<TenantChains>) -> Self {
+        self.shared = Some(shared);
+        self
     }
 
     /// The tenant an object belongs to for authorization: its project when
@@ -259,6 +355,12 @@ impl Access {
         {
             return c.clone();
         }
+        if let Some(c) = self.shared.as_ref().and_then(|s| s.get(ctx, tenant)) {
+            if let Ok(mut chains) = self.chains.lock() {
+                chains.insert(tenant, c.clone());
+            }
+            return c;
+        }
         let mut chain = vec![tenant];
         if let Some(tenants) = &self.tenants {
             let mut at = tenant;
@@ -271,6 +373,9 @@ impl Access {
                     _ => break,
                 }
             }
+        }
+        if let Some(shared) = &self.shared {
+            shared.put(ctx, tenant, &chain);
         }
         if let Ok(mut chains) = self.chains.lock() {
             chains.insert(tenant, chain.clone());
@@ -405,6 +510,96 @@ mod tests {
             )],
         )]));
         assert!(!a.admits(&ctx(), &object(None)).await);
+    }
+
+    /// [`Tree`], counting the parents it is asked for.
+    #[derive(Default)]
+    struct CountingTree(std::sync::atomic::AtomicUsize);
+    #[async_trait]
+    impl TenantParents for CountingTree {
+        async fn parent_of(&self, ctx: &SecurityContext, t: Uuid) -> Option<Uuid> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Tree.parent_of(ctx, t).await
+        }
+    }
+
+    impl CountingTree {
+        fn asked(&self) -> usize {
+            self.0.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    fn ctx_of(subject: u128) -> SecurityContext {
+        SecurityContext::builder()
+            .subject_id(Uuid::from_u128(subject))
+            .subject_tenant_id(ORG)
+            .build()
+            .unwrap()
+    }
+
+    fn org_subtree() -> AccessScope {
+        AccessScope::from_constraints(vec![ScopeConstraint::new(vec![subtree(ORG)])])
+    }
+
+    #[tokio::test]
+    async fn a_chain_is_read_once_across_requests_of_one_caller() {
+        let tree = Arc::new(CountingTree::default());
+        let shared = Arc::new(TenantChains::default());
+        for _ in 0..5 {
+            let a = Access::new(&ctx(), org_subtree(), Some(tree.clone()))
+                .sharing_chains(shared.clone());
+            assert!(a.admits(&ctx(), &object(Some(P1))).await);
+        }
+        // P1's parent, then ORG's (none): two reads, by the first request.
+        assert_eq!(tree.asked(), 2);
+    }
+
+    #[tokio::test]
+    async fn another_caller_reads_its_own_chain() {
+        let tree = Arc::new(CountingTree::default());
+        let shared = Arc::new(TenantChains::default());
+        for subject in [1, 2] {
+            let caller = ctx_of(subject);
+            let a = Access::new(&caller, org_subtree(), Some(tree.clone()))
+                .sharing_chains(shared.clone());
+            assert!(a.admits(&caller, &object(Some(P1))).await);
+        }
+        assert_eq!(tree.asked(), 4);
+    }
+
+    #[tokio::test]
+    async fn a_chain_without_a_parent_is_asked_again() {
+        // No parent may be a root or a failed read: it is not kept.
+        let tree = Arc::new(CountingTree::default());
+        let shared = Arc::new(TenantChains::default());
+        for _ in 0..3 {
+            let a = Access::new(&ctx(), org_subtree(), Some(tree.clone()))
+                .sharing_chains(shared.clone());
+            assert!(!a.admits(&ctx(), &object(Some(ELSEWHERE))).await);
+        }
+        assert_eq!(tree.asked(), 3);
+    }
+
+    #[tokio::test]
+    async fn only_the_chain_is_kept_never_the_pdp_answer() {
+        // A grant that shrank between two requests refuses at once, though
+        // the owner's chain is kept.
+        let tree = Arc::new(CountingTree::default());
+        let shared = Arc::new(TenantChains::default());
+        let wide =
+            Access::new(&ctx(), org_subtree(), Some(tree.clone())).sharing_chains(shared.clone());
+        assert!(wide.admits(&ctx(), &object(Some(P1))).await);
+        let narrow = Access::new(
+            &ctx(),
+            AccessScope::from_constraints(vec![ScopeConstraint::new(vec![
+                subtree(ORG),
+                owner_in(&[P2]),
+            ])]),
+            Some(tree.clone()),
+        )
+        .sharing_chains(shared);
+        assert!(!narrow.admits(&ctx(), &object(Some(P1))).await);
+        assert!(narrow.admits(&ctx(), &object(Some(P2))).await);
     }
 
     #[tokio::test]

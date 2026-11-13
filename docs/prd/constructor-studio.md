@@ -533,7 +533,7 @@ A decision **MUST** be shown as needing review again once the section or the gea
 
 The system **MUST** read from a project's documents, as they are written, the domain model of the application they describe: its entities with their attributes and relations, its requirements, its constraints, lifecycles and decisions. Every fact **MUST** cite the passage it comes from and say whether that passage is in force (active, proposed, deferred, superseded, or evidence rather than specification). The model **MUST** be one per project, merged across its documents, and **MUST NOT** require any document to be changed to be built.
 
-- **Rationale**: The model of a product nobody has built yet is spread over many documents, and only the whole of it shows where they disagree ([spec-domain-model.md](../spec-domain-model.md)).
+- **Rationale**: The model of a product nobody has built yet is spread over many documents, and only the whole of it shows where they disagree ([project-domain-model.md](../project-domain-model.md)).
 - **Actors**: `cpt-studio-actor-member`
 
 #### Disagreements in the documents are findings
@@ -949,8 +949,8 @@ Criticality follows `README.md`: without PostgreSQL, gears-rust or an identity p
 | `cpt-studio-fr-spec-gear-mapping` | `studio-backend/src/spec_mapping/` (`reading.rs`: a specification read as written; `plan.rs`: contract, then evidence with a cited passage, then gap); `/studio-spec-mapping/v1/{plan,capabilities}`; facts from `product/gearbox.rs` (`gdl_contracts`) and `repo_enrich.rs` (`doc_text`); vocabulary `documents/model.rs` (`Capability::contracts`); prototype project tab `components`; #205, #199 |
 | `cpt-studio-fr-mapping-decisions` | `studio-backend/src/spec_mapping/` (`/studio-spec-mapping/v1/decisions`, ranking in `plan.rs`); stored as `mapping_decision` nodes with `decision_on` edges by `artifact_ingest` (`port::MappingDecisionStore`); prototype project tab `components` (✓/✗ on a candidate); planned: decisions shared across an organization; #205, #206 |
 | `cpt-studio-fr-nfr-to-profile` | `studio-backend/src/spec_mapping/` (`reading::declared_requirements`, `plan::deployment_profile`, `nonfunctional` capabilities offer no gear); `/studio-spec-mapping/v1/requirements`; indexed by `documents` (`m0013`); prototype project tab `components` ("Use <profile>"); planned: `config` from requirements; #205 |
-| `cpt-studio-fr-spec-domain-model` | planned: `studio-backend/src/documents/spec_model/` (index, extraction per revision, assembly); `/studio-documents/v1/spec-model`; prototype project tab `model`; [spec-domain-model.md](../spec-domain-model.md) |
-| `cpt-studio-fr-spec-contradictions` | `studio-backend/src/documents/spec_model/index.rs` (references, built); planned: `rules.rs`, `judge.rs`; `/studio-documents/v1/spec-model/findings`; recorded as `spec_finding` nodes with `detector: model`; prototype project tab `model` |
+| `cpt-studio-fr-spec-domain-model` | planned: `studio-backend/src/documents/spec_model/` (index, extraction per revision, assembly); `/studio-documents/v1/project-domain-model`; prototype project tab `model`; [project-domain-model.md](../project-domain-model.md) |
+| `cpt-studio-fr-spec-contradictions` | `studio-backend/src/documents/spec_model/index.rs` (references, built); planned: `rules.rs`, `judge.rs`; `/studio-documents/v1/project-domain-model/findings`; recorded as `spec_finding` nodes with `detector: model`; prototype project tab `model` |
 | `cpt-studio-fr-ide-session` | `studio-backend/src/studio_session/`; `/studio-session/v1`; `theia/Dockerfile`, `theia/browser-app/`; prototype "Open Studio" launcher and `home` (live sessions) |
 | `cpt-studio-fr-theia-bridge` | `studio-backend/src/studio_theia/`; `/studio-theia/v1`; `theia/studio/src/node/studio-control-api.ts` |
 | `cpt-studio-fr-ide-product-surface` | `theia/studio/`, `theia/product-ext/`, `theia/drawio-editor/` |

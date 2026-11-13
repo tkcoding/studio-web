@@ -573,9 +573,10 @@ mod graph_backend {
 
     use graph_storage_sdk::GraphStorageClientV1;
     use graph_storage_sdk::models::{
-        Direction, EdgeSpec, IngestOptions, IngestRequest, NodeSpec, TraverseRequest,
-        TypeRegistration,
+        Direction, EdgeSpec, IngestOptions, IngestRequest, NodeSpec, OnExisting, TraverseRequest,
+        TypeRegistration, TypeRegistrationOptions,
     };
+    use toolkit_canonical_errors::CanonicalError;
     use toolkit_odata::ODataQuery;
 
     use super::super::gts;
@@ -646,6 +647,39 @@ mod graph_backend {
             .contains("already registered with a different schema")
     }
 
+    /// True when graph-storage refused ONE type's change, as opposed to
+    /// failing the call: the candidate is not provably compatible
+    /// (`aborted`), a stored row does not validate against it
+    /// (`invalid_argument`), or the type has more rows than an update may
+    /// scan (`out_of_range`). Each is a fact about that type in this tenant,
+    /// so the type keeps the schema it has and the others go on; an outage
+    /// (`unavailable`, `internal`, a deadline) is still an error.
+    fn is_refused_change(e: &CanonicalError) -> bool {
+        matches!(
+            e,
+            CanonicalError::Aborted { .. }
+                | CanonicalError::InvalidArgument { .. }
+                | CanonicalError::OutOfRange { .. }
+                | CanonicalError::AlreadyExists { .. }
+        ) || is_schema_conflict(e)
+    }
+
+    /// How every domain registration asks: update a stored type in place
+    /// rather than refuse it (`on_existing: Update`), and admit a change the
+    /// schemas cannot prove compatible when the tenant's stored rows still
+    /// validate (`revalidate`). The second is what lets an `index` path reach
+    /// a type registered before it: the path needs a typed property, and a
+    /// typed property narrows what the payload accepts. The scan behind it
+    /// runs once per type, the first time the new schema meets the stored
+    /// one; after that the two are identical and nothing is scanned.
+    fn registration_options() -> TypeRegistrationOptions {
+        TypeRegistrationOptions {
+            on_existing: OnExisting::Update,
+            revalidate: true,
+            ..Default::default()
+        }
+    }
+
     fn ingest_one(nodes: Vec<NodeSpec>, edges: Vec<EdgeSpec>) -> IngestRequest {
         ingest_with(nodes, edges, true)
     }
@@ -669,6 +703,140 @@ mod graph_backend {
         }
     }
 
+    /// What one [`DomainStore::list_objects`] call asks for.
+    struct ObjectRead<'a> {
+        patterns: Vec<String>,
+        reverse: Vec<(String, String)>,
+        scope: Option<&'a str>,
+        limit: Option<usize>,
+    }
+
+    enum ReadError {
+        /// The projection refused the `$filter` itself: a path the selected
+        /// types do not all declare. Nothing was read.
+        FilterRefused(CanonicalError),
+        Failed(anyhow::Error),
+    }
+
+    /// `payload/_scope eq '<scope>'`, quoted the `OData` way (a quote is
+    /// doubled), so a scope is always one literal and never filter syntax.
+    fn scope_filter(scope: &str) -> anyhow::Result<toolkit_odata::ast::Expr> {
+        let raw = format!(
+            "payload/{} eq '{}'",
+            gts::SCOPE_FIELD,
+            scope.replace('\'', "''")
+        );
+        Ok(toolkit_odata::parse_filter_string(&raw)
+            .map_err(|e| anyhow::anyhow!("scope filter `{raw}`: {e}"))?
+            .into_expr())
+    }
+
+    impl GraphStorageBackend {
+        /// Page the projection to the end (or to `limit`), keeping the
+        /// tenant's live objects in scope. With a filter, every page sends it
+        /// again: a cursor is bound to the filter it was minted under.
+        async fn read_objects(
+            &self,
+            ctx: &SecurityContext,
+            read: &ObjectRead<'_>,
+            filter: Option<toolkit_odata::ast::Expr>,
+        ) -> Result<Vec<ObjectNode>, ReadError> {
+            let filtered = filter.is_some();
+            let with_filter = |q: ODataQuery| match &filter {
+                Some(f) => q.with_filter(f.clone()),
+                None => q,
+            };
+            let mut out: Vec<ObjectNode> = Vec::new();
+            // Ask for no more than what is still wanted, so a bounded read costs
+            // one page rather than draining the type.
+            let page_size = |taken: usize| -> u32 {
+                match read.limit {
+                    // With a scope narrowed here a page yields fewer rows than
+                    // it costs, so narrowing the request would just add round
+                    // trips: ask for full pages and stop on the count instead.
+                    Some(_) if read.scope.is_some() && !filtered => LIST_PAGE,
+                    Some(n) => u32::try_from(n.saturating_sub(taken))
+                        .unwrap_or(LIST_PAGE)
+                        .clamp(1, LIST_PAGE),
+                    None => LIST_PAGE,
+                }
+            };
+            let started = std::time::Instant::now();
+            let mut pages = 0u32;
+            let mut query = with_filter(ODataQuery::default().with_limit(u64::from(page_size(0))));
+            loop {
+                let page = match self
+                    .client
+                    .project_nodes(ctx, &read.patterns, query.clone())
+                    .await
+                {
+                    Ok(page) => page,
+                    Err(e @ CanonicalError::InvalidArgument { .. }) if filtered && pages == 0 => {
+                        return Err(ReadError::FilterRefused(e));
+                    }
+                    Err(e) => {
+                        return Err(ReadError::Failed(anyhow::anyhow!(
+                            "graph-storage domain projection: {e}"
+                        )));
+                    }
+                };
+                pages += 1;
+                for row in page.items {
+                    // The projection answers every tenant the caller reaches
+                    // (a platform administrator reaches them all, a member of
+                    // two organizations both), but a tenant's model and records
+                    // are its own: another tenant's node with the same key
+                    // would stand in for this one's.
+                    if row.envelope.tenant_id != ctx.subject_tenant_id() {
+                        continue;
+                    }
+                    let Some((_, our_type)) = read.reverse.iter().find(|(g, _)| *g == row.type_id)
+                    else {
+                        continue;
+                    };
+                    let value = row.payload.unwrap_or_else(|| serde_json::json!({}));
+                    // Checked here even when filtered: the filter is the
+                    // graph's reading of the same rule, and this one is ours.
+                    if !super::in_scope(&value, read.scope) || !super::is_live(&value) {
+                        continue;
+                    }
+                    out.push(ObjectNode {
+                        type_id: our_type.clone(),
+                        instance_id: row.node_key,
+                        value,
+                    });
+                }
+                if read.limit.is_some_and(|n| out.len() >= n) {
+                    break;
+                }
+                let Some(next) = page.page_info.next_cursor else {
+                    break;
+                };
+                let cursor = toolkit_odata::CursorV1::decode(&next).map_err(|e| {
+                    ReadError::Failed(anyhow::anyhow!(
+                        "graph-storage returned an undecodable cursor: {e}"
+                    ))
+                })?;
+                query = with_filter(
+                    ODataQuery::default()
+                        .with_limit(u64::from(page_size(out.len())))
+                        .with_cursor(cursor),
+                );
+            }
+            if let Some(n) = read.limit {
+                out.truncate(n);
+            }
+            tracing::debug!(
+                objects = out.len(),
+                pages,
+                filtered,
+                elapsed_ms = started.elapsed().as_millis(),
+                "studio-domain-model: projection read"
+            );
+            Ok(out)
+        }
+    }
+
     #[async_trait]
     impl DomainStore for GraphStorageBackend {
         async fn register_meta_types(&self, ctx: &SecurityContext) -> anyhow::Result<()> {
@@ -676,12 +844,15 @@ mod graph_backend {
                 .into_iter()
                 .map(|(type_id, schema)| TypeRegistration { type_id, schema })
                 .collect();
-            self.client.register_types(ctx, batch).await.map_err(|e| {
-                anyhow::anyhow!(
-                    "register domain meta types: {}",
-                    crate::graph_error::explain(&e)
-                )
-            })?;
+            self.client
+                .register_types_with(ctx, batch, registration_options())
+                .await
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "register domain meta types: {}",
+                        crate::graph_error::explain(&e)
+                    )
+                })?;
             Ok(())
         }
 
@@ -716,18 +887,34 @@ mod graph_backend {
                 batch.push(TypeRegistration { type_id, schema });
             }
             // One batch is the fast path and the normal one. It aborts whole,
-            // though, and one immutable-schema refusal in it would otherwise
-            // take down every write for the whole model — so a failed batch
-            // falls back to registering type by type, which isolates the
-            // refusals to the types that actually drifted.
-            match self.client.register_types(ctx, batch.clone()).await {
+            // though, and one refused type in it would otherwise take down
+            // every write for the whole model — so a failed batch falls back
+            // to registering type by type, which isolates the refusals to the
+            // types that actually drifted. A refused type keeps the schema it
+            // has: it is written to as before, and a scoped read of it walks
+            // instead of filtering (see `list_objects`).
+            let options = registration_options();
+            match self
+                .client
+                .register_types_with(ctx, batch.clone(), options.clone())
+                .await
+            {
                 Ok(_) => Ok(Vec::new()),
                 Err(batch_err) => {
                     let mut pinned: Vec<String> = Vec::new();
                     for one in batch {
                         let type_id = one.type_id.clone();
-                        if let Err(e) = self.client.register_types(ctx, vec![one]).await {
-                            if is_schema_conflict(&e) {
+                        if let Err(e) = self
+                            .client
+                            .register_types_with(ctx, vec![one], options.clone())
+                            .await
+                        {
+                            if is_refused_change(&e) {
+                                tracing::warn!(
+                                    type_id = %type_id,
+                                    error = %crate::graph_error::explain(&e),
+                                    "studio-domain-model: the stored type keeps its schema"
+                                );
                                 pinned.push(type_id);
                             } else {
                                 return Err(anyhow::anyhow!("register domain types: {e}"));
@@ -837,6 +1024,12 @@ mod graph_backend {
             }
         }
 
+        /// A scoped read asks the graph for the scope (`payload/_scope eq …`,
+        /// the path every domain node type declares in `index`), so it costs
+        /// the scope's objects rather than every object of the type. When the
+        /// projection refuses the filter — a type registered before the path
+        /// was declared, which kept its schema (`register_types`' `pinned`) —
+        /// the read walks the type and narrows here, as it always did.
         async fn list_objects(
             &self,
             ctx: &SecurityContext,
@@ -847,76 +1040,35 @@ mod graph_backend {
             if type_ids.is_empty() {
                 return Ok(Vec::new());
             }
-            // Map each requested our-type-id to its graph type, keeping the
-            // reverse so a row's graph type resolves back to our id.
-            let patterns: Vec<String> = type_ids.iter().map(|t| gts::graph_type_id(t)).collect();
-            let reverse: Vec<(String, String)> = type_ids
-                .iter()
-                .map(|t| (gts::graph_type_id(t), t.clone()))
-                .collect();
-
-            let mut out: Vec<ObjectNode> = Vec::new();
-            // Ask for no more than what is still wanted, so a bounded read costs
-            // one page rather than draining the type.
-            let page_size = |taken: usize| -> u32 {
-                match limit {
-                    // With a scope filter a page yields fewer rows than it
-                    // costs, so narrowing the request would just add round
-                    // trips: ask for full pages and stop on the count instead.
-                    Some(_) if scope.is_some() => LIST_PAGE,
-                    Some(n) => u32::try_from(n.saturating_sub(taken))
-                        .unwrap_or(LIST_PAGE)
-                        .clamp(1, LIST_PAGE),
-                    None => LIST_PAGE,
-                }
+            let read = ObjectRead {
+                // Map each requested our-type-id to its graph type, keeping the
+                // reverse so a row's graph type resolves back to our id.
+                patterns: type_ids.iter().map(|t| gts::graph_type_id(t)).collect(),
+                reverse: type_ids
+                    .iter()
+                    .map(|t| (gts::graph_type_id(t), t.clone()))
+                    .collect(),
+                scope,
+                limit,
             };
-            let mut query = ODataQuery::default().with_limit(u64::from(page_size(0)));
-            loop {
-                let page = self
-                    .client
-                    .project_nodes(ctx, &patterns, query.clone())
-                    .await
-                    .map_err(|e| anyhow::anyhow!("graph-storage domain projection: {e}"))?;
-                for row in page.items {
-                    // The projection answers every tenant the caller reaches
-                    // (a platform administrator reaches them all, a member of
-                    // two organizations both), but a tenant's model and records
-                    // are its own: another tenant's node with the same key
-                    // would stand in for this one's.
-                    if row.envelope.tenant_id != ctx.subject_tenant_id() {
-                        continue;
-                    }
-                    let Some((_, our_type)) = reverse.iter().find(|(g, _)| *g == row.type_id)
-                    else {
-                        continue;
-                    };
-                    let value = row.payload.unwrap_or_else(|| serde_json::json!({}));
-                    if !super::in_scope(&value, scope) || !super::is_live(&value) {
-                        continue;
-                    }
-                    out.push(ObjectNode {
-                        type_id: our_type.clone(),
-                        instance_id: row.node_key,
-                        value,
-                    });
+            if let Some(s) = scope {
+                match self.read_objects(ctx, &read, Some(scope_filter(s)?)).await {
+                    Ok(out) => return Ok(out),
+                    Err(ReadError::FilterRefused(e)) => tracing::debug!(
+                        error = %e,
+                        types = ?read.patterns,
+                        "studio-domain-model: the scope filter is not admitted for these types; walking them"
+                    ),
+                    Err(ReadError::Failed(e)) => return Err(e),
                 }
-                if limit.is_some_and(|n| out.len() >= n) {
-                    break;
+            }
+            match self.read_objects(ctx, &read, None).await {
+                Ok(out) => Ok(out),
+                Err(ReadError::FilterRefused(e)) => {
+                    Err(anyhow::anyhow!("graph-storage domain projection: {e}"))
                 }
-                let Some(next) = page.page_info.next_cursor else {
-                    break;
-                };
-                let cursor = toolkit_odata::CursorV1::decode(&next).map_err(|e| {
-                    anyhow::anyhow!("graph-storage returned an undecodable cursor: {e}")
-                })?;
-                query = ODataQuery::default()
-                    .with_limit(u64::from(page_size(out.len())))
-                    .with_cursor(cursor);
+                Err(ReadError::Failed(e)) => Err(e),
             }
-            if let Some(n) = limit {
-                out.truncate(n);
-            }
-            Ok(out)
         }
 
         async fn upsert_nodes_keeping_vectors(

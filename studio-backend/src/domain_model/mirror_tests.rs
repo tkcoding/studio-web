@@ -76,7 +76,7 @@ impl Pair {
     async fn new(tenant: Uuid) -> Self {
         let inner = Arc::new(InMemoryDomainStore::default());
         let mirror = mirror().await;
-        Self {
+        let pair = Self {
             graph: DomainModelService::new(inner.clone()),
             sql: DomainModelService::new(Arc::new(IndexedDomainStore::new(
                 inner.clone(),
@@ -85,7 +85,22 @@ impl Pair {
             inner,
             mirror,
             ctx: ctx_in(tenant),
+        };
+        // The objects below are risks, which kit project-lifecycle brings
+        // (ADR-0070): the organization's model carries it, as a base kit.
+        let kit: Value = serde_json::from_str(include_str!(
+            "../kit_registry/builtin/project-lifecycle.kit.json"
+        ))
+        .expect("project-lifecycle kit.json");
+        let overlay: super::super::kit_overlay::KitOverlay =
+            serde_json::from_value(kit["model"].clone()).expect("its model");
+        for service in [&pair.sql, &pair.graph] {
+            service
+                .sync_kit_model(&pair.ctx, "project-lifecycle", "1", Some(&overlay))
+                .await
+                .expect("the kit's model");
         }
+        pair
     }
 
     /// Written through the read model's store, so both halves have it.
@@ -97,12 +112,14 @@ impl Pair {
     }
 
     async fn fill(&self) {
+        // The organization's model, kits and all, as the service hands it.
+        let model = self.graph.tenant_model(&self.ctx).await.expect("model");
         fill_tenant(
             self.inner.as_ref() as &dyn DomainStore,
             &self.mirror,
             &FillState::default(),
             &self.ctx,
-            &Ontology::load(),
+            &model,
         )
         .await
         .expect("fill");
@@ -204,6 +221,21 @@ async fn seeded(tenant: u128) -> Pair {
     .await;
     p.fill().await;
     p
+}
+
+#[tokio::test]
+async fn files_and_their_subtypes_share_fields_in_both_readers() {
+    let p = Pair::new(Uuid::new_v4()).await;
+    p.write(json!([
+        {"op":"upsert", "type":"file", "key":"uploaded", "value":{"name":"interview.txt", "media_type":"text/plain"}},
+        {"op":"upsert", "type":"repository-file", "key":"readme", "value":{"name":"README.md", "media_type":"text/markdown", "revision":"abc"}}
+    ])).await;
+    p.fill().await;
+    for ty in ["file", "repository-file"] {
+        let result = p.same(ty, json!({"fields":["name", "media_type"], "order_by":[{"field":"name", "direction":"asc"}]})).await;
+        assert_eq!(result["total"], 1);
+        assert!(result["items"][0]["value"]["media_type"].is_string());
+    }
 }
 
 #[tokio::test]
@@ -586,4 +618,39 @@ async fn a_project_grant_narrows_the_sql_root_its_total_and_its_relations() {
         .await
         .unwrap();
     assert_eq!(out.rows.items[0].relations["delivers"].total, 1);
+}
+
+/// The SQL reader counts only when its page cannot say how many match: the
+/// total must be the graph's at every page shape, including past the end.
+#[tokio::test]
+async fn totals_match_at_every_page_shape() {
+    let p = seeded(0xd0c7).await;
+    let order = json!([{"field": "title", "direction": "asc"}]);
+    for (limit, offset) in [
+        (1, 0),
+        (3, 0),
+        (7, 0),
+        (8, 0),
+        (200, 0),
+        (3, 3),
+        (3, 6),
+        (3, 7),
+        (3, 9),
+        (200, 5),
+    ] {
+        let page = p
+            .same(
+                "risk",
+                json!({"limit": limit, "offset": offset, "order_by": order}),
+            )
+            .await;
+        assert_eq!(page["total"], json!(7), "limit {limit} offset {offset}");
+    }
+    let narrowed = p
+        .same(
+            "risk",
+            json!({"where": {"impact": {"_eq": "high"}}, "limit": 2, "offset": 2}),
+        )
+        .await;
+    assert_eq!(narrowed["total"], json!(3));
 }

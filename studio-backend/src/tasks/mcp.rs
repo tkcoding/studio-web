@@ -6,24 +6,47 @@ use serde_json::json;
 use crate::mcp::sdk::{Effect, Run, Tool, object};
 
 pub fn tools() -> Vec<Tool> {
-    vec![Tool {
-        name: "task_run",
-        description: "One background run by the `run_id` an action answered with (an image \
+    vec![
+        Tool {
+            name: "task_run",
+            description: "One background run by the `run_id` an action answered with (an image \
             import, a build start, a deploy): its `state` (queued, running, succeeded, failed, \
             cancelled), the phase it last reported, its result and `last_error`.",
-        input_schema: || {
-            object(
-                json!({
-                    "id": { "type": "string", "description": "The run's id (`run_id`)." },
-                    "tenant": { "type": "string", "description": "The tenant the run is in, when it is not the caller's (a project's id)." }
-                }),
-                &["id"],
-            )
+            input_schema: || {
+                object(
+                    json!({
+                        "id": { "type": "string", "description": "The run's id (`run_id`)." },
+                        "tenant": { "type": "string", "description": "The tenant the run is in, when it is not the caller's (a project's id)." }
+                    }),
+                    &["id"],
+                )
+            },
+            effect: Effect::Read,
+            experimental: false,
+            run: Run::Get("/studio-tasks/v1/runs/{id}"),
         },
-        effect: Effect::Read,
-        experimental: false,
-        run: Run::Get("/studio-tasks/v1/runs/{id}"),
-    }]
+        Tool {
+            name: "task_retry",
+            description: "Run a failed or cancelled background run again. A run that records \
+            its steps (a project's creation) continues where it stopped; others start over. \
+            Does the work again: say what you retry first.",
+            input_schema: || {
+                object(
+                    json!({
+                        "id": { "type": "string", "description": "The run's id (`run_id`)." },
+                        "tenant": { "type": "string", "description": "The tenant the run is in, when it is not the caller's (an organization's id for a project's creation)." }
+                    }),
+                    &["id"],
+                )
+            },
+            effect: Effect::Write,
+            experimental: true,
+            run: Run::Post {
+                path: "/studio-tasks/v1/runs/{id}/retry",
+                query: &["tenant"],
+            },
+        },
+    ]
 }
 
 #[cfg(test)]

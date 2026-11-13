@@ -191,14 +191,42 @@ const VECTOR_PATHS: [&str; 18] = [
 /// and with it every write in the model. Nothing model-derived belongs in a
 /// schema that cannot change; the edge types already worked this way and the
 /// node types now do too.
+///
+/// **Plus one index path, `_scope`** ([`INDEX_PATHS`]): the workspace or
+/// project an object belongs to, which is what a scoped listing narrows by.
+/// Declared, the projection filters on it with the payload GIN behind it
+/// (`payload/_scope eq '…'`), so a scoped read costs the scope's objects
+/// rather than the whole type. An index path needs a typed property at that
+/// path, so the payload declares `_scope` as a string (or null) and stays
+/// open otherwise. Like the search paths it is the same for every type and
+/// never read off the model.
 pub fn derived_node_schema(type_id: &str) -> serde_json::Value {
     let mut schema = derived_schema(type_id);
     schema["x-gts-traits"] = serde_json::json!({
         "full_text_search": FULL_TEXT_PATHS,
         "vector_search": VECTOR_PATHS,
+        "index": INDEX_PATHS,
     });
+    if let Some(all_of) = schema["allOf"].as_array_mut() {
+        all_of.push(serde_json::json!({
+            "type": "object",
+            "properties": { "payload": {
+                "type": "object",
+                "properties": {
+                    SCOPE_FIELD: { "type": ["string", "null"] },
+                },
+            } },
+        }));
+    }
     schema
 }
+
+/// The payload field a scoped object names its workspace or project in.
+pub const SCOPE_FIELD: &str = "_scope";
+
+/// The payload paths every domain node type declares in its `index` trait,
+/// which is what admits them to the projection's `$filter`.
+pub const INDEX_PATHS: [&str; 1] = ["/payload/_scope"];
 
 pub fn derived_schema(type_id: &str) -> serde_json::Value {
     let family = if is_edge_type(type_id) {

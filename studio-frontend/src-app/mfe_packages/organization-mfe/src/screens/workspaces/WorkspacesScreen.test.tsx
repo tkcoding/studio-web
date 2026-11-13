@@ -51,7 +51,8 @@ const rows = (count: number) =>
     child_count: 1,
   }));
 
-const shownRows = () => screen.queryAllByRole('button', { name: /^(Platform|Workspace \d+)$/ }).length;
+const shownRows = () => screen.queryAllByText(/^(Platform|Workspace \d+)$/).length;
+const rowOf = (name: string) => screen.getByText(name).closest('tr') as HTMLElement;
 const search = () => screen.queryByPlaceholderText(en.search_placeholder);
 const typeSearch = (value: string) => fireEvent.change(search()!, { target: { value } });
 
@@ -114,7 +115,7 @@ describe('WorkspacesScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Go to page 2' }));
 
     await waitFor(() => expect(shownRows()).toBe(5));
-    expect(screen.getByRole('button', { name: 'Workspace 29' })).toBeTruthy();
+    expect(screen.getByText('Workspace 29')).toBeTruthy();
     expect(screen.getByText('30 workspaces')).toBeTruthy();
   });
 
@@ -125,7 +126,7 @@ describe('WorkspacesScreen', () => {
     typeSearch('  platform ');
 
     await waitFor(() => expect(shownRows()).toBe(1));
-    expect(screen.getByRole('button', { name: 'Platform' })).toBeTruthy();
+    expect(screen.getByText('Platform')).toBeTruthy();
   });
 
   it('says nothing matched, and Clear search brings the rows back', async () => {
@@ -148,11 +149,19 @@ describe('WorkspacesScreen', () => {
     expect(screen.queryByRole('button', { name: en.clear_search })).toBeNull();
   });
 
-  it('opens a workspace from its row', async () => {
+  it('opens a workspace clicked anywhere on its row', async () => {
     render(<WorkspacesScreen />);
     await waitFor(() => expect(shownRows()).toBe(10));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Platform' }));
+    fireEvent.click(rowOf('Platform').querySelector('td:last-child')!);
+    expect(requestWorkspace).toHaveBeenCalledWith(null, { id: 'w0', name: 'Platform' }, 'org-1');
+  });
+
+  it('opens a workspace with Enter on its row', async () => {
+    render(<WorkspacesScreen />);
+    await waitFor(() => expect(shownRows()).toBe(10));
+
+    fireEvent.keyDown(rowOf('Platform'), { key: 'Enter' });
     expect(requestWorkspace).toHaveBeenCalledWith(null, { id: 'w0', name: 'Platform' }, 'org-1');
   });
 

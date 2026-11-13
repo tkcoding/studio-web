@@ -98,3 +98,24 @@ fn a_relative_path_stays_inside_the_repository() {
     assert!(relative_path("a//b").is_err());
     assert!(relative_path("..").is_ok());
 }
+
+#[test]
+fn a_path_reads_as_the_string_it_names() {
+    let c = call(
+        "gdl_version = \"1.7\"\nservice(\n  one = path(\"mfe/app\"),\n  many = [path(\"mfe/a\"), \"mfe/b\"],\n)\n",
+    )
+    .unwrap();
+    assert_eq!(c.args[0].1, Lit::Str("mfe/app".into()));
+    assert_eq!(c.args[1].1, Lit::List(vec!["mfe/a".into(), "mfe/b".into()]));
+    for src in [
+        "gdl_version = \"1.7\"\nservice(one = path())\n",
+        "gdl_version = \"1.7\"\nservice(one = path(\"a\", \"b\"))\n",
+        "gdl_version = \"1.7\"\nservice(one = path(other))\n",
+    ] {
+        let e = call(src).unwrap_err();
+        assert!(e.contains("`path()` takes one string"), "{src:?}: {e}");
+    }
+    // Any other call is still a name, not a literal.
+    let e = call("gdl_version = \"1.7\"\nservice(one = glob(\"a\"))\n").unwrap_err();
+    assert!(e.contains("is a name, not a literal"), "{e}");
+}

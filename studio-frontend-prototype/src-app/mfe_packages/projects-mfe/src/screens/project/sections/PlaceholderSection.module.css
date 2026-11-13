@@ -1,0 +1,15 @@
+/* ui-kit 0.4.0-alpha.6 caps Empty at 32rem with no auto margins; centring it is
+ * the placing screen's job. */
+.empty {
+  margin-inline: auto;
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.skeletonBlock {
+  height: var(--space-8);
+}

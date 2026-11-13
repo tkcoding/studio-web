@@ -48,6 +48,47 @@ pub struct KitDescriptor {
     pub default_version: String,
     #[serde(default = "default_manifest_path")]
     pub manifest_path: String,
+    /// The library shelf the kit is on (ADR-0068 §4): [`SHELF_BUILTIN`],
+    /// [`SHELF_OFFICIAL`] or [`SHELF_ORGANIZATION`]. A deployment's
+    /// `STUDIO_KIT_CATALOGUE` names official kits only, so it defaults to that.
+    #[serde(default = "default_shelf")]
+    pub shelf: String,
+    /// The levels the kit may be installed on (`platform`, `organization`, `workspace`,
+    /// `project`), from its manifest's `[kit] levels`. Empty for a kit whose
+    /// manifest is read in its repository rather than by this gear.
+    #[serde(default)]
+    pub levels: Vec<String>,
+}
+
+/// Shipped in Studio's image and versioned with it (ADR-0068 §4). Installed
+/// for every organization as a base kit until a platform administrator
+/// removes it (ADR-0069 §4), except the kits of [`OPT_IN_BUILTIN`].
+pub const SHELF_BUILTIN: &str = "builtin";
+
+/// Built-in kits that are **not** base kits by default (ADR-0068 §7: "installed
+/// only where someone asks for them"). An organization installs one for
+/// itself, or a platform administrator makes it a base kit for every
+/// organization; until then it is in the library and applies nowhere.
+pub const OPT_IN_BUILTIN: &[&str] = &[CONSTRUCTOR_RESEARCH_KIT];
+
+/// The Constructor Research kit (`docs/design/studio-kits.md` §3.13): building
+/// a project's product in Constructor Research and running it there as one of
+/// its applications (ADR-0049). studio-environments asks for it before a
+/// Research environment is added or changed, or a build, deploy or rollback
+/// to one starts.
+pub const CONSTRUCTOR_RESEARCH_KIT: &str = "constructor-research";
+
+/// Is `slug` a built-in kit only where somebody installs it?
+pub fn is_opt_in_builtin(slug: &str) -> bool {
+    OPT_IN_BUILTIN.contains(&slug)
+}
+/// Constructor's kits in their own repositories, pinned by version.
+pub const SHELF_OFFICIAL: &str = "official";
+/// A kit an organization publishes for itself (ADR-0068 phase 7).
+pub const SHELF_ORGANIZATION: &str = "organization";
+
+fn default_shelf() -> String {
+    SHELF_OFFICIAL.to_owned()
 }
 
 fn default_visibility() -> String {
@@ -149,6 +190,11 @@ pub struct KitRegistryService {
     account_management: Arc<dyn AccountManagementClient>,
     /// `STUDIO_KIT_CATALOGUE`, else [`official_catalogue`]; read once.
     catalogue: Vec<KitDescriptor>,
+    /// The kits a bundle source adds to the library, read once; none takes a
+    /// slug the built-in or official shelf holds.
+    bundle_kits: Vec<KitDescriptor>,
+    /// Kits whose micro-frontends are served at run time (ADR-0068 phase 5).
+    bundles: Arc<super::bundles::KitBundles>,
     #[cfg(feature = "theia-bridge")]
     client_hub: Arc<ClientHub>,
 }
@@ -167,15 +213,55 @@ impl KitRegistryService {
             Some(json) => parse_catalogue(&json).context("STUDIO_KIT_CATALOGUE")?,
             None => official_catalogue(),
         };
+        let bundles = super::bundles::KitBundles::from_env()?;
+        let mut bundle_kits = Vec::new();
+        for kit in bundles.kits() {
+            let taken = builtin_catalogue()
+                .iter()
+                .chain(catalogue.iter())
+                .any(|known| known.slug == kit.slug);
+            if taken {
+                tracing::warn!(kit = %kit.slug, "studio-kits: a bundle kit takes a slug the library holds; left out");
+            } else {
+                bundle_kits.push(kit);
+            }
+        }
         Ok(Self {
             account_management,
             catalogue,
+            bundle_kits,
+            bundles: Arc::new(bundles),
             #[cfg(feature = "theia-bridge")]
             client_hub: _client_hub,
         })
     }
 
+    /// Every kit of the library: the built-in kits first, then the official
+    /// ones (`STUDIO_KIT_CATALOGUE`, else [`official_catalogue`]), then the
+    /// kits whose bundles a source brings (`STUDIO_KIT_BUNDLES_DIR`). A
+    /// bundle kit never takes a slug the library already holds.
     pub fn catalogue(&self) -> Vec<KitDescriptor> {
+        let mut all = builtin_catalogue();
+        all.extend(self.catalogue.iter().cloned());
+        all.extend(self.bundle_kits.iter().cloned());
+        all
+    }
+
+    /// Where kits' micro-frontends are served from.
+    pub fn bundles(&self) -> Arc<super::bundles::KitBundles> {
+        self.bundles.clone()
+    }
+
+    /// One kit of the library with what it brings (ADR-0068 §4: shown before
+    /// it is installed). `None` for a slug the library does not hold.
+    pub fn kit(&self, slug: &str) -> Option<super::contents::KitDetail> {
+        super::contents::find(self.catalogue(), slug)
+    }
+
+    /// The kits the IDE's installer can write into a checkout: the official
+    /// shelf only. A built-in kit is compiled into the portal and has no
+    /// repository for `cfs` to read.
+    pub fn installable(&self) -> Vec<KitDescriptor> {
         self.catalogue.clone()
     }
 
@@ -222,7 +308,7 @@ impl KitRegistryService {
         let install_mode = normalize_install_mode(install_mode)?;
         let scope = normalize_scope(scope)?;
         let kit = self
-            .catalogue()
+            .installable()
             .into_iter()
             .find(|kit| kit.slug == kit_slug)
             .context("kit is not registered")?;
@@ -323,6 +409,9 @@ impl KitRegistryService {
         }
     }
 
+    /// Fails with [`SessionUnavailable`] when the IDE could not do it (no
+    /// bridge, no running session, the session's install refused), and with
+    /// [`NotRequested`] when the project never asked for the kit.
     pub async fn materialize_installation(
         &self,
         ctx: &SecurityContext,
@@ -335,7 +424,7 @@ impl KitRegistryService {
         let index = installations
             .iter()
             .position(|entry| entry.kit_slug == kit_slug)
-            .context("kit installation has not been requested")?;
+            .ok_or_else(|| anyhow::Error::new(NotRequested(kit_slug.clone())))?;
         installations[index].status = "installing".to_owned();
         installations[index].failure_reason = None;
         // Cloned rather than moved: the failure arm needs to know which
@@ -404,11 +493,39 @@ impl KitRegistryService {
                 );
                 self.write_installations(ctx, project_id, installations)
                     .await?;
-                Err(error)
+                Err(anyhow::Error::new(SessionUnavailable(format!("{error:#}"))))
             }
         }
     }
+}
 
+/// The IDE could not materialize a kit: no bridge, no running session, or the
+/// session's install failed. The repository set exists only while a session
+/// runs, so this is an expected state (503), not a defect.
+#[derive(Debug)]
+pub struct SessionUnavailable(pub String);
+
+impl std::fmt::Display for SessionUnavailable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for SessionUnavailable {}
+
+/// The project never requested the kit it asked to materialize (404).
+#[derive(Debug)]
+pub struct NotRequested(pub String);
+
+impl std::fmt::Display for NotRequested {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "the project has not requested kit `{}`", self.0)
+    }
+}
+
+impl std::error::Error for NotRequested {}
+
+impl KitRegistryService {
     /// Record an install that ran somewhere the backend cannot call: a
     /// desktop IDE (ADR-0027), which installs the kit into its own checkout
     /// with its own `cfs` and says how it went. The row changes exactly as a
@@ -545,6 +662,15 @@ fn parse_catalogue(json: &str) -> Result<Vec<KitDescriptor>> {
     let installable = official_catalogue();
     let mut seen = std::collections::HashSet::new();
     for kit in &kits {
+        // Only the official shelf is the deployment's to name: a built-in kit
+        // is in the image, and an organization's own comes from its repository.
+        if kit.shelf != SHELF_OFFICIAL {
+            bail!(
+                "kit `{}`: STUDIO_KIT_CATALOGUE names official kits only, not `{}`",
+                kit.slug,
+                kit.shelf
+            );
+        }
         if normalize_slug(&kit.slug)? != kit.slug {
             bail!("kit slug `{}` must be lowercase", kit.slug);
         }
@@ -584,7 +710,7 @@ fn parse_catalogue(json: &str) -> Result<Vec<KitDescriptor>> {
 }
 
 /// The catalogue when the deployment names none: Constructor's own kits.
-fn official_catalogue() -> Vec<KitDescriptor> {
+pub(crate) fn official_catalogue() -> Vec<KitDescriptor> {
     vec![
         KitDescriptor {
             slug: "sdlc".to_owned(),
@@ -596,6 +722,8 @@ fn official_catalogue() -> Vec<KitDescriptor> {
             repository_url: "https://github.com/constructorfabric/studio-kit-sdlc".to_owned(),
             default_version: "5c5b85c870cb4b62ed0506ae1a8ca196156d1c74".to_owned(),
             manifest_path: ".cf-studio-kit.toml".to_owned(),
+            shelf: SHELF_OFFICIAL.to_owned(),
+            levels: vec!["project".to_owned()],
         },
         // `studio-kits-pm` is a MULTI-kit repository: its root manifest holds one
         // `[[kits]]` entry per kit, and `cfs` reads it to offer a selector. So the
@@ -611,11 +739,148 @@ fn official_catalogue() -> Vec<KitDescriptor> {
             repository_url: "https://github.com/constructorfabric/studio-kits-pm".to_owned(),
             default_version: "fbd2f5c43fd1f34d2c12767f2d57f6ac107f2b48".to_owned(),
             manifest_path: ".cf-studio-kit.toml".to_owned(),
+            shelf: SHELF_OFFICIAL.to_owned(),
+            levels: vec!["project".to_owned()],
         },
     ]
 }
 
-fn normalize_slug(value: &str) -> Result<String> {
+/// The version every built-in kit carries: Studio's own, since a built-in kit
+/// is compiled into its image and changes only with a Studio release.
+pub const BUILTIN_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The kits shipped in Studio's image (ADR-0068 §7): today's tabs, each
+/// becoming a kit. No repository: their manifest is compiled in, so `cfs`
+/// never installs them and `repository_url` is empty.
+pub fn builtin_catalogue() -> Vec<KitDescriptor> {
+    let kit = |slug: &str, name: &str, description: &str, levels: &[&str]| KitDescriptor {
+        slug: slug.to_owned(),
+        name: name.to_owned(),
+        description: description.to_owned(),
+        publisher: "Constructor Fabric".to_owned(),
+        visibility: "public".to_owned(),
+        source: SHELF_BUILTIN.to_owned(),
+        repository_url: String::new(),
+        default_version: BUILTIN_VERSION.to_owned(),
+        manifest_path: ".cf-studio-kit.toml".to_owned(),
+        shelf: SHELF_BUILTIN.to_owned(),
+        levels: levels.iter().map(|level| (*level).to_owned()).collect(),
+    };
+    vec![
+        kit(
+            "project-lifecycle",
+            "Project lifecycle",
+            "Project status and phases, and their filters.",
+            &["organization", "workspace", "project"],
+        ),
+        kit(
+            "project-issues",
+            "Issues",
+            "The project's Issues tab: the issues of its repositories.",
+            &["project"],
+        ),
+        kit(
+            "project-tests",
+            "Tests",
+            "The project's Tests tab: its test runs and their results.",
+            &["project"],
+        ),
+        kit(
+            "project-artifacts",
+            "Artifacts",
+            "The project's Artifacts tab: what its builds and documents produce.",
+            &["project"],
+        ),
+        kit(
+            "project-activity",
+            "Activity",
+            "The project's Activity tab, beyond the shell's own run list.",
+            &["project"],
+        ),
+        kit(
+            "org-costs",
+            "Costs",
+            "What an organization's model calls and IDE sessions cost, its price list and monthly budgets.",
+            &["organization"],
+        ),
+        kit(
+            "org-reports",
+            "Reports",
+            "Every report Studio draws, configured once for the organization.",
+            &["organization"],
+        ),
+        kit(
+            "project-specs",
+            "Specs",
+            "A project's specifications and their quality, and the document types a workspace offers.",
+            &["workspace", "project"],
+        ),
+        kit(
+            "studio-api-docs",
+            "Docs & API",
+            "The backend's API reference, grouped by the gear that serves it, opened from the product menu.",
+            &["platform"],
+        ),
+        kit(
+            "components",
+            "Components",
+            "The platform's and the organization's component catalogue and registry, their gear repositories and publication requests.",
+            &["platform", "organization", "project"],
+        ),
+        kit(
+            "org-infrastructure",
+            "Infrastructure",
+            "The places an organization holds, the environments it defines on them, and what runs where.",
+            &["organization"],
+        ),
+        kit(
+            "product-releases",
+            "Product & Releases",
+            "A project's product (its map, configurator and frontend), its builds and its deploys up the environment ladder.",
+            &["project"],
+        ),
+        kit(
+            "project-domain-model",
+            "Project domain model",
+            "What a project's documents say the application is, and the issues they leave to decide (not the Studio domain model).",
+            &["project"],
+        ),
+        kit(
+            "org-connections",
+            "Connections",
+            "An organization's connections to Git hosts, clusters, registries and model providers, and Admin's view of all of them.",
+            &["organization"],
+        ),
+        kit(
+            "project-team",
+            "Team",
+            "A project's Team tab: who works on it and in which role.",
+            &["project"],
+        ),
+        // Not a base kit by default (`OPT_IN_BUILTIN`): an organization that
+        // runs its products in Constructor Research installs it.
+        kit(
+            CONSTRUCTOR_RESEARCH_KIT,
+            "Constructor Research",
+            "Build a project's product in Constructor Research and run it there as one of its applications: the Research projects, their hardware, and the deploys, rollbacks and addresses of what runs there. For the whole organization, or for one project.",
+            &["organization", "project"],
+        ),
+        kit(
+            "assistant",
+            "Assistant",
+            "Studio AI: the chat assistant docked beside every screen, answering on the person's own model key.",
+            &["organization", "workspace", "project"],
+        ),
+        kit(
+            "project-git",
+            "Git",
+            "A project's Git host workflow: the pull requests of its repositories and what waits on review.",
+            &["organization", "project"],
+        ),
+    ]
+}
+
+pub(crate) fn normalize_slug(value: &str) -> Result<String> {
     let value = value.trim().to_ascii_lowercase();
     if value.is_empty()
         || value.len() > 80
@@ -628,7 +893,7 @@ fn normalize_slug(value: &str) -> Result<String> {
     Ok(value)
 }
 
-fn normalize_version(value: &str) -> Result<String> {
+pub(crate) fn normalize_version(value: &str) -> Result<String> {
     if value
         .chars()
         .any(|character| matches!(character, '\0' | '\n' | '\r'))
@@ -709,7 +974,7 @@ fn normalize_install_mode(value: &str) -> Result<String> {
     }
 }
 
-fn now_rfc3339() -> Result<String> {
+pub(crate) fn now_rfc3339() -> Result<String> {
     Ok(OffsetDateTime::now_utc().format(&time::format_description::well_known::Rfc3339)?)
 }
 
@@ -932,6 +1197,66 @@ mod tests {
         assert!(parse_catalogue(&format!("[{}]", kit("Ops", "https://x/y", "main"))).is_err());
         assert!(parse_catalogue(&format!("[{}]", kit("ops", "http://x/y", "main"))).is_err());
         assert!(parse_catalogue(&format!("[{}]", kit("ops", "https://x/y", "../main"))).is_err());
+    }
+
+    #[test]
+    fn the_builtin_kits_are_today_s_tabs_on_their_own_shelf() {
+        let kits = super::builtin_catalogue();
+        let slugs: Vec<&str> = kits.iter().map(|k| k.slug.as_str()).collect();
+        assert_eq!(
+            slugs,
+            [
+                "project-lifecycle",
+                "project-issues",
+                "project-tests",
+                "project-artifacts",
+                "project-activity",
+                "org-costs",
+                "org-reports",
+                "project-specs",
+                "studio-api-docs",
+                "components",
+                "org-infrastructure",
+                "product-releases",
+                "project-domain-model",
+                "org-connections",
+                "project-team",
+                "constructor-research",
+                "assistant",
+                "project-git"
+            ]
+        );
+        for kit in &kits {
+            assert_eq!(kit.shelf, super::SHELF_BUILTIN);
+            // Compiled in: nothing for `cfs` to fetch.
+            assert!(kit.repository_url.is_empty());
+            assert_eq!(kit.default_version, super::BUILTIN_VERSION);
+            assert_eq!(normalize_slug(&kit.slug).unwrap(), kit.slug);
+            assert_eq!(
+                normalize_version(&kit.default_version).unwrap(),
+                kit.default_version
+            );
+            assert!(!kit.levels.is_empty());
+            // No built-in kit shadows an official one.
+            assert!(official_catalogue().iter().all(|o| o.slug != kit.slug));
+        }
+        assert!(
+            official_catalogue()
+                .iter()
+                .all(|k| k.shelf == super::SHELF_OFFICIAL)
+        );
+    }
+
+    #[test]
+    fn a_deployment_names_official_kits_only() {
+        let kit = |shelf: &str| {
+            format!(
+                r#"[{{"slug": "sdlc", "name": "n", "repository_url": "https://github.com/constructorfabric/studio-kit-sdlc", "default_version": "main", "shelf": "{shelf}"}}]"#
+            )
+        };
+        assert!(parse_catalogue(&kit("official")).is_ok());
+        assert!(parse_catalogue(&kit("builtin")).is_err());
+        assert!(parse_catalogue(&kit("organization")).is_err());
     }
 
     #[test]

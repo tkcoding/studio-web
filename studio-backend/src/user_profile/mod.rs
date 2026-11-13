@@ -17,10 +17,10 @@ mod capacity;
 mod entity;
 #[cfg(test)]
 mod grants_tests;
+mod inbox;
 mod invitations;
 mod leaving;
 mod mcp;
-pub(crate) use mcp::tools as mcp_tools;
 mod migrations;
 mod org_requests;
 mod rest;
@@ -151,6 +151,8 @@ mod uuid_text {
     }
 }
 
+/// The Inbox tools (`crate::mcp`).
+pub(crate) use mcp::tools as mcp_tools;
 /// Fold an alias key into its stored form. Re-exported because the
 /// knowledge-graph sync must normalize a login the same way a write did,
 /// or the lookup misses the row.

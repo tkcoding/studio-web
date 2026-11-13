@@ -5,6 +5,7 @@
  * `shared/useSpecsLoad.tsx`.
  */
 
+import { matchesSearch } from '@constructor-studio/mfe-shared';
 import type {
   BindingState,
   DocumentTypeDto,
@@ -161,14 +162,11 @@ export interface SpecsQuery {
 }
 
 export function filterSpecRows(rows: readonly SpecRow[], query: SpecsQuery): SpecRow[] {
-  const needle = query.search.trim().toLowerCase();
   return rows.filter(
     (row) =>
       keptBy(query.filter, row) &&
       (query.documentType === null || row.type?.key === query.documentType) &&
-      (!needle ||
-        row.name.toLowerCase().includes(needle) ||
-        row.location.toLowerCase().includes(needle))
+      matchesSearch(query.search, row.name, row.location)
   );
 }
 

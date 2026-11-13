@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { stubResizeObserver } from '@frontx-test-utils/stubResizeObserver';
 import type { DataGridLoadContext } from '@gears-frontx/ui-kit';
 import type { ConnectionDto } from '@constructor-studio/mfe-shared';
-import type { ConnectionListView, ConnectionRow } from '../../shared/useConnectionList';
+import type { ConnectionListView } from '../../shared/useConnectionList';
+import type { ConnectionRow } from '../../model/connection';
 import en from './i18n/en.json';
 
 const { list, org } = vi.hoisted(() => ({

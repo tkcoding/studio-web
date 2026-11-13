@@ -1,0 +1,26 @@
+# This micro-frontend's passport: everything a tool that assembles a product
+# from FrontX packages (Gearbox, Constructor Studio) needs to know about it, in
+# one file. It restates what package.json and mfe.json say, and those tools
+# check that they agree, so keep them in step when either changes.
+#
+# The Costs kit, `org-costs`: a built-in kit (ADR-0068 §7), a base kit by
+# default (ADR-0069 §4). Its one screen is Organization › Costs (issue #781),
+# carried over from the prototype (ADR-0069 §5).
+gdl_version = "1.5"
+
+mfe(
+    name = "@constructor-studio/costs-mfe",
+    version = "0.2.0-alpha.0",
+
+    # The backend gears its screen calls, by gear id.
+    requires = ["studio-usage", "account-management"],
+
+    screens = ["Costs"],
+    mounts = ["/costs"],
+
+    frontx = "0.2.0-alpha.15",
+
+    roles = [],
+
+    preview = ["/costs"],
+)

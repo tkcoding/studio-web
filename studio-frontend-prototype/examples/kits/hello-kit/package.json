@@ -1,0 +1,11 @@
+{
+  "name": "@example/hello-kit",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A demo kit whose screen the portal loads at run time (ADR-0068 phase 5). Not part of the portal's build.",
+  "scripts": {
+    "build": "vite build",
+    "type-check": "tsc --noEmit"
+  }
+}

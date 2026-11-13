@@ -1,0 +1,26 @@
+{
+  "manifest_version": "1",
+  "slug": "project-domain-model",
+  "name": "Project domain model",
+  "description": "What a project's documents say the application is, and the issues they leave to decide (not the Studio domain model).",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "project"
+  ],
+  "model": {
+    "properties": [
+      {
+        "on": "project",
+        "property": {
+          "name": "model",
+          "type": "object-type",
+          "relation": "object-type",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Domain model",
+          "description": "A tab of the project: what it shows."
+        }
+      }
+    ]
+  }
+}

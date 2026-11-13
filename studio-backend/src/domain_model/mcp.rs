@@ -1,4 +1,6 @@
-//! The domain model as MCP tools (`crate::mcp`).
+//! The Studio domain model as MCP tools (`crate::mcp`): Studio's own types and
+//! objects, not a project's domain model (what a project's documents say,
+//! `crate::documents::mcp`).
 //!
 //! Reads, and the model edits the gear records as versions: a field added,
 //! changed or removed is one version with its inverse, so whatever an agent
@@ -13,8 +15,9 @@ pub fn tools() -> Vec<Tool> {
     vec![
         Tool {
             name: "domain_model_types",
-            description: "Every type of the domain model with its fields and relations, as \
-                stored. Most fields live on base types: a type lists what it declares and \
+            description: "Every type of the Studio domain model (Studio's own objects, not a \
+                project's: that is `project_domain_model_facts`) with its fields and \
+                relations, as stored. Most fields live on base types: a type lists what it declares and \
                 names what it `extends`. To see one type with everything it inherits, call \
                 `domain_type`. Large: call it once and keep the answer.",
             input_schema: || object(json!({}), &[]),

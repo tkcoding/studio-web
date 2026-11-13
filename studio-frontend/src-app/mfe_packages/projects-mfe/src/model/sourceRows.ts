@@ -7,7 +7,12 @@
 // @cpt-dod:cpt-studiofrontend-dod-project-sources-gaps:p1
 // @cpt-dod:cpt-studiofrontend-dod-project-sources-search:p1
 // @cpt-dod:cpt-studiofrontend-dod-project-sources-footer:p1
-import type { ConnectionDto, ProjectSource, Refusal } from '@constructor-studio/mfe-shared';
+import {
+  matchesSearch,
+  type ConnectionDto,
+  type ProjectSource,
+  type Refusal,
+} from '@constructor-studio/mfe-shared';
 import type {
   ArtifactNodeDto,
   RepoActivityDto,
@@ -219,10 +224,8 @@ export function filterSourceRows(
   search: string,
   uploadsName: string
 ): SourcesTableRow[] {
-  const needle = search.trim().toLowerCase();
-  if (!needle) return [...rows];
   return rows.filter((row) =>
-    (row.kind === 'uploads' ? uploadsName : row.fullPath).toLowerCase().includes(needle)
+    matchesSearch(search, row.kind === 'uploads' ? uploadsName : row.fullPath)
   );
 }
 

@@ -15,7 +15,10 @@ README is what you need to work in the directory.
 - Handlers are registered by the gears that own the work — `notify.deliver`,
   `artifact.ingest`, `session.reap`, `session.await_ready`,
   `spec_quality.analyze`, `spec_quality.analyze_batch`, `catalog.sync`,
-  `connector.graph_sync`, and this gear's own `tasks.retention_sweep`.
+  `connector.graph_sync`, `organizations.project_create`, and this gear's own
+  `tasks.retention_sweep`. A handler that records its steps reads them back
+  from `TaskContext::recorded` (the run's result when the attempt began), so a
+  retry continues where the last attempt stopped.
 - A run's `summary` and `last_error` are cut to 500 characters; its `result` is
   **not** capped, and it is broadcast whole on
   [`../studio_events`](../studio_events). A handler that can produce a large

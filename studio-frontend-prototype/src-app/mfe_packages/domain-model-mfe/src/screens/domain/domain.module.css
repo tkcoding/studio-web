@@ -1,0 +1,13 @@
+/* Project › Project domain model: the header's build progress (the prototype's .sm-build-progress). */
+
+.progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.progress progress {
+  width: 8rem;
+}

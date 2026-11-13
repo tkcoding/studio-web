@@ -117,6 +117,23 @@ pub trait RepoFileReader: Send + Sync + 'static {
         ))
     }
 
+    /// The commit and branch the checkout [`Self::read_repo_files`] reads is
+    /// at: what a document read from it was read at. `None` when there is no
+    /// such checkout or it is not a git one — the default, for a reader that
+    /// cannot tell.
+    async fn checkout_revision(&self, _workspace_id: &str, _repo_dir: &str) -> Option<GitRevision> {
+        None
+    }
+
+    /// The same, for the sync's clone [`Self::read_synced_clone`] reads.
+    async fn synced_clone_revision(
+        &self,
+        _secret_ref: &str,
+        _repo_full_path: &str,
+    ) -> Option<GitRevision> {
+        None
+    }
+
     /// Why the sync's own clone of a repository is missing, when it is known:
     /// the last clone of it failed, or the clone volume cannot be written.
     /// `None` when nothing failed — the default, for a reader that keeps no
@@ -156,6 +173,15 @@ pub trait RepoFileReader: Send + Sync + 'static {
             .into_iter()
             .find_map(|(p, text)| (p == path).then_some(text)))
     }
+}
+
+/// Where a checkout stands in its repository's history.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitRevision {
+    /// The full SHA of `HEAD`.
+    pub commit: String,
+    /// The branch checked out; `None` on a detached `HEAD`.
+    pub git_ref: Option<String>,
 }
 
 /// `listing` with the text of the `wanted` paths only.
@@ -717,6 +743,18 @@ pub trait BuildRecords: Send + Sync + 'static {
         project_id: &str,
         build_id: &str,
     ) -> anyhow::Result<Option<BuildRecord>>;
+
+    /// The project's builds -- not a deploy's runs -- newest first, at most
+    /// `limit`: what a project's path to running starts from (#1050). A
+    /// deployment that keeps none answers none.
+    async fn builds(
+        &self,
+        _ctx: &toolkit_security::SecurityContext,
+        _project_id: &str,
+        _limit: usize,
+    ) -> anyhow::Result<Vec<BuildRecord>> {
+        Ok(Vec::new())
+    }
 
     /// Record a build Studio runs (`where: studio`): its start, then its end.
     async fn record(

@@ -1,0 +1,239 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isValidGtsID } from '@globaltypesystem/gts-ts';
+import { STUDIO_SHARED_PROPERTY_SPACE_FRAME_URL } from '@constructor-studio/mfe-shared';
+import { buildStudioScreenDomain } from './bootstrap';
+import { SHELL_SLOTS } from './slots';
+
+const registerDomain = vi.fn();
+const updateSharedProperty = vi.fn();
+const registerSchema = vi.fn();
+const registerInstance = vi.fn();
+const registerExtension = vi.fn().mockResolvedValue(undefined);
+const getDomain = vi.fn();
+
+const mockMfeRegistry = {
+  registerDomain,
+  updateSharedProperty,
+  registerExtension,
+  getDomain,
+  typeSystem: {
+    register: registerInstance,
+    registerSchema,
+  },
+};
+
+const mockApp = {
+  mfeRegistry: mockMfeRegistry,
+  themeRegistry: { getCurrent: () => undefined },
+  i18nRegistry: { getLanguage: () => null },
+  // bootstrapMFE publishes the studio context from the store once the domains
+  // are registered (see mfe/sharedContext.ts). An empty state is the honest
+  // fixture for a cold start: nothing has resolved, so all three publish `null`.
+  store: { getState: () => ({}) },
+};
+
+vi.mock('@gears-frontx/react', async (importOriginal) => {
+  const real = await importOriginal<Record<string, never>>();
+  return {
+    ...real,
+    // bootstrapMFE spreads the screen AND the overlay domain onto declarations
+    // of its own — adding the studio context properties to each — so both stubs
+    // have to carry the fields it spreads or the spread throws.
+    screenDomain: { id: 'screen-domain', actions: [], sharedProperties: [] },
+    sidebarDomain: { id: 'sidebar-domain', actions: [], sharedProperties: [] },
+    popupDomain: { id: 'popup-domain' },
+    overlayDomain: { id: 'overlay-domain', actions: [], sharedProperties: [] },
+  };
+});
+
+describe('bootstrapMFE (host-app)', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.resetModules();
+    registerDomain.mockReset();
+    updateSharedProperty.mockReset();
+    registerSchema.mockReset();
+    registerInstance.mockReset();
+    registerExtension.mockReset();
+    registerExtension.mockResolvedValue(undefined);
+    getDomain.mockReset();
+
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it('registers the four base domains and the named slots before fetching manifests', async () => {
+    fetchSpy.mockResolvedValue(new Response('[]', { status: 200 }));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const { bootstrapMFE } = await import('./bootstrap');
+    await bootstrapMFE(mockApp as never);
+
+    expect(registerDomain).toHaveBeenCalledTimes(4 + Object.keys(SHELL_SLOTS).length);
+    expect(updateSharedProperty.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('throws when the manifest fetch fails', async () => {
+    fetchSpy.mockResolvedValue(new Response('not found', { status: 404, statusText: 'Not Found' }));
+
+    const { bootstrapMFE } = await import('./bootstrap');
+    await expect(bootstrapMFE(mockApp as never)).rejects.toThrow(/Failed to load MFE manifests/);
+  });
+
+  it('registers schemas, manifest, entries, and extensions for each package', async () => {
+    const screenDomainId = 'screen-domain';
+    getDomain.mockImplementation((id: string) => (id === screenDomainId ? { id } : undefined));
+
+    const manifestEntity = { $id: 'manifest.demo', id: 'manifest.demo' };
+    const entry = { id: 'entry.demo', actions: ['act.a'], domainActions: ['act.b'] };
+    const ext = { id: 'ext.demo', domain: screenDomainId };
+    const schemaActionA = { $id: 'schema.act.a' };
+    const schemaActionB = { $id: 'schema.act.b' };
+    const schemaUnrelated = { $id: 'schema.other' };
+
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            manifest: manifestEntity,
+            entries: [entry],
+            extensions: [ext],
+            schemas: [schemaActionA, schemaActionB, schemaUnrelated],
+          },
+        ]),
+        { status: 200 },
+      ),
+    );
+
+    const { bootstrapMFE } = await import('./bootstrap');
+    await bootstrapMFE(mockApp as never);
+
+    // Action schemas registered by scoped pass (act.a/act.b match entry actions/domainActions).
+    expect(registerSchema).toHaveBeenCalledWith(schemaActionA);
+    expect(registerSchema).toHaveBeenCalledWith(schemaActionB);
+    // Non-action schemas are registered up-front via the first pass too.
+    expect(registerSchema).toHaveBeenCalledWith(schemaUnrelated);
+    expect(registerInstance).toHaveBeenCalledWith(manifestEntity);
+    expect(registerInstance).toHaveBeenCalledWith(entry);
+    expect(registerExtension).toHaveBeenCalledWith(ext);
+  });
+
+  it('skips extension registration when host does not own the target domain', async () => {
+    getDomain.mockReturnValue(undefined);
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            manifest: { $id: 'manifest.foreign', id: 'manifest.foreign' },
+            entries: [],
+            extensions: [{ id: 'ext.foreign', domain: 'foreign-domain' }],
+          },
+        ]),
+        { status: 200 },
+      ),
+    );
+
+    const { bootstrapMFE } = await import('./bootstrap');
+    await bootstrapMFE(mockApp as never);
+
+    expect(registerExtension).not.toHaveBeenCalled();
+  });
+
+  it('resolves packaged MFE paths against the runtime origin', async () => {
+    const manifest = {
+      id: 'projects-manifest',
+      metaData: { publicPath: '/mfes/projects-mfe/' },
+    };
+    const config = {
+      manifest,
+      entries: [{ id: 'projects-entry', manifest }],
+      extensions: [],
+    };
+
+    const { resolveRuntimePublicPaths } = await import('./bootstrap');
+    const [resolved] = resolveRuntimePublicPaths(
+      [config] as never,
+      'https://studio-dev.cfabric.org',
+    );
+
+    // `manifest` is optional on the config type now (a frame package has
+    // none), but this config declares one — optional chaining here is a type
+    // narrowing formality, not a weaker assertion: an absent manifest would
+    // still fail this `.toBe` on a `publicPath` mismatch.
+    expect(resolved.manifest?.metaData.publicPath).toBe(
+      'https://studio-dev.cfabric.org/mfes/projects-mfe/',
+    );
+    expect((resolved.entries[0] as { manifest?: unknown }).manifest).toBe(resolved.manifest);
+  });
+
+  it('survives a manifest config that has no manifest at all', async () => {
+    // What the generator emits for a frame package. Before ADR-0021 both
+    // readers dereferenced config.manifest directly and threw on this.
+    const frameConfig = {
+      entries: [
+        {
+          id: 'gts.frontx.mfes.mfe.entry.v1~constructor_studio.mfes.mfe.entry_iframe.v1~acme.demo.mfe.frame.v1',
+          requiredProperties: [],
+          actions: [],
+          domainActions: [],
+          urlProperty: 'gts.frontx.mfes.comm.shared_property.v1~acme.demo.mfe.frame_url.v1~',
+          publicPath: 'http://localhost:3080/',
+        },
+      ],
+    };
+
+    const { resolveRuntimePublicPaths, mfeStylesheetHrefs } = await import('./bootstrap');
+
+    expect(() =>
+      resolveRuntimePublicPaths([frameConfig as never], 'http://localhost:5173')
+    ).not.toThrow();
+    expect(resolveRuntimePublicPaths([frameConfig as never], 'http://localhost:5173')).toEqual([
+      frameConfig,
+    ]);
+    expect(() => mfeStylesheetHrefs([frameConfig as never])).not.toThrow();
+    expect(mfeStylesheetHrefs([frameConfig as never])).toEqual([]);
+  });
+
+  it('publishes no frame address at start-up, even with a frame package in the catalogue', async () => {
+    const frameConfig = {
+      entries: [
+        {
+          id: 'gts.frontx.mfes.mfe.entry.v1~constructor_studio.mfes.mfe.entry_iframe.v1~constructor_studio.space.mfe.main.v1',
+          requiredProperties: [],
+          actions: [],
+          domainActions: [],
+          urlProperty: STUDIO_SHARED_PROPERTY_SPACE_FRAME_URL,
+          publicPath: 'http://localhost:3090/',
+        },
+      ],
+    };
+    fetchSpy.mockResolvedValue(new Response(JSON.stringify([frameConfig]), { status: 200 }));
+
+    const { bootstrapMFE } = await import('./bootstrap');
+    await bootstrapMFE(mockApp as never);
+
+    const frameWrites = updateSharedProperty.mock.calls.filter(([id]) => id === STUDIO_SHARED_PROPERTY_SPACE_FRAME_URL);
+    expect(frameWrites).toEqual([[STUDIO_SHARED_PROPERTY_SPACE_FRAME_URL, null]]);
+  });
+
+  it('declares the frame address on the screen domain', () => {
+    // A domain that does not declare a property cannot deliver it: an entry
+    // requiring one fails contract validation instead (ADR-0021).
+    const domain = buildStudioScreenDomain();
+    expect(domain.sharedProperties).toContain(STUDIO_SHARED_PROPERTY_SPACE_FRAME_URL);
+  });
+
+  it('gives the frame address a well-formed GTS id', () => {
+    // A short instance segment (four tokens instead of five) registers fine
+    // and fails much later, inside bootstrapMFE, as "No schema found for
+    // instance" — a message that reads like a missing schema rather than a
+    // malformed id. Running the id through the real parser catches it here.
+    expect(isValidGtsID(STUDIO_SHARED_PROPERTY_SPACE_FRAME_URL)).toBe(true);
+  });
+});

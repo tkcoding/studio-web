@@ -38,6 +38,42 @@ pub struct StudioNotifyError;
 #[derive(Clone)]
 pub struct Notify(pub Arc<NotifyService>);
 
+/// Who may send through this route: studio-user's answer to "may this caller
+/// administer that organization" (ADR-0019 -- the gear answers
+/// administration, never the PDP). `None` when studio-user is not in this
+/// deployment, and then nobody may.
+#[derive(Clone)]
+pub struct Authority(pub Option<Arc<dyn crate::user_profile::OrgAuthority>>);
+
+/// The privilege a send asks for: it posts through the tenant's connection.
+pub const SEND_PRIVILEGE: &str = "connector.manage";
+
+/// The reason a caller who does not administer the tenant is refused with
+/// (403), for the screen to say so.
+pub const ORG_ADMIN_REQUIRED: &str = "ORG_ADMIN_REQUIRED";
+
+/// A notification through this route goes out in an organization's name, to
+/// its channel or into the IDE of whoever has its workspace open: its
+/// administrator's to send, or a platform administrator's (#1044). Other
+/// gears notify through the `Notifications` port, which this does not gate.
+async fn require_admin(
+    ctx: &SecurityContext,
+    authority: &Authority,
+    tenant: Uuid,
+) -> ApiResult<()> {
+    let allowed = match authority.0.as_deref() {
+        Some(authority) => authority.may_administer(ctx, tenant, SEND_PRIVILEGE).await,
+        None => false,
+    };
+    if allowed {
+        Ok(())
+    } else {
+        Err(StudioNotifyError::permission_denied()
+            .with_reason(ORG_ADMIN_REQUIRED)
+            .create())
+    }
+}
+
 struct License;
 impl AsRef<str> for License {
     fn as_ref(&self) -> &'static str {
@@ -109,9 +145,12 @@ pub struct QueuedDto {
 async fn send(
     Extension(ctx): Extension<SecurityContext>,
     Extension(notify): Extension<Notify>,
+    Extension(authority): Extension<Authority>,
     headers: axum::http::HeaderMap,
     Json(req): Json<SendRequest>,
 ) -> ApiResult<(StatusCode, JsonBody<QueuedDto>)> {
+    let tenant = req.tenant_id.unwrap_or_else(|| ctx.subject_tenant_id());
+    require_admin(&ctx, &authority, tenant).await?;
     // The repeat-safe key is the `Idempotency-Key` header, as on every
     // operation that answers 202 — no longer a body field.
     let idempotency_key = crate::idempotency::key(&headers)?;
@@ -142,7 +181,7 @@ async fn send(
         .accept(
             &ctx,
             NewDelivery {
-                tenant: req.tenant_id.unwrap_or_else(|| ctx.subject_tenant_id()),
+                tenant,
                 to,
                 title: req.title.as_deref(),
                 text: &req.text,
@@ -175,6 +214,7 @@ pub fn register_routes(
     mut router: Router,
     openapi: &dyn OpenApiRegistry,
     service: Arc<NotifyService>,
+    authority: Authority,
 ) -> Router {
     router = OperationBuilder::post("/studio-notify/v1/messages")
         .operation_id("studio_notify.send")
@@ -193,7 +233,10 @@ pub fn register_routes(
              `Idempotency-Key` header to make your own retry of this request safe: a \
              second request with the same key in the same tenant answers the first run \
              rather than queuing another. (The body field `idempotency_key` it replaces \
-             is gone.)",
+             is gone.) An administrator of the tenant's organization sends it \
+             (`connector.manage` on the roles model, its owner), or a platform \
+             administrator; anybody else is refused 403 `ORG_ADMIN_REQUIRED`. Other \
+             gears notify in process and are not gated here.",
         )
         .tag("StudioNotify")
         .authenticated()
@@ -204,8 +247,79 @@ pub fn register_routes(
         .json_response_with_schema::<QueuedDto>(openapi, StatusCode::ACCEPTED, "Queued")
         .error_400(openapi)
         .error_401(openapi)
+        .error_403(openapi)
         .error_500(openapi)
         .register(router, openapi);
 
-    router.layer(Extension(Notify(service)))
+    router
+        .layer(Extension(Notify(service)))
+        .layer(Extension(authority))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::response::IntoResponse;
+
+    const ORG: Uuid = Uuid::from_u128(0x0a);
+    const OWNER: u128 = 1;
+
+    struct OwnerOnly;
+
+    #[async_trait::async_trait]
+    impl crate::user_profile::OrgAuthority for OwnerOnly {
+        async fn may_administer(&self, ctx: &SecurityContext, org: Uuid, privilege: &str) -> bool {
+            org == ORG && privilege == SEND_PRIVILEGE && ctx.subject_id().as_u128() == OWNER
+        }
+        async fn may_dispose(&self, _: &SecurityContext, _: Uuid) -> bool {
+            false
+        }
+    }
+
+    fn caller(id: u128) -> SecurityContext {
+        SecurityContext::builder()
+            .subject_id(Uuid::from_u128(id))
+            .subject_tenant_id(ORG)
+            .build()
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn an_organization_administrator_may_send() {
+        let authority = Authority(Some(Arc::new(OwnerOnly)));
+        assert!(require_admin(&caller(OWNER), &authority, ORG).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_member_is_refused_with_the_reason() {
+        let authority = Authority(Some(Arc::new(OwnerOnly)));
+        let response = require_admin(&caller(7), &authority, ORG)
+            .await
+            .expect_err("refused")
+            .into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(String::from_utf8_lossy(&body).contains(ORG_ADMIN_REQUIRED));
+    }
+
+    #[tokio::test]
+    async fn another_organization_is_not_the_owner_s_to_send_in() {
+        let authority = Authority(Some(Arc::new(OwnerOnly)));
+        assert!(
+            require_admin(&caller(OWNER), &authority, Uuid::from_u128(0x0b))
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn without_studio_user_nobody_may() {
+        assert!(
+            require_admin(&caller(OWNER), &Authority(None), ORG)
+                .await
+                .is_err()
+        );
+    }
 }

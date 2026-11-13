@@ -1,27 +1,142 @@
 {
-  "name": "studio-frontend",
-  "private": true,
-  "version": "0.1.0",
+  "name": "@gears-frontx/frontx-template-shell",
+  "version": "0.1.0-alpha.2",
+  "description": "Standard FrontX application template — target scaffold for template-side code relocation",
   "type": "module",
+  "main": "./dist-lib/index.cjs",
+  "module": "./dist-lib/index.js",
+  "types": "./dist-lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist-lib/index.d.ts",
+      "import": "./dist-lib/index.js",
+      "require": "./dist-lib/index.cjs"
+    },
+    "./build/mf-gts": {
+      "types": "./dist-lib/build/mf-gts.d.ts",
+      "import": "./dist-lib/build/mf-gts.js",
+      "require": "./dist-lib/build/mf-gts.cjs"
+    }
+  },
+  "files": [
+    "dist-lib"
+  ],
+  "workspaces": [
+    "src-app/mfe_packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build:mfes": "npx --yes tsx@4.23.12 scripts/build-mfes.ts",
+    "generate:mfe-manifests": "npx --yes tsx@4.23.12 scripts/generate-mfe-manifests.ts",
+    "package:mfe-assets": "npx --yes tsx@4.23.12 scripts/package-mfe-assets.ts",
+    "dev": "npm run build:package && npm run build:mfes && npm run generate:mfe-manifests && vite",
+    "predev:all": "npm run build:package",
+    "dev:all": "npx --yes tsx@4.23.12 scripts/dev-all.ts",
     "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "build:package": "tsup",
+    "build": "npm run build:package && npm run build:mfes && npm run generate:mfe-manifests -- --base-path /mfes && vite build && npm run package:mfe-assets",
+    "type-check:package": "tsc --noEmit",
+    "type-check:package:test": "tsc -p tsconfig.test.json",
+    "type-check:app": "tsc --noEmit -p tsconfig.app.json",
+    "type-check:mfe": "node scripts/run-mfe-type-checks.mjs",
+    "type-check:e2e": "tsc -p e2e/tsconfig.json",
+    "type-check": "npm run type-check:package && npm run type-check:package:test && npm run type-check:app && npm run type-check:mfe && npm run type-check:e2e",
+    "lint": "eslint . --max-warnings 0",
+    "arch:deps": "npx dependency-cruiser src-app/ --config .dependency-cruiser.cjs --output-type err-long",
+    "test": "npm run test:unit",
+    "test:unit": "vitest --run --passWithNoTests=false && vitest --run --config src-app/vitest.config.ts --passWithNoTests=false && npm run test:unit --workspaces --if-present",
+    "test:unit:watch": "vitest --watch",
+    "e2e": "playwright test -c e2e",
+    "e2e:ui": "playwright test -c e2e --ui"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "5.3.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "@gears-frontx/api": "0.3.0",
+    "@gears-frontx/auth": "0.2.0-alpha.3",
+    "@gears-frontx/framework": "0.2.0-alpha.16",
+    "@gears-frontx/gts-plugin": "0.4.0",
+    "@gears-frontx/i18n": "0.2.0-alpha.2",
+    "@gears-frontx/mfes": "0.4.0",
+    "@gears-frontx/react": "0.2.0-alpha.15",
+    "@gears-frontx/routing": "0.4.0",
+    "@gears-frontx/state": "0.2.0-alpha.4",
+    "@gears-frontx/studio": "0.2.0-alpha.3",
+    "@gears-frontx/ui-kit": "0.4.10",
+    "@hookform/resolvers": "5.2.2",
+    "@iconify/react": "^6.0.2",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@reduxjs/toolkit": "2.12.0",
+    "@tanstack/react-query": "5.101.4",
+    "clsx": "^2.1.1",
+    "date-fns": "4.1.0",
+    "input-otp": "1.4.2",
+    "lodash": "4.18.1",
+    "lucide-react": "0.563.0",
+    "react": "19.2.4",
+    "react-day-picker": "9.12.0",
+    "react-dom": "19.2.4",
+    "react-hook-form": "7.68.0",
+    "react-redux": "9.3.0",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss-animate": "1.0.7",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@gears-frontx/api": ">=0.2.0-0",
+    "@gears-frontx/mfes": "*",
+    "esbuild": ">=0.20.0",
+    "vite": ">=5.0.0"
+  },
+  "overrides": {
+    "@gears-frontx/frontx-template-shell": "file:."
+  },
+  "peerDependenciesMeta": {
+    "@gears-frontx/api": {
+      "optional": false
+    },
+    "esbuild": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.9.0",
-    "vite": "^7.1.0",
-    "vitest": "^3.2.0"
-  }
+    "@eslint/js": "9.27.0",
+    "@globaltypesystem/gts-ts": "0.3.0",
+    "@module-federation/vite": "^1.14.2",
+    "@playwright/test": "1.63.0",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/lodash": "4.17.20",
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.0.3",
+    "@vitejs/plugin-react": "4.3.4",
+    "@vitest/coverage-v8": "4.1.4",
+    "autoprefixer": "10.4.23",
+    "concurrently": "^10.0.4",
+    "dependency-cruiser": "17.3.10",
+    "eslint": "9.27.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-unused-imports": "4.4.1",
+    "globals": "15.12.0",
+    "postcss": "8.5.10",
+    "tailwindcss": "3.4.1",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.2",
+    "typescript-eslint": "8.65.0",
+    "vite": "6.4.3",
+    "vitest": "4.1.4"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "frontx",
+    "template",
+    "typescript"
+  ],
+  "author": "Cyber Fabric",
+  "license": "Apache-2.0"
 }

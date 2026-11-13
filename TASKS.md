@@ -1,7 +1,7 @@
 # 2026-10-15 — the project, its product, and where gears come from
 
 What #716, #742, #756, #774 and the combined #789 leave open. The designs:
-`docs/project-and-product.md`, `docs/spec-domain-model.md`, ADR-0044, ADR-0045,
+`docs/project-and-product.md`, `docs/project-domain-model.md`, ADR-0044, ADR-0045,
 ADR-0046.
 
 - [x] Put main's tip on Dev @andrejk666

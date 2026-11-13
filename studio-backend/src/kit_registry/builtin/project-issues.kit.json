@@ -1,0 +1,394 @@
+{
+  "manifest_version": "1",
+  "slug": "project-issues",
+  "name": "Issues",
+  "description": "The project's Issues tab: the issues of its repositories.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "project"
+  ],
+  "model": {
+    "types": [
+      {
+        "name": "finding",
+        "id": "finding",
+        "label": "Finding",
+        "description": "Observed issue over the graph: gap, drift, staleness, contradiction, duplicate, ownership hole or review/scan result.",
+        "entity": {
+          "id": "finding",
+          "bucket": "automation",
+          "name": "Finding",
+          "kind": "graph issue or signal",
+          "description": "Observed issue over the graph: gap, drift, staleness, contradiction, duplicate, ownership hole or review/scan result.",
+          "meta": {
+            "relationship": "control-loop",
+            "priority": "P2",
+            "level": 4,
+            "badge": "From MaxV",
+            "note": "Added as the generic observed graph issue and signal object. · model.md §6.1",
+            "badge-style": "green",
+            "profiles": [
+              "Arch",
+              "Dev",
+              "QA",
+              "Sec",
+              "StudioAdmin"
+            ],
+            "links": [
+              {
+                "kind": "see-also",
+                "target": "security-finding",
+                "note": "Kit specialization of the generic Finding; renamed to Security Finding to clear the name collision"
+              }
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "FindingId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "finding_kind",
+              "type": "gap | drift | stale | contradiction | duplicate | ownership_hole | review | scan | cost_optimization | bloat",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "provenance_kind",
+              "type": "mirrored | computed | authored",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "subject_refs",
+              "type": "EntityRef[]",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "status",
+              "type": "detected | acknowledged | triaged | accepted | dismissed | auto_resolved",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "provenance_ref",
+              "type": "ProvenanceId?",
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "may_produce",
+              "type": "ActionRun",
+              "description": "",
+              "relation": "action-run",
+              "relationType": "derives",
+              "relationLabel": "may produce",
+              "required": false,
+              "cardinality": "1:N",
+              "extends": "link"
+            },
+            {
+              "name": "may_produce_opportunity",
+              "type": "ManagedObject",
+              "description": "",
+              "relation": "managed-object",
+              "relationType": "derives",
+              "relationLabel": "may produce opportunity",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "accepted_as",
+              "type": "Opportunity",
+              "description": "",
+              "relation": "opportunity",
+              "relationType": "derives",
+              "relationLabel": "accepted as",
+              "required": false,
+              "extends": "edge"
+            }
+          ],
+          "methods": [
+            {
+              "name": "acknowledge",
+              "description": "",
+              "input": "actor",
+              "result": "void"
+            },
+            {
+              "name": "accept",
+              "description": "",
+              "input": "actor",
+              "result": "ActionRun"
+            },
+            {
+              "name": "auto_resolve",
+              "description": "",
+              "input": "",
+              "result": "void"
+            }
+          ],
+          "examples": [
+            "Capability gap",
+            "Stale artifact",
+            "Security finding"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "managed-object"
+        }
+      },
+      {
+        "name": "work-item",
+        "id": "work-item",
+        "label": "Work Item",
+        "description": "A provider-neutral instance of a configurable Work Item Type, retaining source identity and lifecycle history.",
+        "entity": {
+          "id": "work-item",
+          "bucket": "planning",
+          "name": "Work Item",
+          "kind": "typed lifecycle object",
+          "description": "A provider-neutral instance of a configurable Work Item Type, retaining source identity and lifecycle history.",
+          "meta": {
+            "relationship": "delivery-planning",
+            "priority": "P1",
+            "level": 3,
+            "badge": "",
+            "note": "",
+            "badge-style": "neutral",
+            "profiles": [
+              "CTO",
+              "PdM",
+              "Arch",
+              "Dev",
+              "QA"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "EntityId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "type_id",
+              "type": "TypeId",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "external_id",
+              "type": "string?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "url",
+              "type": "URL?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "details",
+              "type": "JSON",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "state",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "priority",
+              "type": "Priority?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "source_system",
+              "type": "SourceId?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "updated_at",
+              "type": "timestamp",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "closed_at",
+              "type": "timestamp?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "assigned_to",
+              "type": "Person",
+              "description": "",
+              "relation": "person",
+              "relationType": "member",
+              "relationLabel": "assigned_to",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "implemented_by",
+              "type": "PullRequest",
+              "description": "",
+              "relation": "pull-request",
+              "relationType": "references",
+              "relationLabel": "implemented_by",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "instance_of",
+              "type": "WorkItemType",
+              "description": "",
+              "relation": "work-item-type",
+              "relationType": "references",
+              "relationLabel": "instance of",
+              "required": false,
+              "extends": "link"
+            }
+          ],
+          "methods": [
+            {
+              "name": "get_details",
+              "description": "",
+              "input": "",
+              "result": "JSON"
+            },
+            {
+              "name": "update_details",
+              "description": "",
+              "input": "patch",
+              "result": "WorkItem"
+            },
+            {
+              "name": "close",
+              "description": "",
+              "input": "resolution?",
+              "result": "void"
+            },
+            {
+              "name": "assign",
+              "description": "",
+              "input": "person",
+              "result": "void"
+            },
+            {
+              "name": "transition",
+              "description": "",
+              "input": "state",
+              "result": "void"
+            },
+            {
+              "name": "list_links",
+              "description": "",
+              "input": "",
+              "result": "Link[]"
+            },
+            {
+              "name": "get_history",
+              "description": "",
+              "input": "",
+              "result": "ChangeRecord[]"
+            }
+          ],
+          "examples": [
+            "Jira DEV-123",
+            "Linear ENG-42",
+            "GitHub issue #91",
+            "Service incident INC-7"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "managed-object"
+        }
+      }
+    ],
+    "properties": [
+      {
+        "on": "project",
+        "property": {
+          "name": "issues",
+          "type": "finding",
+          "relation": "finding",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Issues",
+          "description": "A tab of the project: what it shows."
+        }
+      },
+      {
+        "on": "project",
+        "property": {
+          "name": "scopes",
+          "type": "WorkItem",
+          "description": "",
+          "relation": "work-item",
+          "relationType": "composes",
+          "relationLabel": "includes",
+          "required": false,
+          "extends": "edge"
+        }
+      },
+      {
+        "on": "kit",
+        "property": {
+          "name": "introduces_type_22",
+          "type": "Finding",
+          "description": "",
+          "relation": "security-finding",
+          "relationType": "references",
+          "relationLabel": "packages",
+          "required": false,
+          "extends": "link"
+        }
+      }
+    ]
+  }
+}

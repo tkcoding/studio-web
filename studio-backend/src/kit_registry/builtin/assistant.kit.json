@@ -1,0 +1,415 @@
+{
+  "manifest_version": "1",
+  "slug": "assistant",
+  "name": "Assistant",
+  "description": "Studio AI: the chat assistant docked beside every screen, and the model endpoints, tools and messages it works with.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "organization",
+    "workspace",
+    "project"
+  ],
+  "model": {
+    "types": [
+      {
+        "name": "model",
+        "id": "model",
+        "label": "Model Endpoint",
+        "description": "A provider-neutral point at which Studio calls a model, selected by policy for quality, latency, privacy and cost. Its status describes the access, not the model itself.",
+        "entity": {
+          "id": "model",
+          "bucket": "ai",
+          "name": "Model Endpoint",
+          "kind": "callable model endpoint",
+          "description": "A provider-neutral point at which Studio calls a model, selected by policy for quality, latency, privacy and cost. Its status describes the access, not the model itself.",
+          "meta": {
+            "relationship": "agentic-execution",
+            "priority": "P1",
+            "level": 1,
+            "badge": "Changed",
+            "note": "Renamed from Model: the card describes the endpoint Studio calls, not the model an organization has deployed (that is AI Model in the SDLC kit).",
+            "badge-style": "amber",
+            "profiles": [
+              "CTO",
+              "Arch",
+              "Dev",
+              "Researcher"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "ModelId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "provider",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "name",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "capabilities",
+              "type": "Capability[]",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "context_limit",
+              "type": "integer?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "pricing",
+              "type": "Pricing?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "data_policy",
+              "type": "DataPolicy",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "status",
+              "type": "available | degraded | disabled",
+              "description": "",
+              "relationLabel": ""
+            }
+          ],
+          "methods": [
+            {
+              "name": "supports",
+              "description": "",
+              "input": "capability",
+              "result": "boolean"
+            },
+            {
+              "name": "estimate_cost",
+              "description": "",
+              "input": "usage",
+              "result": "Cost"
+            },
+            {
+              "name": "get_limits",
+              "description": "",
+              "input": "",
+              "result": "ModelLimits"
+            },
+            {
+              "name": "get_health",
+              "description": "",
+              "input": "",
+              "result": "Health"
+            }
+          ],
+          "examples": [
+            "Hosted LLM / language model",
+            "Local LLM",
+            "Embedding model",
+            "Reranker",
+            "Multimodal model"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "record"
+        }
+      },
+      {
+        "name": "tool",
+        "id": "tool",
+        "label": "Tool",
+        "description": "A discoverable typed capability callable by an agent, workflow or human through a governed provider.",
+        "entity": {
+          "id": "tool",
+          "bucket": "ai",
+          "name": "Tool",
+          "kind": "callable capability",
+          "description": "A discoverable typed capability callable by an agent, workflow or human through a governed provider.",
+          "meta": {
+            "relationship": "agentic-execution",
+            "priority": "P1",
+            "level": 2,
+            "badge": "",
+            "note": "",
+            "badge-style": "neutral",
+            "profiles": [
+              "CTO",
+              "Arch",
+              "Dev",
+              "Researcher"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "ToolId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "name",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "description",
+              "type": "string",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "input_schema",
+              "type": "JSONSchema",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "output_schema",
+              "type": "JSONSchema?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "side_effect",
+              "type": "none | read | write | destructive",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "approval_policy",
+              "type": "ApprovalPolicy?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "version",
+              "type": "string?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "invoked_as",
+              "type": "ToolCall",
+              "description": "",
+              "relation": "tool-call",
+              "relationType": "derives",
+              "relationLabel": "invoked as",
+              "required": false,
+              "extends": "link"
+            }
+          ],
+          "methods": [
+            {
+              "name": "validate_input",
+              "description": "",
+              "input": "input",
+              "result": "ValidationResult"
+            },
+            {
+              "name": "invoke",
+              "description": "",
+              "input": "input, context",
+              "result": "ToolCall"
+            },
+            {
+              "name": "estimate_risk",
+              "description": "",
+              "input": "input",
+              "result": "Risk"
+            },
+            {
+              "name": "dry_run",
+              "description": "",
+              "input": "input",
+              "result": "CandidateChange?"
+            }
+          ],
+          "examples": [
+            "Read object",
+            "Search graph",
+            "Create work item",
+            "Patch file",
+            "Deploy release"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "record"
+        }
+      },
+      {
+        "name": "message",
+        "id": "message",
+        "label": "Message",
+        "description": "An immutable turn carrying typed content, authorship, references, usage and optional tool activity.",
+        "entity": {
+          "id": "message",
+          "bucket": "collaboration",
+          "name": "Message",
+          "kind": "interaction event",
+          "description": "An immutable turn carrying typed content, authorship, references, usage and optional tool activity.",
+          "meta": {
+            "relationship": "human-loop",
+            "priority": "P1",
+            "level": 3,
+            "badge": "",
+            "note": "A turn inside a Conversation, distinct from a Comment on an object.",
+            "badge-style": "neutral",
+            "profiles": [
+              "PdM",
+              "Arch",
+              "Dev",
+              "QA"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "MessageId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "role",
+              "type": "system | user | assistant | tool",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "author_ref",
+              "type": "ActorRef?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "content",
+              "type": "ContentPart[]",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "references",
+              "type": "EntityRef[]",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "usage",
+              "type": "ModelUsage?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "requests",
+              "type": "ToolCall",
+              "description": "",
+              "relation": "tool-call",
+              "relationType": "composes",
+              "relationLabel": "requests",
+              "required": false,
+              "extends": "link"
+            },
+            {
+              "name": "generated_by",
+              "type": "Model",
+              "description": "",
+              "relation": "model",
+              "relationType": "references",
+              "relationLabel": "generated by",
+              "required": false,
+              "extends": "link"
+            },
+            {
+              "name": "contains",
+              "type": "Mention",
+              "description": "",
+              "relation": "mention",
+              "relationType": "composes",
+              "relationLabel": "contains",
+              "required": false,
+              "extends": "link"
+            }
+          ],
+          "methods": [
+            {
+              "name": "to_text",
+              "description": "",
+              "input": "",
+              "result": "TextContent"
+            },
+            {
+              "name": "list_references",
+              "description": "",
+              "input": "",
+              "result": "Object[]"
+            },
+            {
+              "name": "list_tool_calls",
+              "description": "",
+              "input": "",
+              "result": "ToolCall[]"
+            },
+            {
+              "name": "get_usage",
+              "description": "",
+              "input": "",
+              "result": "ModelUsage?"
+            }
+          ],
+          "examples": [
+            "Instruction",
+            "Human request",
+            "Assistant response",
+            "Tool result",
+            "Approval request"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "record"
+        }
+      }
+    ],
+    "properties": [
+      {
+        "on": "person",
+        "property": {
+          "name": "authors",
+          "type": "Message",
+          "description": "",
+          "relation": "message",
+          "relationType": "member",
+          "relationLabel": "authors",
+          "required": false,
+          "extends": "link"
+        }
+      }
+    ]
+  }
+}

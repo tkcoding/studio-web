@@ -1187,6 +1187,24 @@ pub trait ConnectorDriver: Send + Sync + 'static {
         ))
     }
 
+    /// One file's bytes at `git_ref` (the default branch when `None`), text or
+    /// not, or `None` when the repository has no such file: a kit's built
+    /// bundle (fonts, images, wasm) as well as its scripts. Defaulted to an
+    /// error for a driver that cannot.
+    async fn read_file_bytes(
+        &self,
+        auth: &ConnectionAuth,
+        repo_full_path: &str,
+        path: &str,
+        git_ref: Option<&str>,
+    ) -> anyhow::Result<Option<Vec<u8>>> {
+        let _ = (auth, repo_full_path, path, git_ref);
+        Err(anyhow::anyhow!(
+            "{} does not expose file bytes",
+            self.display_name()
+        ))
+    }
+
     /// The newest commits (up to `limit`) that touched `path` -- a file or a
     /// directory -- on `git_ref`, newest first. Defaulted to empty.
     async fn path_history(

@@ -1,0 +1,146 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.upload {
+  margin-bottom: var(--space-4);
+}
+
+/* TODO(#888): the design draws a 32px search and 14px cells, the kit's DataGrid (and Specs)
+ * 40px and 12px; check with the design which one Studio's tables keep. */
+.grid {
+  --data-grid-table-min-inline-size: 73.5rem;
+  min-width: 0;
+}
+
+.empty {
+  margin-inline: auto;
+  border: 0;
+  white-space: normal;
+}
+
+.footer {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-meta-size);
+  line-height: var(--text-meta-line-height);
+  color: var(--muted-foreground);
+}
+
+.muted {
+  color: var(--muted-foreground);
+}
+
+.source {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.providerTile {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height-xs);
+  height: var(--control-height-xs);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.sourceText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sourceName,
+.sourcePath {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sourceName {
+  font-weight: var(--text-label-weight);
+  color: var(--foreground);
+}
+
+.sourcePath {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta-size);
+  line-height: var(--text-meta-line-height);
+  color: var(--muted-foreground);
+}
+
+button.specsLink {
+  --button-fg: var(--foreground);
+  height: auto;
+  padding: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.pullRequests {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.prCounts {
+  display: flex;
+  flex-direction: column;
+}
+
+.prOpen {
+  font-size: var(--text-meta-size);
+  line-height: var(--text-meta-line-height);
+  font-weight: var(--text-heading-2-weight);
+}
+
+.prMerged,
+.prsUnavailable,
+.share {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.syncLine {
+  font-size: var(--text-meta-size);
+  line-height: var(--text-meta-line-height);
+  color: var(--muted-foreground);
+}
+
+.lastSync {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-meta-size);
+  line-height: var(--text-meta-line-height);
+  color: var(--muted-foreground);
+}
+
+.role {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-meta-size);
+  line-height: var(--text-meta-line-height);
+}
+
+.roleDot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: var(--radius-full);
+  background: var(--muted-foreground);
+}
+
+.actionsCell {
+  display: flex;
+  justify-content: flex-end;
+}

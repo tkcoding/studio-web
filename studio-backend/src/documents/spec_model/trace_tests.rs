@@ -271,6 +271,7 @@ fn the_fingerprint_moves_with_a_document_or_a_path() {
         doc_type: None,
         node: String::new(),
         binding: None,
+        at: None,
     };
     let tree: BTreeSet<String> = ["prd.md".to_string(), "src/a.rs".to_string()].into();
     let base = fingerprint(&[source("one")], &tree);

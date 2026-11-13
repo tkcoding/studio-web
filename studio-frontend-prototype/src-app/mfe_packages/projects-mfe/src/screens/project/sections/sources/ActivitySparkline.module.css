@@ -1,0 +1,32 @@
+.chart {
+  --chart-aspect-ratio: auto;
+  width: 6rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+}
+
+/* As the kit's popups stack. */
+.tooltipLayer {
+  position: fixed;
+  z-index: 50;
+  margin-block: var(--space-1);
+  pointer-events: none;
+}
+
+.tooltipRow {
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.tooltipName {
+  color: var(--muted-foreground);
+}
+
+.tooltipValue {
+  font-family: var(--font-mono);
+  font-weight: var(--text-label-weight);
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}

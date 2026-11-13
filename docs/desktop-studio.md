@@ -562,8 +562,9 @@ front is widened to the assistants' 360px (`settleRightPanelWidth`,
 
 **Specs → Domain model** shows the project's domain model below the editor:
 what its documents say the application is, and where they disagree. It is the
-model of the portal's project tab *Domain model* (`docs/spec-domain-model.md`),
-read through the documents gear's `/studio-documents/v1/spec-model` routes, and
+model of the portal's project tab *Project domain model* (`docs/project-domain-model.md`),
+read through the documents gear's `/studio-documents/v1/project-domain-model` routes (the desktop still calls
+them by their deprecated `/spec-model` alias), and
 the desktop's only: it is bound in `studio-electron-frontend-module.ts`, so a
 session registers no command for it and its ribbon leaves the button out.
 

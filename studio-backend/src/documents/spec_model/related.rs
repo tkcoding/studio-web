@@ -1,7 +1,7 @@
 //! Requirements of other projects that say the same thing, or its opposite
-//! (`docs/spec-domain-model.md`, "Across projects"; issue #733).
+//! (`docs/project-domain-model.md`, "Across projects"; issue #733).
 //!
-//! The spec model finds disagreements inside one project. Interviews asked
+//! The project domain model finds disagreements inside one project. Interviews asked
 //! for the other half: "does another team already require this, or the
 //! opposite?" (problem 1.2, eighteen people in six companies). This is the
 //! deterministic part: candidates by the words two statements share, and a

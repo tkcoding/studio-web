@@ -24,7 +24,8 @@ import {
   useThemedRoot,
 } from '@constructor-studio/mfe-shared';
 import { useConnectionListScreenTranslations, useConnectionListText } from '../../i18n';
-import { useConnectionList, type ConnectionRow } from '../../shared/useConnectionList';
+import { useConnectionList } from '../../shared/useConnectionList';
+import type { ConnectionRow } from '../../model/connection';
 import { openConnectDialog } from '../../actions/connectActions';
 import { connectionColumns } from './components/connectionColumns';
 import styles from './ConnectionListScreen.module.css';

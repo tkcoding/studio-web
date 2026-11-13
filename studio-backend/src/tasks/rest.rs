@@ -322,6 +322,11 @@ pub fn register_routes(
         .authenticated()
         .require_license_features::<License>([])
         .path_param("id", "Run id")
+        .query_param(
+            "tenant",
+            false,
+            "The tenant the run is in, when it is not the caller's",
+        )
         .handler(get_run)
         .json_response_with_schema::<RunDto>(openapi, StatusCode::OK, "The run")
         .error_401(openapi)
@@ -342,6 +347,11 @@ pub fn register_routes(
         .authenticated()
         .require_license_features::<License>([])
         .path_param("id", "Run id")
+        .query_param(
+            "tenant",
+            false,
+            "The tenant the run is in, when it is not the caller's",
+        )
         .handler(cancel_run)
         .json_response_with_schema::<RunDto>(
             openapi,
@@ -366,6 +376,11 @@ pub fn register_routes(
         .authenticated()
         .require_license_features::<License>([])
         .path_param("id", "Run id")
+        .query_param(
+            "tenant",
+            false,
+            "The tenant the run is in, when it is not the caller's",
+        )
         .handler(retry_run)
         .json_response_with_schema::<RunDto>(openapi, StatusCode::ACCEPTED, "Queued again")
         .error_400(openapi)

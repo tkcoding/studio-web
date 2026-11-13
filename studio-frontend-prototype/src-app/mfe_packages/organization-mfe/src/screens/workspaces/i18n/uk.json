@@ -1,0 +1,22 @@
+{
+  "title": "Workspaces",
+  "toolbar_label": "Workspaces",
+  "table_label": "Workspaces",
+  "search_placeholder": "Search workspaces...",
+  "new_workspace": "New workspace",
+  "new_workspace_no_org": "No organization is in scope for this session.",
+  "totals_workspaces_one": "{count} workspace",
+  "totals_workspaces_many": "{count} workspaces",
+  "totals_projects_one": "{count} project",
+  "totals_projects_many": "{count} projects",
+  "col_workspace": "Workspace",
+  "col_projects": "Projects",
+  "col_updated": "Updated",
+  "empty_search": "No workspace matches that search.",
+  "error_title": "The workspaces could not be read.",
+  "retry": "Try again",
+  "range_one": "{from}–{to} of {total} workspace",
+  "range_many": "{from}–{to} of {total} workspaces",
+  "resolving_org": "Resolving the organization…",
+  "no_org": "No organization is in scope."
+}

@@ -1388,6 +1388,36 @@ impl ConnectorDriver for GitHubDriver {
         }))
     }
 
+    async fn read_file_bytes(
+        &self,
+        auth: &ConnectionAuth,
+        repo_full_path: &str,
+        path: &str,
+        git_ref: Option<&str>,
+    ) -> anyhow::Result<Option<Vec<u8>>> {
+        let path = normalize_repo_path(path)?;
+        let url = format!(
+            "{}/repos/{repo_full_path}/contents/{}",
+            auth.root(),
+            encode_path(&path)
+        );
+        let mut rb = self
+            .request(&url, auth)
+            .header("Accept", "application/vnd.github.raw");
+        if let Some(r) = git_ref.map(str::trim).filter(|r| !r.is_empty()) {
+            rb = rb.query(&[("ref", r)]);
+        }
+        let res = rb.send().await?;
+        let status = res.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            anyhow::bail!("GitHub {status} reading {path} raw");
+        }
+        Ok(Some(res.bytes().await?.to_vec()))
+    }
+
     async fn path_history(
         &self,
         auth: &ConnectionAuth,

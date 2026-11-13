@@ -47,7 +47,7 @@ pub const ROLE_OWNER: &str = "owner";
 /// purpose: projects are account-management tenants (ADR-0010), so reaching one
 /// is membership rather than a privilege, and an entry that must be granted to
 /// everybody in order not to break them is worse than no entry.
-pub const PRIVILEGES: [&str; 18] = [
+pub const PRIVILEGES: [&str; 19] = [
     "people.view",
     "people.invite",
     "people.manage",
@@ -75,6 +75,9 @@ pub const PRIVILEGES: [&str; 18] = [
     // administration asked of studio-user.
     "cost.view",
     "cost.manage",
+    // Kits an organization installs for itself (ADR-0069 §4): administration
+    // asked of studio-user.
+    "kit.manage",
 ];
 
 /// Does a role with `privileges` carry `wanted`?

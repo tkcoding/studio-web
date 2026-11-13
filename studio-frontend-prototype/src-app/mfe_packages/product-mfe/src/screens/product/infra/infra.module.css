@@ -1,0 +1,22 @@
+/* Product › Infrastructure's own pieces, over the kit's tokens. */
+
+.clickable {
+  cursor: pointer;
+}
+
+.clip {
+  max-width: 20rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5, 1.25rem);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+}
