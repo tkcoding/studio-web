@@ -82,7 +82,7 @@ there is.
 in one file per environment: the namespace, the values file, the image tag (`GEARS_MATCHER_IMAGE_TAG`,
 required) and the flags the workflow passes by hand (`--wait`, `--rollback-on-failure`, a 10 minute
 timeout, 10 revisions kept). The workflow does not use it yet, and Studio's own release is not in it
-(Studio Delivery stays the way to deploy that one, see PIPELINES.md). Not validated against a cluster:
+(Studio Delivery stays the way to deploy that one, see PIPELINES.md). `helmfile lint` and `template` pass for dev and test (helm 4); not run against a cluster:
 `helmfile diff` is the first thing to run.
 
 What it would give: one place for what differs between Dev and Test; `diff` before an upgrade; the
