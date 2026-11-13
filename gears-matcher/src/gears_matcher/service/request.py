@@ -30,7 +30,7 @@ class Limits:
     max_documents: int = 20
     max_document_bytes: int = 500_000
     max_request_bytes: int = 2_000_000
-    max_calls: int = 400  # Studio's PRD (54 requirements) took 126 calls; Insight (157) needs ~360
+    max_calls: int = 400  # measured: Studio's PRD 126 calls, Insight's 192
     max_extract_calls: int = 100
     max_concurrent_runs: int | None = None  # None: no cap (T9 D16, for now)
     max_run_seconds: int = 3600
