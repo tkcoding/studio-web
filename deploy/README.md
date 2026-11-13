@@ -83,7 +83,7 @@ in one file per environment: the namespace, the values file, the image tag (`GEA
 required) and the flags the workflow passes by hand (`--wait`, `--rollback-on-failure`, a 10 minute
 timeout, 10 revisions kept). The workflow does not use it yet, and Studio's own release is not in it
 (Studio Delivery stays the way to deploy that one, see PIPELINES.md). Not validated against a cluster:
-`helmfile lint` and `helmfile diff` are the first thing to run.
+`helmfile diff` is the first thing to run.
 
 What it would give: one place for what differs between Dev and Test; `diff` before an upgrade; the
 same command on a laptop and in the workflow. What it would cost: a tool (`helmfile`, and the

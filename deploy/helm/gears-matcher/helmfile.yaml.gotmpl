@@ -21,12 +21,13 @@ environments:
 
 ---
 # The same flags as the workflow's `helm upgrade --install … --rollback-on-failure --wait --timeout 10m
-# --history-max 10`.
+# --history-max 10`. `syncArgs` goes to `helm upgrade` only: `args` would reach `helm lint` and `helm
+# template` too, which do not know the flag.
 helmDefaults:
   wait: true
   timeout: 600
   historyMax: 10
-  args:
+  syncArgs:
     - --rollback-on-failure
 
 releases:
