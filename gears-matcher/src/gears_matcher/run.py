@@ -102,7 +102,7 @@ class RunInputs:
     cache_dir: Path  # where model replies are kept, so a rerun does not pay twice
     product: str | None = None
     own_gears: frozenset[str] = frozenset()
-    max_calls: int = 200  # bounds the matching models, all together
+    max_calls: int = 400  # bounds the matching models, all together (Studio took 126)
     extract_max_calls: int | None = None  # None: free-form reading is off
     tau: float = DEFAULT_TAU
 
