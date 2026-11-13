@@ -76,6 +76,35 @@ the Pod that accepted it, and the reply cache is on a ReadWriteOnce claim kept w
 fails the deploy, which rolls back. The per-run call bound (`limits.maxCalls`, 400) is the one cost limit
 there is.
 
+### A Helmfile for the gears-matcher (proposal)
+
+[`helm/gears-matcher/helmfile.yaml.gotmpl`](helm/gears-matcher/helmfile.yaml.gotmpl) states the release
+in one file per environment: the namespace, the values file, the image tag (`GEARS_MATCHER_IMAGE_TAG`,
+required) and the flags the workflow passes by hand (`--wait`, `--rollback-on-failure`, a 10 minute
+timeout, 10 revisions kept). The workflow does not use it yet, and Studio's own release is not in it
+(Studio Delivery stays the way to deploy that one, see PIPELINES.md). `helmfile lint` and `template` pass for dev and test (helm 4); not run against a cluster:
+`helmfile diff` is the first thing to run.
+
+What it would give: one place for what differs between Dev and Test; `diff` before an upgrade; the
+same command on a laptop and in the workflow. What it would cost: a tool (`helmfile`, and the
+`helm-diff` plugin) that nothing else in the repository uses, installed on the runner.
+
+Settings worth recording per environment, in `values-<env>.yaml` (the file the Helmfile reads), none
+of them secret:
+
+| Setting | Why per environment |
+|---|---|
+| `catalogue.url`, `catalogue.branch` | Dev follows Studio's corpus branch; Test the pinned commits. Move with the Studio release's `backend.gearbox.corpusUrl/corpusRef`. |
+| `limits.maxCalls`, `maxExtractCalls`, `maxConcurrentRuns` | The cost limits; the pilot may want a cap on Dev only. |
+| `limits.workers`, `resources`, `persistence.size`, `storageClass` | Sized to the environment's quota. A run of 157 requirements took about 30 minutes and 192 calls. |
+| `database.name`, `database.pool`, `database.create` | The pool is counted in the connection budget; `create` is on only where the bootstrap Secret exists. |
+| `config.existingSecret`, `config.revision` | Bump the revision to roll the Pod after the Secret changes. |
+| `imagePullSecrets` | Empty while the package is public. |
+| `networkPolicy.backendPodLabels` | Must match the Studio release's backend labels in that namespace. |
+
+Keep out of the file: `shared_secret`, the connector's `access_key` and the other `[llm]` settings.
+They stay in the Secret `studio-gears-matcher`, which the workflow checks exists.
+
 ## Configuration model
 
 One image, any environment:

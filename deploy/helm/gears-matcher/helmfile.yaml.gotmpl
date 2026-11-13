@@ -1,0 +1,41 @@
+# The gears-matcher release, per environment, as one declarative file (a PROPOSAL, see
+# deploy/README.md "A Helmfile for the gears-matcher"). It states what .github/workflows/gears-matcher.yml
+# runs by hand with `helm upgrade --install`: the release, its namespace, the values file of the
+# environment, the image tag, and how the upgrade waits and rolls back. The workflow does not use it yet.
+#
+#   export GEARS_MATCHER_IMAGE_TAG=sha-<40 hex>        # required: an immutable tag, never `latest`
+#   helmfile -f deploy/helm/gears-matcher/helmfile.yaml.gotmpl -e dev lint
+#   helmfile -f deploy/helm/gears-matcher/helmfile.yaml.gotmpl -e dev diff       # needs the helm-diff plugin
+#   helmfile -f deploy/helm/gears-matcher/helmfile.yaml.gotmpl -e dev apply
+#
+# Not here, on purpose: the keys. They are in the Secret `studio-gears-matcher` (key `config.toml`),
+# which the operator makes; no value of it is read, written or templated by this file.
+
+environments:
+  dev:
+    values:
+      - namespace: studio-dev
+  test:
+    values:
+      - namespace: studio-test
+
+---
+# The same flags as the workflow's `helm upgrade --install … --rollback-on-failure --wait --timeout 10m
+# --history-max 10`. `syncArgs` goes to `helm upgrade` only: `args` would reach `helm lint` and `helm
+# template` too, which do not know the flag.
+helmDefaults:
+  wait: true
+  timeout: 600
+  historyMax: 10
+  syncArgs:
+    - --rollback-on-failure
+
+releases:
+  - name: gears-matcher
+    namespace: {{ .Environment.Values.namespace }}
+    chart: .
+    values:
+      - values-{{ .Environment.Name }}.yaml
+    setString:
+      - name: image.tag
+        value: {{ requiredEnv "GEARS_MATCHER_IMAGE_TAG" | quote }}
