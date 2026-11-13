@@ -1,0 +1,692 @@
+// @cpt-flow:cpt-frontx-flow-request-lifecycle-query-client-lifecycle:p2
+
+/**
+ * MFE Bootstrap
+ *
+ * Registers MFE domains, extensions, and handlers with the FrontX app.
+ *
+ * MFE manifest configs are fetched at runtime from `/generated-mfe-manifests.json`
+ * (a public asset produced by `scripts/generate-mfe-manifests.ts` before each
+ * `vite dev` / `vite build`). The script accepts `--base-url` for
+ * deployment-specific `publicPath` values; the JSON shape is identical to
+ * what the future backend API will return so the transport swap is a
+ * one-line URL change here.
+ */
+
+import {
+  ExtensionDomainImplementation,
+  ExtensionDomainImplementationFactory,
+  ExclusiveMountStrategy,
+  OptionalMountStrategy,
+  ConcurrentMountStrategy,
+  ActionHandler,
+  FRONTX_ACTION_MOUNT_EXT,
+  FRONTX_ACTION_UNMOUNT_EXT,
+  FRONTX_SHARED_PROPERTY_THEME,
+  FRONTX_SHARED_PROPERTY_LANGUAGE,
+  screenDomain,
+  sidebarDomain,
+  popupDomain,
+  overlayDomain,
+} from '@gears-frontx/react';
+import type {
+  FrontXApp,
+  Extension,
+  ExtensionDomain,
+  MfManifest,
+  MfeEntryMF,
+  JSONSchema,
+  MfeRegistry,
+  ContainerHooks,
+  DomainContext,
+  ActionPayload,
+  MountStrategy,
+} from '@gears-frontx/react';
+
+import {
+  STUDIO_ACTION_ARTIFACT_OPEN,
+  STUDIO_ACTION_CHAIN_DONE,
+  STUDIO_ACTION_CHAIN_FAILED,
+  STUDIO_ACTION_CONTEXT_PUBLISH,
+  STUDIO_ACTION_NOTIFY,
+  STUDIO_ACTION_PLACE_OPEN,
+  STUDIO_ACTION_SCREEN_OPEN,
+  STUDIO_ACTION_WORKSPACES_PUBLISH,
+  STUDIO_SHARED_PROPERTY_CONTEXT_ARTIFACT,
+  STUDIO_SHARED_PROPERTY_CONTEXT_ORGANIZATION,
+  STUDIO_SHARED_PROPERTY_CONTEXT_PROJECT,
+  STUDIO_SHARED_PROPERTY_CONTEXT_SECTION,
+  STUDIO_SHARED_PROPERTY_CONTEXT_WORKSPACE,
+  STUDIO_SHARED_PROPERTY_SESSION_PROFILE,
+  STUDIO_SHARED_PROPERTY_SPACE_FRAME_URL,
+  STUDIO_SHARED_PROPERTY_LIVE_EVENT,
+  STUDIO_SHARED_PROPERTY_SCREENS_AVAILABLE,
+  prewarmShadowStyles,
+} from '@constructor-studio/mfe-shared';
+import {
+  createArtifactOpenHandler,
+  createContextPublishHandler,
+  createPlaceOpenHandler,
+  createWorkspacePublishHandler,
+} from '@/app/mfe/contextActions';
+import { createNotifyHandler } from '@/app/mfe/notifyAction';
+import { createScreenOpenHandler } from '@/app/mfe/screenOpenAction';
+import type { StudioScreenExtension } from '@/app/mfe/screenLevels';
+import { occupancyOf } from '@/app/mfe/domainOccupancy';
+import { outcomesOf } from '@/app/mfe/shellOutcomes';
+import {
+  publishAvailableScreens,
+  publishFrameUrl,
+  publishLiveEvent,
+  publishStudioContext,
+} from '@/app/mfe/sharedContext';
+import { KIT_SLOT_EXTENSION_TYPE, SHELL_SLOTS, orderOf, type ShellSlot, type SlotContribution } from '@/app/mfe/slots';
+
+const MFE_MANIFESTS_URL = '/generated-mfe-manifests.json';
+
+/**
+ * Shape of each MFE manifest config in the generated JSON.
+ * Matches the output of scripts/generate-mfe-manifests.ts. `extensions` is
+ * optional because an MFE may declare only loadable entries (with no
+ * default wiring); the consumer chooses how those entries get wired into
+ * domains. Self-declared `extensions[]` are still supported for MFEs that
+ * propose default wirings the host should pick up. `domains` is optional
+ * because most MFEs target host-owned domains; an MFE declares `domains`
+ * only when it owns an ExtensionDomain instance (e.g., demo-mfe owns the
+ * widgets domain — registered here so extensions targeting that domain
+ * resolve content-addressed at the runtime store). `manifest` is optional
+ * because a frame package (ADR-0021) has no remote to describe one for — it
+ * carries a `publicPath` on each entry instead.
+ */
+export interface MfeManifestConfig {
+  manifest?: MfManifest;
+  domains?: ExtensionDomain[];
+  entries: Array<MfeEntryMF | MfeEntryFrameConfig>;
+  extensions?: Extension[];
+  schemas?: JSONSchema[];
+}
+
+/**
+ * A frame entry as the generator emits it: an address, and no module. Nothing
+ * reads `publicPath` since #322 — the frame shows what the property holds; it
+ * stays only because the catalogue shape has one for every entry
+ * (`manifest-generator.ts`, `resolveFramePublicPath`).
+ */
+interface MfeEntryFrameConfig {
+  id: string;
+  requiredProperties: string[];
+  actions: string[];
+  domainActions: string[];
+  urlProperty: string;
+  publicPath: string;
+  optionalProperties?: string[];
+}
+
+/** Resolve deploy-time same-origin MFE paths without baking an environment hostname into the image. */
+export function resolveRuntimePublicPaths(
+  manifests: readonly MfeManifestConfig[],
+  origin: string,
+): MfeManifestConfig[] {
+  return manifests.map((config) => {
+    // Narrowed to a local so TS carries "defined" through the rest of this
+    // closure — `config.manifest` on its own stays optional even after the
+    // guard below, because the guard tests `configuredPath`, not `manifest`.
+    const sourceManifest = config.manifest;
+    const configuredPath = sourceManifest?.metaData?.publicPath;
+    if (sourceManifest === undefined || !configuredPath?.startsWith('/')) return config;
+
+    const manifest: MfManifest = {
+      ...sourceManifest,
+      metaData: {
+        ...sourceManifest.metaData,
+        publicPath: new URL(configuredPath, origin).href,
+      },
+    };
+    return {
+      ...config,
+      manifest,
+      // Only an MF entry carries its own `manifest` field to refresh; a frame
+      // entry (ADR-0021) has none and passes through unchanged — though a
+      // manifest-bearing config's entries are always MF entries in practice.
+      entries: config.entries.map((entry) =>
+        'manifest' in entry ? { ...entry, manifest } : entry
+      ),
+    };
+  });
+}
+
+export function mfeStylesheetHrefs(manifests: readonly MfeManifestConfig[]): string[] {
+  const hrefs: string[] = [];
+  for (const config of manifests) {
+    const baseUrl = config.manifest?.metaData?.publicPath;
+    if (!baseUrl) continue;
+    for (const entry of config.entries) {
+      // A frame entry (ADR-0021) exposes no chunks — nothing to add.
+      if (!('exposeAssets' in entry)) continue;
+      const css = entry.exposeAssets?.css;
+      for (const path of [...(css?.sync ?? []), ...(css?.async ?? [])]) {
+        hrefs.push(new URL(path, baseUrl).href);
+      }
+    }
+  }
+  return hrefs;
+}
+
+// ─── Domain implementation building blocks ───────────────────────────────────
+//
+// The redesigned domain model owns mount semantics inside the domain
+// implementation. Each domain registered with the registry pairs an
+// `ExtensionDomain` declaration with an `ExtensionDomainImplementationFactory`
+// whose `build(ctx)` constructs an `ExtensionDomainImplementation`. The
+// implementation captures the per-domain mounter and a `ContainerHooks`
+// inside its chosen `MountStrategy` and registers per-action-type handlers
+// that delegate to the strategy.
+
+/**
+ * `fill` is the difference between an area and a frame. Screen and sidebar hand
+ * the extension a region and expect it filled. Overlay and popup draw a frame
+ * around whatever the extension turns out to be, so forcing a height here would
+ * override the size the extension states for itself.
+ */
+class HostContainerHooks implements ContainerHooks {
+  private readonly elements = new Map<string, HTMLElement>();
+
+  constructor(
+    private readonly registry: MfeRegistry,
+    private readonly domainId: string,
+    private readonly fill: boolean = true,
+  ) {}
+
+  create(extensionId: string): Element {
+    const el = document.createElement('div');
+    el.dataset.extensionId = extensionId;
+    if (this.fill) el.style.height = '100%';
+    this.elements.set(extensionId, el);
+    return el;
+  }
+
+  /**
+   * The runtime creates the container before it loads the remote, so the
+   * extension counts as mounted only from here: once its mount has finished.
+   */
+  mounted(extensionId: string): void {
+    occupancyOf(this.registry).mountFinished(this.domainId, extensionId);
+  }
+
+  destroy(extensionId: string): void {
+    this.elements.delete(extensionId);
+    occupancyOf(this.registry).destroyed(this.domainId, extensionId);
+  }
+}
+
+/** Mounts through the domain's strategy, and records the extension once it is in. */
+function mountHandler(strategy: MountStrategy, hooks: HostContainerHooks): ActionHandler {
+  return ActionHandler.fromFunction(async (_t, p) => {
+    const payload = p as ActionPayload;
+    await strategy.mount(payload);
+    hooks.mounted(payload.subject);
+  });
+}
+
+class ScreenDomainImpl extends ExtensionDomainImplementation {
+  private readonly strategy: ExclusiveMountStrategy;
+
+  constructor(ctx: DomainContext, hooks: HostContainerHooks, registry: MfeRegistry) {
+    super();
+    this.strategy = new ExclusiveMountStrategy(ctx.mounter, hooks);
+    ctx.registerHandler(FRONTX_ACTION_MOUNT_EXT, mountHandler(this.strategy, hooks));
+    // The screen domain is where the mounted MFE lives, so it is also where an
+    // MFE's context publication arrives. See contextActions.ts for why this is
+    // an action chain and not an event.
+    ctx.registerHandler(STUDIO_ACTION_CONTEXT_PUBLISH, createContextPublishHandler());
+    ctx.registerHandler(STUDIO_ACTION_WORKSPACES_PUBLISH, createWorkspacePublishHandler());
+    ctx.registerHandler(STUDIO_ACTION_ARTIFACT_OPEN, createArtifactOpenHandler());
+    ctx.registerHandler(STUDIO_ACTION_NOTIFY, createNotifyHandler());
+    ctx.registerHandler(STUDIO_ACTION_PLACE_OPEN, createPlaceOpenHandler());
+    ctx.registerHandler(
+      STUDIO_ACTION_SCREEN_OPEN,
+      createScreenOpenHandler(() => registry.getExtensionsForDomain(screenDomain.id) as StudioScreenExtension[])
+    );
+    // Where every shell request reports how it ended (shellOutcomes.ts).
+    ctx.registerHandler(STUDIO_ACTION_CHAIN_DONE, outcomesOf(registry).done);
+    ctx.registerHandler(STUDIO_ACTION_CHAIN_FAILED, outcomesOf(registry).failed);
+  }
+
+  protected getMountStrategies(): MountStrategy[] {
+    return [this.strategy];
+  }
+}
+
+class OptionalDomainImpl extends ExtensionDomainImplementation {
+  private readonly strategy: OptionalMountStrategy;
+
+  constructor(ctx: DomainContext, hooks: HostContainerHooks, handlers: Record<string, ActionHandler> = {}) {
+    super();
+    this.strategy = new OptionalMountStrategy(ctx.mounter, hooks);
+    ctx.registerHandler(FRONTX_ACTION_MOUNT_EXT, mountHandler(this.strategy, hooks));
+    ctx.registerHandler(
+      FRONTX_ACTION_UNMOUNT_EXT,
+      ActionHandler.fromFunction((_t, p) => this.strategy.unmount!(p as ActionPayload)),
+    );
+    for (const [type, handler] of Object.entries(handlers)) {
+      ctx.registerHandler(type, handler);
+    }
+  }
+
+  protected getMountStrategies(): MountStrategy[] {
+    return [this.strategy];
+  }
+}
+
+class ScreenDomainFactory extends ExtensionDomainImplementationFactory {
+  constructor(private readonly registry: MfeRegistry) { super(); }
+  build(ctx: DomainContext): ScreenDomainImpl {
+    return new ScreenDomainImpl(ctx, new HostContainerHooks(this.registry, screenDomain.id), this.registry);
+  }
+}
+
+class OptionalDomainFactory extends ExtensionDomainImplementationFactory {
+  constructor(
+    private readonly registry: MfeRegistry,
+    private readonly domainId: string,
+    private readonly fill: boolean = true,
+    private readonly handlers: Record<string, ActionHandler> = {},
+  ) { super(); }
+  build(ctx: DomainContext): OptionalDomainImpl {
+    return new OptionalDomainImpl(ctx, new HostContainerHooks(this.registry, this.domainId, this.fill), this.handlers);
+  }
+}
+
+/**
+ * A slot's containers sit side by side in the slot's root, in the
+ * contributions' order: the root is a flex box (`layout/KitSlot.tsx`), so the
+ * order holds whatever order the mounts finish in.
+ */
+class SlotContainerHooks extends HostContainerHooks {
+  constructor(private readonly slotRegistry: MfeRegistry, domainId: string) {
+    super(slotRegistry, domainId, false);
+  }
+
+  override create(extensionId: string): Element {
+    const el = super.create(extensionId) as HTMLElement;
+    const extension = this.slotRegistry.getExtension(extensionId) as SlotContribution | undefined;
+    el.style.order = String(extension ? orderOf(extension) : 0);
+    el.style.minWidth = '0';
+    return el;
+  }
+}
+
+/** Every contribution its own container, mounted and unmounted one by one (`mfe/slots.ts`). */
+class SlotDomainImpl extends ExtensionDomainImplementation {
+  private readonly strategy: ConcurrentMountStrategy;
+
+  constructor(ctx: DomainContext, hooks: HostContainerHooks) {
+    super();
+    this.strategy = new ConcurrentMountStrategy(ctx.mounter, hooks);
+    ctx.registerHandler(FRONTX_ACTION_MOUNT_EXT, mountHandler(this.strategy, hooks));
+    ctx.registerHandler(
+      FRONTX_ACTION_UNMOUNT_EXT,
+      ActionHandler.fromFunction((_t, p) => this.strategy.unmount(p as ActionPayload)),
+    );
+  }
+
+  protected getMountStrategies(): MountStrategy[] {
+    return [this.strategy];
+  }
+}
+
+class SlotDomainFactory extends ExtensionDomainImplementationFactory {
+  constructor(private readonly registry: MfeRegistry, private readonly domainId: string) { super(); }
+  build(ctx: DomainContext): SlotDomainImpl {
+    return new SlotDomainImpl(ctx, new SlotContainerHooks(this.registry, this.domainId));
+  }
+}
+
+/**
+ * One named slot's domain: the sidebar's lifecycle and mount/unmount actions,
+ * the studio context a contribution may ask for, and the contribution type
+ * every extension in it chains through. Exported for the tests.
+ */
+export function buildSlotDomain(slot: ShellSlot): ExtensionDomain {
+  return unrouted({
+    ...sidebarDomain,
+    id: slot.domainId,
+    sharedProperties: [
+      ...sidebarDomain.sharedProperties,
+      STUDIO_SHARED_PROPERTY_CONTEXT_ORGANIZATION,
+      STUDIO_SHARED_PROPERTY_CONTEXT_WORKSPACE,
+      STUDIO_SHARED_PROPERTY_CONTEXT_PROJECT,
+      STUDIO_SHARED_PROPERTY_CONTEXT_SECTION,
+      STUDIO_SHARED_PROPERTY_SESSION_PROFILE,
+      STUDIO_SHARED_PROPERTY_LIVE_EVENT,
+    ],
+    extensionsTypeId: KIT_SLOT_EXTENSION_TYPE,
+  });
+}
+
+// @cpt-begin:cpt-frontx-dod-mfe-registry-mfe-schema-registration:p1:inst-1
+/**
+ * Scoped schema registration: only register schemas whose $id matches an action ID
+ * declared by at least one entry in this package. Action schemas are validated
+ * against declared entry actions; non-action schemas (derived ExtensionDomain
+ * and Extension type schemas owned by parent MFEs) are registered separately
+ * via `registerNonActionSchemas` because they have no action ID counterpart.
+ */
+function collectDeclaredActionIds(entries: Array<MfeEntryMF | MfeEntryFrameConfig>): Set<string> {
+  const declaredActionIds = new Set<string>();
+  for (const entry of entries) {
+    for (const actionId of entry.actions) declaredActionIds.add(actionId);
+    for (const actionId of entry.domainActions) declaredActionIds.add(actionId);
+  }
+  return declaredActionIds;
+}
+
+function registerScopedSchemas(
+  registry: MfeRegistry,
+  schemas: JSONSchema[],
+  declaredActionIds: Set<string>,
+): void {
+  for (const schema of schemas) {
+    const schemaId = schema.$id;
+    if (!schemaId) continue;
+    const matches = Array.from(declaredActionIds).some((actionId) =>
+      schemaId.includes(actionId),
+    );
+    if (matches) {
+      registry.typeSystem.registerSchema(schema);
+    }
+  }
+}
+
+/**
+ * Register schemas that are not action schemas. Derived `ExtensionDomain` and
+ * `Extension` type schemas declared by a parent MFE (e.g., demo-mfe's widgets
+ * domain derived schema) must be registered before any leaf MFE's extension
+ * instance is validated against the chain — per
+ * `cpt-frontx-dod-mfe-registry-mfe-schema-registration` (parent
+ * registers schemas before entries / extensions). The action-id-match filter
+ * in `registerScopedSchemas` does not apply to these schemas because their
+ * `$id` is a domain or extension type ID, not an action ID.
+ *
+ * Registration is idempotent: `gtsPlugin.registerSchema` accepts duplicates,
+ * so registering all non-action schemas across all packages in a first pass
+ * is safe and keeps the schema chain available before any leaf-MFE extension
+ * registration.
+ */
+function registerNonActionSchemas(
+  registry: MfeRegistry,
+  schemas: JSONSchema[],
+  declaredActionIds: Set<string>,
+): void {
+  for (const schema of schemas) {
+    const schemaId = schema.$id;
+    if (!schemaId) continue;
+    const matchesAction = Array.from(declaredActionIds).some((actionId) =>
+      schemaId.includes(actionId),
+    );
+    if (!matchesAction) {
+      registry.typeSystem.registerSchema(schema);
+    }
+  }
+}
+// @cpt-end:cpt-frontx-dod-mfe-registry-mfe-schema-registration:p1:inst-1
+
+/**
+ * First pass over every package: register all non-action schemas on the gts
+ * singleton so leaf-MFE extension validation later in the second pass can chain
+ * through derived schemas declared by parent MFEs (regardless of iteration
+ * order in `generated-mfe-manifests.json`).
+ */
+function registerAllNonActionSchemas(
+  registry: MfeRegistry,
+  manifests: readonly MfeManifestConfig[],
+): void {
+  for (const config of manifests) {
+    if (!config.schemas) continue;
+    registerNonActionSchemas(
+      registry,
+      config.schemas,
+      collectDeclaredActionIds(config.entries),
+    );
+  }
+}
+
+/**
+ * Returns true when the given domain ID is registered on the host registry —
+ * i.e., this host owns the domain and is responsible for registering its
+ * extensions. Foreign-domain extensions (those whose target domain is owned by
+ * a different runtime, like the widgets domain owned by demo-mfe's child
+ * FrontX app) MUST NOT be registered on the host registry; they reach their
+ * owning runtime through a content-addressed dispatcher (per Phase 2.6 —
+ * `cpt-frontx-algo-framework-composition-content-addressed-discovery`).
+ */
+function hostOwnsDomain(registry: MfeRegistry, domainId: string): boolean {
+  return registry.getDomain(domainId) !== undefined;
+}
+
+export async function registerMfePackage(
+  registry: MfeRegistry,
+  config: MfeManifestConfig,
+): Promise<void> {
+  if (config.schemas) {
+    registerScopedSchemas(registry, config.schemas, collectDeclaredActionIds(config.entries));
+  }
+  // register() validates each instance against its schema and throws on
+  // failure — invalid manifests/entries fail startup loudly rather than
+  // persisting broken state into the registry. The aggregator script inlines
+  // the resolved MfManifest object into each entry's `manifest` field so the
+  // host registers entries opaquely — no spread/override needed here. A
+  // frame package (ADR-0021) carries no manifest at all: nothing to enrich.
+  if (config.manifest !== undefined) {
+    registry.typeSystem.register(config.manifest);
+  }
+  // Registration order: schemas → manifest → domains → entries → extensions.
+  // Domains MUST be registered before any extension references them so the
+  // content-addressed dispatcher can resolve target-domain ownership at the
+  // GTS runtime store. Domain registration is opaque — the aggregator passes
+  // each `ExtensionDomain` instance through verbatim.
+  for (const domain of config.domains ?? []) {
+    console.info(`[MFE Bootstrap] Registering domain ${domain.id}`);
+    registry.typeSystem.register(domain);
+  }
+  for (const entry of config.entries) {
+    registry.typeSystem.register(entry);
+  }
+  for (const extension of config.extensions ?? []) {
+    // Phase 2.6 content-addressed discovery: only register extensions whose
+    // target domain is owned by this host registry. Extensions targeting a
+    // domain owned by another FrontX app (e.g., widgets-fixture-a's two widget
+    // extensions target the widgets domain owned by demo-mfe's child app) are
+    // skipped here and dispatched to the owning runtime by L4 inline code in
+    // that runtime's bootstrap. When the framework `microfrontends()` plugin's
+    // content-addressed dispatcher lands (post-Phase 2.6 implementation), this
+    // skip-and-defer rule moves into L2 and the host bootstrap becomes a pure
+    // GTS-runtime-store registrar.
+    if (!hostOwnsDomain(registry, extension.domain)) {
+      continue;
+    }
+    await registry.registerExtension(extension);
+  }
+}
+
+/**
+ * A domain declaration without its `route`. The framework starts its own router
+ * for every routed domain, and that router clears our address (ADR-0028).
+ */
+function unrouted<T extends { route?: string }>(declaration: T): Omit<T, 'route'> {
+  const rest = { ...declaration };
+  delete rest.route;
+  return rest;
+}
+
+/**
+ * The screen domain this host registers: the framework's `screenDomain` plus
+ * the studio context properties a screen-mounted MFE may ask for, and the
+ * frame address a frame-entry MFE's `urlProperty` names (ADR-0021). Exported
+ * so a test can read what the shell declares without standing up a registry.
+ */
+export function buildStudioScreenDomain(): ExtensionDomain {
+  return unrouted({
+    ...screenDomain,
+    actions: [
+      ...screenDomain.actions,
+      STUDIO_ACTION_CONTEXT_PUBLISH,
+      STUDIO_ACTION_WORKSPACES_PUBLISH,
+      STUDIO_ACTION_ARTIFACT_OPEN,
+      STUDIO_ACTION_NOTIFY,
+      STUDIO_ACTION_SCREEN_OPEN,
+      STUDIO_ACTION_PLACE_OPEN,
+      STUDIO_ACTION_CHAIN_DONE,
+      STUDIO_ACTION_CHAIN_FAILED,
+    ],
+    sharedProperties: [
+      ...screenDomain.sharedProperties,
+      STUDIO_SHARED_PROPERTY_CONTEXT_PROJECT,
+      STUDIO_SHARED_PROPERTY_CONTEXT_ORGANIZATION,
+      STUDIO_SHARED_PROPERTY_CONTEXT_SECTION,
+      STUDIO_SHARED_PROPERTY_CONTEXT_WORKSPACE,
+      STUDIO_SHARED_PROPERTY_CONTEXT_ARTIFACT,
+      STUDIO_SHARED_PROPERTY_SESSION_PROFILE,
+      STUDIO_SHARED_PROPERTY_SPACE_FRAME_URL,
+      STUDIO_SHARED_PROPERTY_LIVE_EVENT,
+      STUDIO_SHARED_PROPERTY_SCREENS_AVAILABLE,
+    ],
+  });
+}
+
+/**
+ * The overlay domain carries the studio context too, and it has to be stated
+ * here: the framework's `overlayDomain` declares theme and language only, and
+ * a domain that does not declare a property cannot deliver it — an entry
+ * asking for one fails registration instead.
+ */
+export function buildStudioOverlayDomain(): ExtensionDomain {
+  return unrouted({
+    ...overlayDomain,
+    // The overlay that creates a workspace hands it back through this action —
+    // it is mounted here, and an action reaches only the domain it targets, so
+    // the screen domain above declares it too.
+    // Search, an overlay, goes to the place or the file it found: the same
+    // place and artifact requests a screen makes.
+    actions: [
+      ...overlayDomain.actions,
+      STUDIO_ACTION_WORKSPACES_PUBLISH,
+      STUDIO_ACTION_PLACE_OPEN,
+      STUDIO_ACTION_ARTIFACT_OPEN,
+    ],
+    sharedProperties: [
+      ...overlayDomain.sharedProperties,
+      STUDIO_SHARED_PROPERTY_CONTEXT_ORGANIZATION,
+      STUDIO_SHARED_PROPERTY_CONTEXT_WORKSPACE,
+      STUDIO_SHARED_PROPERTY_CONTEXT_PROJECT,
+      STUDIO_SHARED_PROPERTY_SESSION_PROFILE,
+    ],
+  });
+}
+
+/**
+ * The sidebar domain this host registers: what a kit docks beside the screen
+ * (`layout/KitDock.tsx`; Studio AI, the `assistant` kit). It carries where the
+ * person is — the framework's `sidebarDomain` declares theme and language
+ * only, and a domain that does not declare a property cannot deliver it.
+ */
+export function buildStudioSidebarDomain(): ExtensionDomain {
+  return unrouted({
+    ...sidebarDomain,
+    sharedProperties: [
+      ...sidebarDomain.sharedProperties,
+      STUDIO_SHARED_PROPERTY_CONTEXT_ORGANIZATION,
+      STUDIO_SHARED_PROPERTY_CONTEXT_WORKSPACE,
+      STUDIO_SHARED_PROPERTY_CONTEXT_PROJECT,
+      STUDIO_SHARED_PROPERTY_CONTEXT_SECTION,
+      STUDIO_SHARED_PROPERTY_SESSION_PROFILE,
+    ],
+  });
+}
+
+/**
+ * Bootstrap MFE system for the host application.
+ *
+ * Synchronously registers the four well-known domains (screen, sidebar,
+ * popup, overlay) with their per-domain implementation factories, then
+ * broadcasts initial shared properties (theme, language) and asynchronously
+ * registers extensions declared in `generated-mfe-manifests.json`.
+ *
+ * Mount/unmount lifecycle is delegated to ExtensionDomainSlot in
+ * MfeScreenContainer (and any other host-rendered slots).
+ *
+ * @param app - FrontX application instance
+ */
+// @cpt-begin:cpt-frontx-flow-request-lifecycle-query-client-lifecycle:p2:inst-bootstrap-mfe
+export async function bootstrapMFE(app: FrontXApp): Promise<void> {
+  const registry = app.mfeRegistry;
+  if (!registry) {
+    throw new Error('[MFE Bootstrap] mfeRegistry is not available on app instance');
+  }
+
+  const studioScreenDomain: ExtensionDomain = buildStudioScreenDomain();
+  const studioOverlayDomain: ExtensionDomain = buildStudioOverlayDomain();
+  registry.registerDomain(studioScreenDomain, new ScreenDomainFactory(registry));
+  registry.registerDomain(buildStudioSidebarDomain(), new OptionalDomainFactory(registry, sidebarDomain.id));
+  // Framed domains: the extension states its own footprint, the shell only clamps it.
+  registry.registerDomain(unrouted(popupDomain), new OptionalDomainFactory(registry, popupDomain.id, false));
+  registry.registerDomain(
+    studioOverlayDomain,
+    new OptionalDomainFactory(registry, overlayDomain.id, false, {
+      [STUDIO_ACTION_WORKSPACES_PUBLISH]: createWorkspacePublishHandler(),
+      [STUDIO_ACTION_PLACE_OPEN]: createPlaceOpenHandler(),
+      [STUDIO_ACTION_ARTIFACT_OPEN]: createArtifactOpenHandler(),
+    }),
+  );
+  // The named slots a kit contributes into (mfe/slots.ts): registered before
+  // any package, so a contribution finds its domain.
+  for (const slot of Object.values(SHELL_SLOTS)) {
+    registry.registerDomain(buildSlotDomain(slot), new SlotDomainFactory(registry, slot.domainId));
+  }
+
+  const currentThemeId = app.themeRegistry?.getCurrent()?.id ?? 'default';
+  registry.updateSharedProperty(FRONTX_SHARED_PROPERTY_THEME, currentThemeId);
+  const derivedLanguage = app.i18nRegistry.getLanguage();
+  registry.updateSharedProperty(FRONTX_SHARED_PROPERTY_LANGUAGE, derivedLanguage ?? 'en');
+  publishStudioContext(app);
+  // No page before a session: the editor's session publishes its address once
+  // it is ready (effects/editorSessionEffects.ts). `null`, never `undefined`,
+  // for an MFE that requires the property.
+  publishFrameUrl(app, null);
+  // Nothing heard yet: the live channel (app/live) relays its frames once the
+  // person is signed in. `null` for the same reason as the frame address.
+  publishLiveEvent(app, null);
+  // Not known before the screens are registered (app/layout/AvailableScreens.tsx).
+  publishAvailableScreens(app, null);
+
+  console.info(`[MFE Bootstrap] Fetching MFE manifests from ${MFE_MANIFESTS_URL}`);
+  const response = await fetch(MFE_MANIFESTS_URL);
+  if (!response.ok) {
+    throw new Error(
+      `[MFE Bootstrap] Failed to load MFE manifests from ${MFE_MANIFESTS_URL}: ${response.status} ${response.statusText}`,
+    );
+  }
+  const manifests = resolveRuntimePublicPaths(
+    (await response.json()) as MfeManifestConfig[],
+    window.location.origin,
+  );
+
+  if (manifests.length === 0) {
+    console.warn(
+      '[MFE Bootstrap] No MFE manifests found. Run `npm run generate:mfe-manifests` to generate them.',
+    );
+    return;
+  }
+  // Ahead of any mount, and not awaited: the first click may still beat it, and
+  // that mount simply takes the DOM-node path once.
+  prewarmShadowStyles(mfeStylesheetHrefs(manifests));
+
+  // First pass: register every package's non-action schemas (derived
+  // ExtensionDomain / Extension type schemas) so leaf-MFE extension validation
+  // in the second pass can chain through them regardless of manifest order.
+  registerAllNonActionSchemas(registry, manifests);
+  for (const config of manifests) {
+    await registerMfePackage(registry, config);
+  }
+}
+// @cpt-end:cpt-frontx-flow-request-lifecycle-query-client-lifecycle:p2:inst-bootstrap-mfe

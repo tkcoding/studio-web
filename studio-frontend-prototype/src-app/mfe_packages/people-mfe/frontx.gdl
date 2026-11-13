@@ -1,0 +1,34 @@
+# This micro-frontend's passport: everything a tool that assembles a product
+# from FrontX packages (Gearbox, Constructor Studio) needs to know about it, in
+# one file. It restates what package.json and mfe.json say, and those tools
+# check that they agree, so keep them in step when either changes.
+#
+# Organization › People: a screen of the shell (ADR-0069), not a kit.
+gdl_version = "1.5"
+
+mfe(
+    name = "@constructor-studio/people-mfe",
+    version = "0.2.0-alpha.0",
+
+    # The backend gears its screen calls, by gear id (account-management: the
+    # workspaces, projects, access config and project configuration are
+    # tenants and their metadata).
+    requires = [
+        "account-management",
+        "studio-user",
+        "studio-organizations",
+        "studio-artifact-ingest",
+        "studio-session",
+        "studio-presence",
+        "studio-insight",
+    ],
+
+    screens = ["People"],
+    mounts = ["/people"],
+
+    frontx = "0.2.0-alpha.15",
+
+    roles = [],
+
+    preview = ["/people"],
+)

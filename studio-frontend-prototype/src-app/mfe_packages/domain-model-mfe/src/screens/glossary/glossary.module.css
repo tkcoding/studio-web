@@ -1,0 +1,196 @@
+/* The Glossary part of the tab (the prototype's .gl-* classes) over ui-kit tokens. */
+
+.gl {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.howto {
+  margin: 0;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.search {
+  max-width: 20rem;
+}
+
+.offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.verdictLine {
+  margin: 0;
+}
+
+.sub {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.evidence {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.h {
+  margin-bottom: var(--space-1);
+  font-weight: 600;
+}
+
+.pairDetail {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.pairSides {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-4);
+}
+
+.def {
+  overflow-wrap: anywhere;
+}
+
+.missing {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+.where {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.ok {
+  color: var(--success, var(--foreground));
+}
+
+.blocks {
+  color: var(--destructive);
+}
+
+.defs {
+  display: grid;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.term {
+  font-size: 0.9375rem;
+}
+
+.layerPill {
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+
+.layer_domain {
+  color: var(--primary);
+}
+
+.layer_deployment {
+  color: var(--warning, var(--muted-foreground));
+}
+
+.actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+
+.names,
+.merge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.clarify {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 48rem;
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.saved {
+  color: var(--success, var(--foreground));
+}
+
+.doc {
+  gap: var(--space-2);
+}
+
+.docHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.docHead p {
+  margin: 0;
+}
+
+.docDone {
+  margin: 0;
+}
+
+.docLeft {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.docDef {
+  display: block;
+  max-width: 32rem;
+  overflow-wrap: anywhere;
+}

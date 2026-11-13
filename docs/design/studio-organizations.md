@@ -111,6 +111,60 @@ column, not the row; a self-managed subtree answering 404 is tenant isolation
 working and leaves the other columns alone. Counts come from a source's total,
 never from fetching rows to count them.
 
+#### A project is created by one run, on behalf of whoever asked
+
+- [x] `p2` - **ID**: `cpt-studio-principle-organizations-project-create-on-behalf`
+
+A project used to be created by the portal, one request at a time: the
+tenant, its configuration, the repository its gears go to, its sources, a
+starter gear, a PRD from the brief, the kits it asked for. A closed tab or a
+failed request left half a project, and an agent could not create one at all.
+It is now one studio-tasks run, `organizations.project_create`, owned by this
+gear (`project_create.rs`), asked for with `POST /project-creations`.
+
+**On whose behalf.** A run executes with no request behind it and nothing
+persists a bearer token (`cpt-studio-principle-tasks-authorize-at-enqueue`),
+so the run cannot act as the person who asked. The decision:
+
+- **Authorize everything at enqueue, as the caller**, with the checks the
+  routes that do each step apply (`project_create_rest.rs`): the caller
+  reaches the workspace, which is a workspace of an organization (the same
+  tenant-scope clamp account-management applies to a tenant created under
+  it); every connection named for a source or the repository is one the
+  caller can see from the workspace, is the organization's own
+  (`CONNECTION_NOT_OWNED` otherwise, as the product routes refuse), and is
+  not personal; names, slugs and kinds are valid. The workspace's required
+  stages are read as the caller there too.
+- **Record `asked_by` and the approved plan** as the run's payload. The
+  project's tenant id is chosen then (from the caller's `idempotency_key`
+  when there is one), so every later step names the same project.
+- **Execute each step in process as this gear's service principal**
+  (`logo::SERVICE_SUBJECT_ID`, `subject_type: service`), scoped to the
+  organization the project is created in for the tenant, the repository (its
+  connection is the organization's) and the PRD (the workspace's document
+  types are read), and to the new project tenant for its configuration and
+  kits -- never wider. The other gears are reached through their ports:
+  `product::port::ProjectRepositories` and `GearScaffolds`,
+  `documents::port::ProjectDocuments` (the PRD records `asked_by` as its
+  author), `kit_registry::port::ProjectKitRequests`.
+
+Why not the alternatives: carrying the caller's token in the payload would
+store a credential in a table and outlive its expiry on any retry; running
+the steps as the caller from the request (as the portal did) is the half-made
+project this replaces; a wider service scope (the platform) would let a plan
+that names another organization's tenant act there -- the handler refuses a
+plan whose organization is not the run's tenant. A personal connection is
+refused rather than borrowed, because its token is its owner's alone and the
+run is not its owner.
+
+**Resumable.** Each finished step is written to the run's result as it ends,
+and the next attempt -- or `POST /studio-tasks/v1/runs/{id}/retry` after a
+failure -- reads it back (`TaskContext::recorded`) and continues from the
+first step not done. Every step also looks before it writes (the tenant by
+its id, the configuration by its fields, the sources by URL, the PRD by type,
+the kits by slug), so a record lost with a crash costs a probe, not a
+duplicate; only the starter gear relies on the record alone.
+
 ### 2.2 Constraints
 
 #### Deletion refuses work
@@ -294,6 +348,8 @@ it exists because the alternative was that composition in every portal.
 | `GET` | `/studio-organizations/v1/logo?organization_id=` | Its logo, read as the caller; 404 when none | unstable |
 | `PUT` | `/studio-organizations/v1/logo?organization_id=` | Set it: PNG, JPEG, WebP or GIF up to 256 KiB, by whoever holds `access.manage` | unstable |
 | `DELETE` | `/studio-organizations/v1/logo?organization_id=` | Remove it; the portal shows the initial again | unstable |
+| `POST` | `/studio-organizations/v1/project-creations` | Check a project's creation as the caller and queue it as one run (202: `run_id`, `project_id`, the steps) | unstable |
+| `GET` | `/studio-organizations/v1/project-creations/{run_id}?organization_id=` | Where it stands: the run's state and each step's | unstable |
 
 ### 3.4 Internal Dependencies
 
@@ -307,6 +363,11 @@ it exists because the alternative was that composition in every portal.
 | `cpt-studio-component-usage` | `OrganizationUsage` (optional) | The overview's spend |
 | `cpt-studio-component-tasks` | `RecentRuns` (optional) | The overview's refused connections |
 | `cpt-studio-component-components-catalog-registry` | `Registry` (optional) | The overview's open decisions |
+| `cpt-studio-component-tasks` | `TaskQueue`, the task registry | A project's creation as one run |
+| `cpt-studio-component-product` | `ProjectRepositories`, `GearScaffolds` | A creation's repository and starter gear |
+| `cpt-studio-component-documents` | `ProjectDocuments` | A creation's PRD |
+| `cpt-studio-component-kits` | `ProjectKitRequests` | A creation's kits |
+| `cpt-studio-component-connector` | `connection_by_id`, `check_owned` | A creation's connections, checked as the caller |
 
 The rollup sources are resolved in the REST phase and each is optional; without
 account-management the rollups answer 503. The overview resolves its other
@@ -341,6 +402,37 @@ sequenceDiagram
 **Description**: A failure after the tenant is a 500 that names the
 organization and the step; repeating with that id finishes it.
 
+#### Create a project
+
+**ID**: `cpt-studio-seq-organizations-project-create`
+
+**Actors**: `cpt-studio-actor-member`
+
+```mermaid
+sequenceDiagram
+    participant M as Member (portal or agent)
+    participant O as studio-organizations
+    participant T as studio-tasks
+    participant H as project_create (as the service)
+    participant G as account-management, product, documents, kits
+    M->>O: POST /project-creations (workspace, name, sources, repository, ...)
+    O->>G: as the caller: workspace reachable, connections the org's own, not personal
+    O->>T: enqueue organizations.project_create (plan, asked_by) in the organization
+    O-->>M: 202 run_id, project_id, steps
+    T->>H: run (recorded steps, if any)
+    loop each step not done
+        H->>G: tenant / config / repository / sources / scaffold / prd / kits
+        H->>T: record the step (progress → task.progress studio-event)
+    end
+    T-->>M: task.succeeded (or task.failed; POST /runs/{id}/retry continues)
+```
+
+**Description**: The plan is approved as the caller and executed as the
+service scoped to the organization and the new project
+(`cpt-studio-principle-organizations-project-create-on-behalf`). The portal's
+New project dialog starts the run, shows its steps, and opens the project
+when it succeeds.
+
 ### 3.7 Database schemas & tables
 
 None. The gear stores nothing.
@@ -354,7 +446,8 @@ capabilities `[rest]`, deps `account_management`, config section
 ## 4. Additional context
 
 `cpt-studio-seq-create-project` is the next step down: a project is created
-in a workspace by the portal, not by this gear.
+in a workspace by this gear's run (`cpt-studio-seq-organizations-project-create`);
+the portal only asks for it and shows its progress.
 
 ## 5. Traceability
 

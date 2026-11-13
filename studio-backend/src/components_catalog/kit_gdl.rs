@@ -24,8 +24,26 @@
 //! `name` is the slug the kit registry and the installer know it by, and the
 //! only argument required. The installer still reads the manifest; the
 //! passport is what the catalogue shows and versions.
+//!
+//! GDL 1.7 (ADR-0068 phase 5) adds what a kit with screens says: `levels`,
+//! where it may be installed, and `mfe`, its built FrontX bundles, each a
+//! directory `mfe/<package>` beside the passport, as `path("mfe/<package>")`
+//! or a list of them. `studio-kits` serves those bundles to the shell
+//! (`kit_registry/bundles.rs`).
+//!
+//! ```text
+//! gdl_version = "1.7"
+//!
+//! kit(
+//!     name = "hello-kit",
+//!     title = "Hello",
+//!     version = "0.1.0",
+//!     levels = ["organization", "project"],
+//!     mfe = [path("mfe/hello")],
+//! )
+//! ```
 
-use super::gdl_literal::{self, Args};
+use super::gdl_literal::{self, Args, Lit};
 
 /// The GDL version `kit.gdl` was introduced in.
 pub(crate) const GDL_VERSION: &str = "1.6";
@@ -51,9 +69,18 @@ pub(crate) struct KitPassport {
     pub kinds: Vec<String>,
     /// Its documents, relative to the passport's directory.
     pub docs: Vec<String>,
+    /// The levels it may be installed on (GDL 1.7): `platform`,
+    /// `organization`, `workspace`, `project`.
+    pub levels: Vec<String>,
+    /// Its built micro-frontend bundles (GDL 1.7), relative to the passport's
+    /// directory.
+    pub mfe: Vec<String>,
 }
 
-const ARGS: [&str; 9] = [
+/// The levels a kit may name.
+pub(crate) const LEVELS: [&str; 4] = ["platform", "organization", "workspace", "project"];
+
+const ARGS: [&str; 11] = [
     "name",
     "title",
     "version",
@@ -63,7 +90,28 @@ const ARGS: [&str; 9] = [
     "manifest",
     "kinds",
     "docs",
+    "levels",
+    "mfe",
 ];
+
+/// `mfe`: one `path(...)` or a list of them, each relative to the passport.
+fn bundles(a: &Args) -> Result<Vec<String>, String> {
+    let paths = match a.get("mfe") {
+        None | Some((Lit::None, _)) => return Ok(Vec::new()),
+        Some((Lit::Str(one), _)) => vec![one.clone()],
+        Some((Lit::List(many), _)) => many.clone(),
+        Some((_, l)) => {
+            return Err(format!(
+                "line {l}: `mfe` is a path or a list of paths: `mfe = [path(\"mfe/app\")]`"
+            ));
+        }
+    };
+    let line = a.get("mfe").map_or(0, |(_, l)| l);
+    for p in &paths {
+        gdl_literal::relative_path(p).map_err(|e| format!("line {line}: mfe: \"{p}\" {e}"))?;
+    }
+    Ok(paths)
+}
 
 /// Read a `kit.gdl`. `Err` says why it is not one this reads.
 pub(crate) fn read(src: &str) -> Result<KitPassport, String> {
@@ -94,6 +142,16 @@ pub(crate) fn read(src: &str) -> Result<KitPassport, String> {
         docs: a
             .list("docs", gdl_literal::relative_path)?
             .unwrap_or_default(),
+        levels: a
+            .list("levels", |v| {
+                if LEVELS.contains(&v) {
+                    Ok(())
+                } else {
+                    Err(format!("is not a level ({})", LEVELS.join(", ")))
+                }
+            })?
+            .unwrap_or_default(),
+        mfe: bundles(&a)?,
     })
 }
 

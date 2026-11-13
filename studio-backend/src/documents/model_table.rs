@@ -80,6 +80,7 @@ pub fn need(
     fields: &[(&str, &str)],
 ) -> TypeNeed {
     TypeNeed {
+        declared_by: gear.to_owned(),
         held_by: Some(gear.to_string()),
         searchable: entity == "studio-document",
         id: entity.to_string(),

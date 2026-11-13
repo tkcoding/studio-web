@@ -1,0 +1,16 @@
+/* The prototype's empty state, through the tokens the kit's Empty reads: a
+   primary icon on a rounder tile, a heavier title, a taller description. The
+   tile's size is a literal in the kit and stays 3rem. */
+
+.media {
+  --foreground: var(--primary);
+  --radius-xl: var(--radius-2xl);
+}
+
+.title {
+  --text-label-weight: var(--text-heading-2-weight);
+}
+
+.description {
+  --text-body-line-height: var(--text-heading-2-line-height);
+}

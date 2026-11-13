@@ -16,6 +16,7 @@ import {
   Webhook,
   type LucideIcon,
 } from 'lucide-react';
+import { matchesSearch, type ConnectionDto } from '@constructor-studio/mfe-shared';
 
 export type ProviderCode =
   | 'github'
@@ -64,4 +65,15 @@ export type ConnectionHealth = 'healthy' | 'unusable';
 
 export function healthTone(health: ConnectionHealth): 'success' | 'warning' {
   return health === 'healthy' ? 'success' : 'warning';
+}
+
+export interface ConnectionRow {
+  id: string;
+  connection: ConnectionDto;
+  providerName: string;
+}
+
+export function matchesQuery(row: ConnectionRow, query: string): boolean {
+  const { label, account, provider } = row.connection;
+  return matchesSearch(query, label, account, provider, row.providerName);
 }

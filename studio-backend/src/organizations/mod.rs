@@ -11,18 +11,27 @@
 //! that those three are written by one operation, in an order that can be
 //! resumed (see `service`).
 
+mod access_grants;
 mod creation;
+mod events;
 pub mod logo;
+mod mcp;
 mod metrics;
 mod overview;
+mod project_create;
+mod project_create_rest;
 pub mod project_types;
 /// The logo document only this gear writes, for the PDP's gear-held list.
 pub use logo::LOGO_METADATA_TYPE;
+/// The project status tool (`crate::mcp`).
+pub(crate) use mcp::tools as mcp_tools;
 pub mod port;
 mod rest;
 pub mod rollups;
 pub mod sdk;
 mod service;
+mod status;
+mod status_read;
 
 use std::sync::{Arc, OnceLock};
 
@@ -128,9 +137,19 @@ impl Gear for StudioOrganizationsGear {
         // (the components registry): published at init so it is there for
         // every gear's REST phase, whatever the order.
         match ctx.client_hub().get::<dyn AccountManagementClient>() {
-            Ok(am) => ctx
-                .client_hub()
-                .register::<dyn port::ProjectsOf>(Arc::new(port::TenantTreeProjects::new(am))),
+            Ok(am) => {
+                // A project's creation, as one background run (studio-tasks'
+                // registry is process-global, so the order of init does not
+                // matter).
+                crate::tasks::sdk::register(Arc::new(project_create::ProjectCreateHandler::new(
+                    Arc::new(project_create::InProcess::new(
+                        Arc::clone(&am),
+                        ctx.client_hub(),
+                    )),
+                )))?;
+                ctx.client_hub()
+                    .register::<dyn port::ProjectsOf>(Arc::new(port::TenantTreeProjects::new(am)));
+            }
             Err(_) => warn!(
                 "studio-organizations: account-management is not available — no gear can list an \
                  organization's projects"
@@ -223,6 +242,16 @@ impl RestApiCapability for StudioOrganizationsGear {
                 ))
             });
         let router = project_types::register(router, openapi, project_types);
+        // A project's creation as one run: asked for as the caller here.
+        let creations = ctx
+            .client_hub()
+            .get::<dyn AccountManagementClient>()
+            .ok()
+            .map(|am| project_create_rest::Creations {
+                am,
+                hub: ctx.client_hub(),
+            });
+        let router = project_create_rest::register(router, openapi, creations);
         Ok(rest::register_routes(
             router, openapi, service, creation, sources, overview, metrics, access,
         ))

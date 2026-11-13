@@ -1,0 +1,26 @@
+{
+  "manifest_version": "1",
+  "slug": "org-infrastructure",
+  "name": "Infrastructure",
+  "description": "The places an organization holds, the environments it defines on them, and what runs where.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "organization"
+  ],
+  "model": {
+    "properties": [
+      {
+        "on": "organization",
+        "property": {
+          "name": "environments",
+          "type": "deployment-environment",
+          "relation": "deployment-environment",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Infrastructure",
+          "description": "A tab of the organization: what it shows."
+        }
+      }
+    ]
+  }
+}

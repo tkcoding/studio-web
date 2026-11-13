@@ -33,6 +33,10 @@ mod infra_routes;
 #[path = "rest_pipeline.rs"]
 mod pipeline_routes;
 
+#[path = "rest_path.rs"]
+mod path_routes;
+pub use path_routes::FailureCauseDto;
+
 /// Errors attributable to an environment or a deployment as a resource.
 #[resource_error(gts_id!("cf.studio.environments.environment.v1~"))]
 pub struct StudioEnvironmentsError;
@@ -775,6 +779,13 @@ pub struct DeploymentDto {
     /// message` each (`CONFIG_SECRET_SHADOWED_BY_DESCRIPTION`,
     /// `INFRA_ISSUER_UNREACHABLE_IN_CLUSTER`).
     pub warnings: Vec<String>,
+    /// Whether it runs in Constructor Research (ADR-0049).
+    pub research: bool,
+    /// Where the application answers: a Research application's public
+    /// address, a preview's host.
+    pub public_url: Option<String>,
+    /// Why it failed and what fixes it; only for a failed deploy (#1054).
+    pub cause: Option<FailureCauseDto>,
 }
 
 #[derive(Debug)]
@@ -792,7 +803,31 @@ pub struct PreviewDto {
 }
 
 fn deployment_dto(d: Deployment) -> DeploymentDto {
+    let research = d.research.is_some();
+    let public_url = d
+        .preview
+        .as_ref()
+        .and_then(|p| p.host.as_ref().map(|h| format!("https://{h}")))
+        .or_else(|| {
+            research
+                .then(|| d.outcome.as_deref().and_then(super::failure::public_url))
+                .flatten()
+        });
+    let cause = (d.state == super::model::DeploymentState::Failed).then(|| {
+        path_routes::cause_dto(super::failure::explain(
+            super::failure::Of::Deploy,
+            d.outcome
+                .as_deref()
+                .or(d.reason.as_deref())
+                .unwrap_or_default(),
+            None,
+            research,
+        ))
+    });
     DeploymentDto {
+        research,
+        public_url,
+        cause,
         id: d.id,
         project_id: d.project_id,
         project_name: d.project_name,
@@ -1283,6 +1318,183 @@ async fn list_research_hardware(
         total: u32::try_from(items.len()).unwrap_or(u32::MAX),
         items,
     }))
+}
+
+/// One item the Constructor Research kit's Inbox sources answer
+/// (`docs/design/studio-kits.md` §3.11, a source of kind `endpoint`): what
+/// waits on the person, read from studio-environments' records.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct ResearchInboxItemDto {
+    /// Stable within the source: the deploy's id, or the sign-in's.
+    pub id: String,
+    pub title: String,
+    /// The project it is about, when it is about one.
+    pub project_id: Option<String>,
+    pub project_name: Option<String>,
+    pub environment_name: Option<String>,
+    /// When it is due, RFC 3339: when a sign-in runs out.
+    pub due_at: Option<String>,
+    pub overdue: bool,
+    /// Whole days until a sign-in runs out; 0 once it has.
+    pub days_left: Option<i64>,
+    /// What else there is to read: why the deploy failed.
+    pub detail: Option<String>,
+    /// Where the portal opens it: the deploy itself on Project › Releases,
+    /// with its log and cause (#1054).
+    pub url: Option<String>,
+    /// The deploy, for a deploy's item.
+    pub deployment_id: Option<String>,
+    /// Why the deploy failed and what fixes it.
+    pub cause: Option<FailureCauseDto>,
+}
+
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct ResearchInboxItemListDto {
+    pub items: Vec<ResearchInboxItemDto>,
+    pub total: u32,
+}
+
+fn inbox_list(items: Vec<ResearchInboxItemDto>) -> ResearchInboxItemListDto {
+    ResearchInboxItemListDto {
+        total: u32::try_from(items.len()).unwrap_or(u32::MAX),
+        items,
+    }
+}
+
+async fn research_inbox_deploys(
+    OrgCtx(ctx): OrgCtx,
+    Extension(envs): Extension<Environments>,
+) -> ApiResult<JsonBody<ResearchInboxItemListDto>> {
+    let org = ctx.subject_tenant_id();
+    let failed = envs
+        .0
+        .research_failed_deploys(&ctx, org)
+        .await
+        .map_err(problem)?;
+    let mut items = Vec::with_capacity(failed.len());
+    for d in failed {
+        let url = envs.0.deployment_link(&ctx, org, d.project_id, d.id).await;
+        items.push(research_inbox_item(d, url));
+    }
+    Ok(Json(inbox_list(items)))
+}
+
+/// Deploys waiting for the caller's decision: an Inbox `endpoint` source.
+async fn inbox_deploys_awaiting_approval(
+    OrgCtx(ctx): OrgCtx,
+    Extension(envs): Extension<Environments>,
+) -> ApiResult<JsonBody<ResearchInboxItemListDto>> {
+    let items = envs
+        .0
+        .deploys_awaiting_approval(&ctx, ctx.subject_tenant_id())
+        .await
+        .map_err(problem)?
+        .into_iter()
+        .map(|d| ResearchInboxItemDto {
+            id: d.id.to_string(),
+            title: format!(
+                "{}: {} asks to deploy to {}",
+                d.project_name,
+                if d.requested_by_name.is_empty() {
+                    "somebody"
+                } else {
+                    d.requested_by_name.as_str()
+                },
+                d.environment_name
+            ),
+            project_id: Some(d.project_id.to_string()),
+            project_name: Some(d.project_name),
+            environment_name: Some(d.environment_name),
+            due_at: None,
+            overdue: false,
+            days_left: None,
+            detail: Some(format!("asked {}", d.requested_at)),
+            url: None,
+            deployment_id: Some(d.id.to_string()),
+            cause: None,
+        })
+        .collect();
+    Ok(Json(inbox_list(items)))
+}
+
+/// A failed Research deploy as the Inbox shows it: what failed, its cause,
+/// and the deploy itself to open, not a list (#1054).
+fn research_inbox_item(d: Deployment, url: String) -> ResearchInboxItemDto {
+    let cause = path_routes::cause_dto(super::failure::explain(
+        super::failure::Of::Deploy,
+        d.outcome
+            .as_deref()
+            .or(d.reason.as_deref())
+            .unwrap_or_default(),
+        None,
+        true,
+    ));
+    ResearchInboxItemDto {
+        id: d.id.to_string(),
+        title: format!(
+            "{}: the deploy to {} in Constructor Research failed: {}",
+            d.project_name, d.environment_name, cause.summary
+        ),
+        project_id: Some(d.project_id.to_string()),
+        project_name: Some(d.project_name),
+        environment_name: Some(d.environment_name),
+        due_at: None,
+        overdue: false,
+        days_left: None,
+        detail: d.outcome,
+        url: Some(url),
+        deployment_id: Some(d.id.to_string()),
+        cause: Some(cause),
+    }
+}
+
+async fn research_inbox_sign_in(
+    OrgCtx(ctx): OrgCtx,
+    Extension(envs): Extension<Environments>,
+) -> ApiResult<JsonBody<ResearchInboxItemListDto>> {
+    let due = envs
+        .0
+        .research_sign_in_due(&ctx, ctx.subject_tenant_id())
+        .await
+        .map_err(problem)?;
+    let items = due
+        .map(|due| {
+            let title = if due.days_left == 0 {
+                "Your Constructor Research sign-in has run out: sign in again under Connections"
+                    .to_owned()
+            } else {
+                format!(
+                    "Your Constructor Research sign-in runs out in {} day{}: sign in again under \
+                     Connections",
+                    due.days_left,
+                    if due.days_left == 1 { "" } else { "s" }
+                )
+            };
+            ResearchInboxItemDto {
+                id: format!("{}@{}", due.connection_id, due.expires_at),
+                title,
+                project_id: None,
+                project_name: None,
+                environment_name: None,
+                due_at: time::OffsetDateTime::from_unix_timestamp(due.expires_at)
+                    .ok()
+                    .and_then(|t| {
+                        t.format(&time::format_description::well_known::Rfc3339)
+                            .ok()
+                    }),
+                overdue: due.days_left == 0,
+                days_left: Some(due.days_left),
+                detail: None,
+                url: None,
+                deployment_id: None,
+                cause: None,
+            }
+        })
+        .into_iter()
+        .collect();
+    Ok(Json(inbox_list(items)))
 }
 
 fn binding_dto(b: Binding) -> BindingDto {
@@ -1830,6 +2042,85 @@ pub fn register_routes(
         .error_500(openapi)
         .register(router, openapi);
 
+    // The Constructor Research kit's Inbox sources (kind `endpoint`,
+    // docs/design/studio-kits.md §3.11): studio-user's Inbox calls them as
+    // the person.
+    router = OperationBuilder::get("/studio-environments/v1/research/inbox/deploys")
+        .operation_id("studio_environments.list_research_inbox_deploys")
+        .summary("The caller's Research deploys that failed")
+        .description(
+            "Any member, for themselves: each Constructor Research deploy they asked for whose \
+             newest attempt in its environment failed, newest first, in the projects where the \
+             Constructor Research kit applies (the project's, its organization's or a base \
+             installation). An item leaves when a newer deploy there succeeds. The kit's Inbox \
+             source `deploy-failed`.",
+        )
+        .tag(TAG)
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param_typed("organization_id", false, "The organization", "string")
+        .handler(research_inbox_deploys)
+        .json_response_with_schema::<ResearchInboxItemListDto>(
+            openapi,
+            StatusCode::OK,
+            "The deploys that wait on the caller",
+        )
+        .error_401(openapi)
+        .error_403(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-environments/v1/inbox/deploys-awaiting-approval")
+        .operation_id("studio_environments.list_inbox_deploys_awaiting_approval")
+        .summary("Deploys waiting for the caller's decision")
+        .description(
+            "For whoever decides deploys in the organization (an organization administrator, \
+             or a holder of the environments' manage privilege): each deploy \
+             `awaiting_approval`, the longest waiting first; empty for anybody else. An Inbox \
+             `endpoint` source (ADR-0068 §6, the Releases kit's): an item is answered by \
+             `POST /studio-environments/v1/deployments/{deployment_id}/decisions` (approve, or decline with \
+             a reason) and leaves when it is decided.",
+        )
+        .tag(TAG)
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param_typed("organization_id", false, "The organization", "string")
+        .handler(inbox_deploys_awaiting_approval)
+        .json_response_with_schema::<ResearchInboxItemListDto>(
+            openapi,
+            StatusCode::OK,
+            "The deploys waiting for a decision",
+        )
+        .error_401(openapi)
+        .error_403(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-environments/v1/research/inbox/sign-in")
+        .operation_id("studio_environments.list_research_inbox_sign_ins")
+        .summary("The caller's Research sign-in, when it runs out soon")
+        .description(
+            "Any member, for themselves: their own Constructor Research sign-in when its access \
+             key runs out within 14 days or has run out (a key lasts 90 days from the sign-in, \
+             ADR-0049 §1), where the Constructor Research kit is in use (it applies to the \
+             organization, or to a project the caller deployed to Research). At most one item. \
+             The kit's Inbox source `sign-in-expires`.",
+        )
+        .tag(TAG)
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param_typed("organization_id", false, "The organization", "string")
+        .handler(research_inbox_sign_in)
+        .json_response_with_schema::<ResearchInboxItemListDto>(
+            openapi,
+            StatusCode::OK,
+            "The sign-in, when it is due",
+        )
+        .error_401(openapi)
+        .error_403(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
     router = OperationBuilder::put("/studio-environments/v1/open-clusters")
         .operation_id("studio_environments.update_open_clusters")
         .summary("Say which clusters projects may put environments of their own on")
@@ -2335,6 +2626,7 @@ pub fn register_routes(
     router = infra_routes::register(router, openapi);
     // One build, one deployment, an environment's secret keys (docs/mcp.md).
     router = pipeline_routes::register(router, openapi);
+    router = path_routes::register(router, openapi);
 
     router.layer(Extension(Environments(service)))
 }

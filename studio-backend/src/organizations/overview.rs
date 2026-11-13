@@ -42,6 +42,7 @@ use toolkit_security::SecurityContext;
 use uuid::Uuid;
 
 use super::rollups::{ORGANIZATION_TENANT_TYPE, Rollup, RollupKind, Sources};
+use super::status::{GIT_KIT, Kits};
 use crate::artifact_ingest::port::{OpenPull, OpenPullRequests};
 use crate::tasks::{RecentRuns, RunSummary};
 use crate::usage::port::Payer;
@@ -50,6 +51,10 @@ use crate::user_profile::{MemberAliases, RosterMember};
 
 /// A pull request waiting this many days without a move is stuck.
 pub const STUCK_DAYS: u32 = 7;
+/// The kit whose Costs screen answers a growing spend.
+pub const COSTS_KIT: &str = "org-costs";
+/// The kit whose registry screen answers the components to decide.
+pub const COMPONENTS_KIT: &str = "components";
 /// Spend growing by this share against the same days last month is news.
 pub const GROWTH_ALERT: f64 = 0.2;
 /// A project with no activity for this many days is quiet.
@@ -788,6 +793,10 @@ pub struct Read {
     /// and the read failed.
     pub spend: Option<Result<Spend, String>>,
     pub windows: Windows,
+    /// The kits that apply to the whole organization. Without project-git
+    /// the pull requests are not read and their parts of the answer are
+    /// null (ADR-0070 §7); the other blocks stay.
+    pub kits: Kits,
 }
 
 #[derive(Debug)]
@@ -855,6 +864,25 @@ impl<V: Clone> Answers<V> {
 }
 
 impl Overview {
+    /// The kits that apply where `tenant` is (a project's effective kits, or
+    /// an organization's), from studio-kits ([`KitPresence`]). An assembly
+    /// without studio-kits, or an answer that could not be read, is
+    /// [`Kits::All`]: nothing is hidden for a failed read.
+    ///
+    /// [`KitPresence`]: crate::kit_registry::port::KitPresence
+    pub async fn kits(&self, ctx: &SecurityContext, tenant: Uuid) -> Kits {
+        let Ok(presence) = self.hub.get::<dyn crate::kit_registry::port::KitPresence>() else {
+            return Kits::All;
+        };
+        match presence.effective(ctx, tenant).await {
+            Ok(kits) => Kits::Only(kits),
+            Err(e) => {
+                tracing::warn!(%tenant, error = %format!("{e:#}"), "organizations: installed kits not read");
+                Kits::All
+            }
+        }
+    }
+
     /// The organization's overview for this caller, from the last minute's
     /// answer when there is one. The organization is read as the caller
     /// first either way, so a caller who no longer reaches it is refused
@@ -905,6 +933,8 @@ impl Overview {
         now: OffsetDateTime,
     ) -> Read {
         let windows = windows(now);
+        let kits = self.kits(ctx, org).await;
+        let git = kits.has(Some(GIT_KIT));
 
         // Three independent strands, read side by side: the organization's
         // tree with everything that hangs off its projects, the registry, and
@@ -957,6 +987,10 @@ impl Overview {
                 };
                 let pulls_and_accounts = async {
                     let pulls = async {
+                        // Pull requests are project-git's: not read without it.
+                        if !git {
+                            return None;
+                        }
                         let source = self.hub.get::<dyn OpenPullRequests>().ok()?;
                         let scopes: Vec<String> = projects.iter().map(Uuid::to_string).collect();
                         let reads = futures_util::future::join_all(
@@ -1033,6 +1067,7 @@ impl Overview {
             accounts,
             spend,
             windows,
+            kits,
         }
     }
 
@@ -1143,6 +1178,7 @@ fn need_dto(need: Need) -> OverviewNeedDto {
             previous: Some(previous),
             forecast: Some(forecast),
             grower,
+            kit: Some(COSTS_KIT.into()),
             ..OverviewNeedDto::default()
         },
         Need::Stuck { pulls, people } => OverviewNeedDto {
@@ -1150,12 +1186,14 @@ fn need_dto(need: Need) -> OverviewNeedDto {
             tone: "warn".into(),
             pulls: Some(pulls),
             people: Some(people),
+            kit: Some(GIT_KIT.into()),
             ..OverviewNeedDto::default()
         },
         Need::Decide { components } => OverviewNeedDto {
             kind: "components".into(),
             tone: "warn".into(),
             components: Some(components),
+            kit: Some(COMPONENTS_KIT.into()),
             ..OverviewNeedDto::default()
         },
         Need::RunsFailed { runs } => OverviewNeedDto {
@@ -1209,7 +1247,8 @@ pub fn compose(org: Uuid, read: &Read, now: OffsetDateTime) -> OrganizationOverv
         .flat_map(|b| b.projects.iter().cloned())
         .collect();
 
-    let pulls = read.pulls.as_deref().unwrap_or_default();
+    let git = read.kits.has(Some(GIT_KIT));
+    let pulls = read.pulls.as_deref().filter(|_| git).unwrap_or_default();
     let stuck_pulls = stuck(pulls, STUCK_DAYS);
     let mut stuck_by: BTreeMap<String, u32> = BTreeMap::new();
     for p in &stuck_pulls {
@@ -1363,13 +1402,31 @@ pub fn compose(org: Uuid, read: &Read, now: OffsetDateTime) -> OrganizationOverv
         growth_alert: GROWTH_ALERT,
         quiet_days: QUIET_DAYS,
         costs: costs.into(),
-        needs: needs.into_iter().map(need_dto).collect(),
+        needs: needs
+            .into_iter()
+            .map(need_dto)
+            .filter(|n| read.kits.has(n.kit.as_deref()))
+            .collect(),
         spend: spend_dto,
-        delivery: OverviewDeliveryDto {
-            merged: sum_u32(projects.iter().map(|r| r.pulls_merged)),
-            window_days: count(super::rollups::ACTIVITY_DAYS),
-            open: sum_u32(projects.iter().map(|r| r.pulls_open)),
-            median_wait_days: median(&open_ages),
+        // Pull requests are project-git's: without it the block is unknown.
+        delivery: if git {
+            OverviewDeliveryDto {
+                merged: sum_u32(projects.iter().map(|r| r.pulls_merged)),
+                window_days: count(super::rollups::ACTIVITY_DAYS),
+                open: sum_u32(projects.iter().map(|r| r.pulls_open)),
+                median_wait_days: median(&open_ages),
+            }
+        } else {
+            OverviewDeliveryDto {
+                merged: None,
+                window_days: count(super::rollups::ACTIVITY_DAYS),
+                open: None,
+                median_wait_days: None,
+            }
+        },
+        kits: match &read.kits {
+            Kits::All => None,
+            Kits::Only(kits) => Some(kits.clone()),
         },
         specs: OverviewSpecsDto {
             specs: sum_u32(projects.iter().map(|r| r.specs)),
@@ -1408,7 +1465,7 @@ pub fn compose(org: Uuid, read: &Read, now: OffsetDateTime) -> OrganizationOverv
             })
             .collect(),
         money,
-        waiting_on: read.pulls.as_ref().map(|_| {
+        waiting_on: read.pulls.as_ref().filter(|_| git).map(|_| {
             queues
                 .into_iter()
                 .map(|q| OverviewQueueDto {

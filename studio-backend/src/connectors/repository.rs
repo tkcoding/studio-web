@@ -91,6 +91,14 @@ impl Repository {
             .await
     }
 
+    /// One file's bytes at the ref, text or not; `None` when there is no such
+    /// file.
+    pub async fn read_bytes(&self, path: &str) -> Result<Option<Vec<u8>>> {
+        self.driver
+            .read_file_bytes(&self.auth, &self.repo, path, self.git_ref())
+            .await
+    }
+
     /// The newest commits (up to `limit`) that touched `path` on the ref.
     pub async fn history(&self, path: &str, limit: u32) -> Result<Vec<RemoteCommit>> {
         self.driver

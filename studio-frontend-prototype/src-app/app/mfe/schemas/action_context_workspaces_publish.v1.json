@@ -1,0 +1,47 @@
+{
+  "$id": "gts://gts.frontx.mfes.comm.action.v1~constructor_studio.context.workspaces.publish.v1~",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Shell-owned action an MFE executes against the domain it is mounted in, to tell the shell two things about workspaces: that one was just created (the shell adds it and makes it current), and that the screen now mounted works inside a workspace (the shell reads the workspace list again if its last read failed; the slot itself is drawn at every level, by the path's rule). An action chain and not an event because an MFE runs in its own module realm and the shell never hears its eventBus.",
+  "allOf": [
+    {
+      "$ref": "gts://gts.frontx.mfes.comm.action.v1~"
+    }
+  ],
+  "properties": {
+    "payload": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "created",
+            "selected",
+            "scoped"
+          ],
+          "$comment": "created = this workspace now exists and is the one to work in; selected = a screen chose it, so the shell makes it current and moves the session into the workspace level; scoped = the screen that just mounted works inside a workspace, so a failed read of the workspace list is retried."
+        },
+        "workspace": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name"
+          ],
+          "$comment": "Required for kind=created and kind=selected. Both carry the name because the sender read the workspace itself and the shell's own list may not hold it yet."
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    }
+  },
+  "required": [
+    "payload"
+  ]
+}

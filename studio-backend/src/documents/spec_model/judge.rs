@@ -1,5 +1,5 @@
 //! Stage 5: a model shown both passages of a candidate, each in its section,
-//! says whether they really cannot both hold (`docs/spec-domain-model.md`,
+//! says whether they really cannot both hold (`docs/project-domain-model.md`,
 //! "Rules propose, a model confirms, a person decides").
 //!
 //! Pure: the question and reading the answer. The answer is held to the text

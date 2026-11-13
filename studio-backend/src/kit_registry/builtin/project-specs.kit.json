@@ -1,0 +1,668 @@
+{
+  "manifest_version": "1",
+  "slug": "project-specs",
+  "name": "Specs",
+  "description": "A project's specifications and their quality, and the document types a workspace offers.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "workspace",
+    "project"
+  ],
+  "model": {
+    "types": [
+      {
+        "name": "document",
+        "id": "document",
+        "label": "Document",
+        "description": "A versioned document mirrored from a documentation source while preserving hierarchy and provenance.",
+        "entity": {
+          "id": "document",
+          "bucket": "content",
+          "name": "Document",
+          "kind": "artifact",
+          "description": "A versioned document mirrored from a documentation source while preserving hierarchy and provenance.",
+          "meta": {
+            "relationship": "knowledge",
+            "priority": "P1",
+            "level": 2,
+            "badge": "",
+            "note": "",
+            "badge-style": "neutral",
+            "profiles": [
+              "PdM",
+              "Arch",
+              "Dev",
+              "QA",
+              "Researcher"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "ArtifactId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "space_ref",
+              "type": "EntityId",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "source_system",
+              "type": "SourceId",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "external_id",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "url",
+              "type": "URL?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "parent_id",
+              "type": "EntityId?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "version",
+              "type": "string?",
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "updated_at",
+              "type": "timestamp",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "contains_child",
+              "type": "Document",
+              "description": "",
+              "relation": "document",
+              "relationType": "composes",
+              "relationLabel": "contains",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "normalizes_as",
+              "type": "MarkdownDocument",
+              "description": "",
+              "relation": "markdown-document",
+              "relationType": "derives",
+              "relationLabel": "normalizes as",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "has_comments",
+              "type": "Comment",
+              "description": "",
+              "relation": "comment",
+              "relationType": "composes",
+              "relationLabel": "has comments",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "has_conversations",
+              "type": "DocumentConversation",
+              "description": "",
+              "relation": "document-conversation",
+              "relationType": "composes",
+              "relationLabel": "has conversations",
+              "required": false,
+              "extends": "edge"
+            }
+          ],
+          "methods": [
+            {
+              "name": "read",
+              "description": "",
+              "input": "",
+              "result": "ProviderContent"
+            },
+            {
+              "name": "to_text",
+              "description": "",
+              "input": "",
+              "result": "TextContent"
+            },
+            {
+              "name": "to_markdown",
+              "description": "",
+              "input": "",
+              "result": "TextContent"
+            },
+            {
+              "name": "list_children",
+              "description": "",
+              "input": "",
+              "result": "Document[]"
+            },
+            {
+              "name": "list_comments",
+              "description": "",
+              "input": "",
+              "result": "Comment[]"
+            },
+            {
+              "name": "add_comment",
+              "description": "",
+              "input": "author, body",
+              "result": "Comment"
+            },
+            {
+              "name": "get_history",
+              "description": "",
+              "input": "",
+              "result": "DocumentVersion[]"
+            }
+          ],
+          "examples": [
+            "Notion page",
+            "Confluence page",
+            "Wiki page",
+            "Technical note"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "managed-object"
+        }
+      },
+      {
+        "name": "policy",
+        "id": "policy",
+        "label": "Policy",
+        "description": "The organization's own normative document: a security regulation, a retention policy, a code of conduct. Content-backed and versioned; mirrored from a wiki or GRC tool, or authored in Studio. It states the commitment; Data Policy and Safety Constraint are what enforce it.",
+        "entity": {
+          "id": "policy",
+          "bucket": "governance",
+          "name": "Policy",
+          "kind": "content-backed governance document",
+          "description": "The organization's own normative document: a security regulation, a retention policy, a code of conduct. Content-backed and versioned; mirrored from a wiki or GRC tool, or authored in Studio. It states the commitment; Data Policy and Safety Constraint are what enforce it.",
+          "meta": {
+            "relationship": "control-loop",
+            "priority": "P1",
+            "level": 1,
+            "badge": "Changed",
+            "badge-style": "amber",
+            "profiles": [
+              "CTO",
+              "Sec",
+              "GRC",
+              "Arch"
+            ],
+            "note": "Rewritten from a generic Studio rule into the organization document §9 asks for. · model.md §9"
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "EntityId",
+              "description": "",
+              "required": true,
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "description": "",
+              "required": true,
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "version",
+              "type": "string",
+              "description": "",
+              "required": true,
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "content_ref",
+              "type": "ContentRef",
+              "description": "The document itself, versioned",
+              "required": true,
+              "relationLabel": ""
+            },
+            {
+              "name": "policy_kind",
+              "type": "security | privacy | data_retention | engineering | compliance | other",
+              "description": "",
+              "required": true,
+              "relationLabel": ""
+            },
+            {
+              "name": "status",
+              "type": "draft | active | superseded | retired",
+              "description": "",
+              "required": true,
+              "relationLabel": ""
+            },
+            {
+              "name": "owner_ref",
+              "type": "EntityId",
+              "description": "",
+              "required": true,
+              "relationLabel": ""
+            },
+            {
+              "name": "effective_from",
+              "type": "timestamp?",
+              "description": "",
+              "required": false,
+              "relationLabel": ""
+            },
+            {
+              "name": "review_due",
+              "type": "timestamp?",
+              "description": "",
+              "required": false,
+              "relationLabel": ""
+            },
+            {
+              "name": "acquisition",
+              "type": "mirrored | authored",
+              "description": "",
+              "required": true,
+              "relationLabel": ""
+            },
+            {
+              "name": "implements",
+              "type": "Control",
+              "description": "",
+              "relation": "control",
+              "relationType": "references",
+              "relationLabel": "implements",
+              "required": false,
+              "extends": "edge"
+            }
+          ],
+          "methods": [
+            {
+              "name": "current_version",
+              "description": "",
+              "input": "",
+              "result": "ContentVersion"
+            },
+            {
+              "name": "list_enforcements",
+              "description": "The Data Policies and Safety Constraints that enforce this document",
+              "input": "",
+              "result": "PolicyRule[]"
+            },
+            {
+              "name": "is_due_for_review",
+              "description": "",
+              "input": "at?",
+              "result": "boolean"
+            }
+          ],
+          "examples": [
+            "Data Retention Policy v3",
+            "Secure Development Policy",
+            "Acceptable AI Use Policy"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "document"
+        }
+      },
+      {
+        "name": "review-request",
+        "id": "review-request",
+        "label": "Review Request",
+        "description": "A routed request for one or more people or teams to review a pull request, document, change, risk or generated proposal.",
+        "entity": {
+          "id": "review-request",
+          "bucket": "collaboration",
+          "name": "Review Request",
+          "kind": "requested human review",
+          "description": "A routed request for one or more people or teams to review a pull request, document, change, risk or generated proposal.",
+          "meta": {
+            "relationship": "human-loop",
+            "priority": "P1",
+            "level": 2,
+            "badge": "",
+            "note": "Routes a human review request; accepted 2026-08-03.",
+            "badge-style": "neutral",
+            "profiles": [
+              "PdM",
+              "Arch",
+              "Dev",
+              "QA"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "EntityId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "subject_ref",
+              "type": "EntityRef",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "requester_ref",
+              "type": "ActorRef",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "reviewer_refs",
+              "type": "ActorRef[]",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "review_type",
+              "type": "code | document | architecture | security | release | custom",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "status",
+              "type": "requested | in_review | completed | dismissed | expired",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "due_at",
+              "type": "timestamp?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "collects",
+              "type": "Review",
+              "description": "",
+              "relation": "code-review",
+              "relationType": "composes",
+              "relationLabel": "collects",
+              "required": false,
+              "extends": "edge"
+            }
+          ],
+          "methods": [
+            {
+              "name": "accept",
+              "description": "",
+              "input": "actor",
+              "result": "void"
+            },
+            {
+              "name": "dismiss",
+              "description": "",
+              "input": "actor, reason?",
+              "result": "void"
+            },
+            {
+              "name": "complete",
+              "description": "",
+              "input": "review",
+              "result": "void"
+            },
+            {
+              "name": "list_reviews",
+              "description": "",
+              "input": "",
+              "result": "Review[]"
+            }
+          ],
+          "examples": [
+            "PR required reviewer request",
+            "Spec review request",
+            "Security review request",
+            "Architecture board review"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "managed-object"
+        }
+      },
+      {
+        "name": "approval",
+        "id": "approval",
+        "label": "Approval",
+        "description": "An attributable human or delegated principal decision on a candidate change, quality gate or lifecycle transition.",
+        "entity": {
+          "id": "approval",
+          "bucket": "collaboration",
+          "name": "Approval",
+          "kind": "human decision record",
+          "description": "An attributable human or delegated principal decision on a candidate change, quality gate or lifecycle transition.",
+          "meta": {
+            "relationship": "human-loop",
+            "priority": "P1",
+            "level": 2,
+            "badge": "",
+            "note": "",
+            "badge-style": "neutral",
+            "profiles": [
+              "CTO",
+              "PdM",
+              "Arch",
+              "Sec",
+              "GRC"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "ApprovalId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "subject_ref",
+              "type": "EntityRef",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "gate_ref",
+              "type": "EntityId?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "decision",
+              "type": "pending | approved | rejected | expired",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "decided_by",
+              "type": "ActorRef?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "reason",
+              "type": "TextContent?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "decided_at",
+              "type": "timestamp?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "records",
+              "type": "Evidence",
+              "description": "",
+              "relation": "evidence",
+              "relationType": "derives",
+              "relationLabel": "records",
+              "required": false,
+              "extends": "link"
+            },
+            {
+              "name": "notifies",
+              "type": "Notification",
+              "description": "",
+              "relation": "notification",
+              "relationType": "derives",
+              "relationLabel": "produces",
+              "required": false,
+              "extends": "link"
+            },
+            {
+              "name": "decides_on",
+              "type": "CandidateObject",
+              "description": "",
+              "relation": "candidate-object",
+              "relationType": "references",
+              "relationLabel": "decides_on",
+              "required": false,
+              "cardinality": "1:1 per decision event",
+              "extends": "link"
+            },
+            {
+              "name": "decides_on_2",
+              "type": "ActionRun",
+              "description": "",
+              "relation": "action-run",
+              "relationType": "references",
+              "relationLabel": "decides_on",
+              "required": false,
+              "cardinality": "1:1 per decision event",
+              "extends": "link"
+            }
+          ],
+          "methods": [
+            {
+              "name": "approve",
+              "description": "",
+              "input": "actor, reason?",
+              "result": "void"
+            },
+            {
+              "name": "reject",
+              "description": "",
+              "input": "actor, reason",
+              "result": "void"
+            },
+            {
+              "name": "is_current",
+              "description": "",
+              "input": "at?",
+              "result": "boolean"
+            }
+          ],
+          "examples": [
+            "Code review approval",
+            "Release approval",
+            "Risk acceptance",
+            "Production change approval"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "record"
+        }
+      }
+    ],
+    "properties": [
+      {
+        "on": "project",
+        "property": {
+          "name": "specs",
+          "type": "document",
+          "relation": "document",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Specs",
+          "description": "A tab of the project: what it shows."
+        }
+      },
+      {
+        "on": "project",
+        "property": {
+          "name": "documented_by",
+          "type": "Document",
+          "description": "",
+          "relation": "document",
+          "relationType": "references",
+          "relationLabel": "documented by",
+          "required": false,
+          "extends": "edge"
+        }
+      },
+      {
+        "on": "workspace",
+        "property": {
+          "name": "types",
+          "type": "template",
+          "relation": "template",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Document types",
+          "description": "A tab of the workspace: what it shows."
+        }
+      }
+    ]
+  },
+  "inbox": [
+    {
+      "id": "review-requests",
+      "label": "Reviews waiting on your verdict",
+      "kind": "studio"
+    }
+  ]
+}

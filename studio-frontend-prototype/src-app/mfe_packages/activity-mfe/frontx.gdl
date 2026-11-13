@@ -1,0 +1,27 @@
+# This micro-frontend's passport: everything a tool that assembles a product
+# from FrontX packages (Gearbox, Constructor Studio) needs to know about it, in
+# one file. It restates what package.json and mfe.json say, and those tools
+# check that they agree, so keep them in step when either changes.
+#
+# The Activity kit (`project-activity`): a built-in kit (ADR-0068 §7), a base
+# kit by default (ADR-0069 §4). Two project sections: Activity, and the
+# Timeline, which shows project-lifecycle's `milestone` (ADR-0070 §2) and
+# shows only where that type is installed.
+gdl_version = "1.5"
+
+mfe(
+    name = "@constructor-studio/activity-mfe",
+    version = "0.2.0-alpha.0",
+
+    # The backend gears its screens call, by gear id.
+    requires = ["studio-artifact-ingest", "studio-domain-model"],
+
+    screens = ["Activity", "Timeline"],
+    mounts = ["/projects/activity", "/projects/timeline"],
+
+    frontx = "0.2.0-alpha.15",
+
+    roles = [],
+
+    preview = ["/projects/activity"],
+)

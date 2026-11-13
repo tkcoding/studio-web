@@ -1,0 +1,779 @@
+/*
+ * The product map over ui-kit semantic tokens (the prototype's `.pmap-*`
+ * rules). A group's hue comes in as `--g-h`; states as the kit's
+ * success/warning/destructive colours.
+ */
+
+.card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 0.5rem);
+  background: var(--card);
+}
+
+.muted {
+  color: var(--muted-foreground);
+}
+
+.small {
+  font-size: 0.75rem;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.error {
+  color: var(--destructive);
+}
+
+.warnText {
+  color: var(--warning, #b45309);
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stack {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.linklike {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.linklike:hover {
+  text-decoration: underline;
+}
+
+.pre {
+  margin: 0;
+  max-height: 20rem;
+  overflow: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+  background: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  white-space: pre;
+}
+
+/* ── the bar ── */
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.find {
+  width: 14rem;
+}
+
+.problems {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: var(--space-4);
+  font-size: 0.8125rem;
+}
+
+.suggest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+  background: var(--accent);
+}
+
+/* ── the three columns ── */
+
+.body {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr) 17rem;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.palette,
+.detail {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+  font-size: 0.8125rem;
+}
+
+.detail p {
+  margin: 0;
+}
+
+.paletteList {
+  display: grid;
+  gap: var(--space-2);
+  max-height: 36rem;
+  overflow: auto;
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid hsl(var(--g-h, 220) 60% 55%);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--card);
+  cursor: grab;
+}
+
+.itemName {
+  font-weight: 500;
+}
+
+.itemSub {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.itemGroup {
+  margin: var(--space-2) 0 var(--space-1);
+  color: hsl(var(--g-h, 220) 55% 45%);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.glyph {
+  margin-right: 0.25rem;
+  opacity: 0.7;
+}
+
+/* ── the canvas ── */
+
+.canvas {
+  position: relative;
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-2);
+}
+
+.links {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.link {
+  fill: none;
+  stroke: var(--muted-foreground);
+  stroke-width: 1.2px;
+  opacity: 0.55;
+}
+
+.linkCalls {
+  stroke-dasharray: none;
+}
+
+.linkRunsOn,
+.linkStoresIn {
+  stroke-dasharray: 4 3;
+}
+
+.linkSignsIn {
+  stroke-dasharray: 1 3;
+}
+
+.linkDepends {
+  stroke-dasharray: 6 2;
+}
+
+.linkBad {
+  stroke: var(--destructive, #dc2626);
+  opacity: 0.9;
+}
+
+.linkOn {
+  opacity: 1;
+  stroke-width: 2px;
+}
+
+.linkHit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 10px;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.linkCount {
+  fill: var(--foreground);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.lane {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+}
+
+.drop {
+  border-color: var(--primary);
+  background: var(--accent);
+}
+
+.laneHead {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.laneBody {
+  min-width: 0;
+}
+
+.laneRow {
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+}
+
+.group {
+  display: grid;
+  gap: var(--space-1);
+  align-content: start;
+  min-width: 11rem;
+  padding: var(--space-2);
+  border-top: 3px solid hsl(var(--g-h, 220) 60% 55%);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: hsl(var(--g-h, 220) 60% 55% / 0.06);
+}
+
+.folded {
+  min-width: auto;
+}
+
+.groupHead,
+.kidsHead {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chips {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.compact .chips {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.node {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--card);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.nodeLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 500;
+}
+
+.nodeState {
+  color: var(--destructive, #dc2626);
+  font-size: 0.6875rem;
+}
+
+.nodeWhat {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+
+.nodeMeta {
+  color: var(--muted-foreground);
+  font-size: 0.625rem;
+}
+
+.stateDot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--success, #16a34a);
+}
+
+.stateDot.missing,
+.stateDot.bad {
+  background: var(--destructive, #dc2626);
+}
+
+.stateDot.warn {
+  background: var(--warning, #d97706);
+}
+
+.stateDot.unused {
+  background: var(--muted-foreground);
+}
+
+.node.missing {
+  border-style: dashed;
+  border-color: var(--destructive, #dc2626);
+}
+
+.node.bad {
+  border-color: var(--destructive, #dc2626);
+}
+
+.node.warn {
+  border-color: var(--warning, #d97706);
+}
+
+.node.unused {
+  border-style: dashed;
+  opacity: 0.8;
+}
+
+.on {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.picked {
+  outline: 2px solid var(--primary);
+}
+
+.found {
+  box-shadow: 0 0 0 2px var(--warning, #d97706);
+}
+
+.linked {
+  border-color: var(--primary);
+}
+
+.dim {
+  opacity: 0.3;
+}
+
+.badge {
+  justify-self: start;
+  padding: 0 0.375rem;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+}
+
+.badge_bad {
+  background: var(--destructive, #dc2626);
+  color: var(--destructive-foreground, #fff);
+}
+
+.badge_warn {
+  background: var(--warning, #d97706);
+  color: #fff;
+}
+
+.badge_info {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.parent {
+  display: grid;
+  gap: 2px;
+}
+
+.kids {
+  display: grid;
+  gap: 2px;
+  padding-left: var(--space-3);
+}
+
+/* ── the shell, drawn as the app ── */
+
+.shell {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+  background: var(--card);
+  z-index: 2;
+  position: relative;
+}
+
+.shellHead {
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--muted);
+  color: var(--foreground);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.appBody {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.appNav {
+  display: grid;
+  gap: var(--space-1);
+  align-content: start;
+}
+
+.appMenu {
+  display: grid;
+  gap: 1px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 0.25rem);
+  cursor: pointer;
+}
+
+.appMenu.missing,
+.appMenu.bad {
+  border-color: var(--destructive, #dc2626);
+}
+
+.appMfe {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.appItem {
+  padding-left: var(--space-2);
+  font-size: 0.75rem;
+}
+
+.appItem.on {
+  outline: none;
+  font-weight: 600;
+}
+
+.appStage {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.appDrawn {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+
+.appShared {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.75rem;
+}
+
+/* ── a screen's preview ── */
+
+.previewHold {
+  display: block;
+}
+
+.preview {
+  display: grid;
+  overflow: hidden;
+  max-width: 28rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+  background: var(--background);
+}
+
+.node .preview {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 22rem;
+  z-index: 10;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+
+.previewBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-2);
+  background: var(--muted);
+  font-size: 0.625rem;
+}
+
+.previewUrl {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previewTag {
+  color: var(--muted-foreground);
+}
+
+.previewShot {
+  display: block;
+  width: 100%;
+}
+
+.previewThumbs {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  overflow-x: auto;
+}
+
+.previewThumb {
+  display: grid;
+  width: 4rem;
+  font-size: 0.5625rem;
+  cursor: pointer;
+}
+
+.previewThumb img {
+  width: 100%;
+}
+
+.previewThumb.on {
+  outline: 1px solid var(--primary);
+}
+
+.previewBody {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 7rem;
+}
+
+.previewNav {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  padding: var(--space-1);
+  border-right: 1px solid var(--border);
+  font-size: 0.625rem;
+}
+
+.previewItem.on {
+  outline: none;
+  font-weight: 600;
+}
+
+.previewPage {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: var(--space-2);
+}
+
+.previewTitle {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.previewLine {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--muted);
+}
+
+/* ── the detail ── */
+
+.detailKind {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detailTitle {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.facts {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: var(--space-4);
+}
+
+.params {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.param {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.param dt,
+.param dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.param.missing dd {
+  color: var(--destructive, #dc2626);
+}
+
+.secret {
+  font-style: italic;
+}
+
+.legend {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.swatch {
+  display: inline-block;
+  width: 1.5rem;
+  height: 0.75rem;
+  vertical-align: middle;
+  border: 1px solid var(--destructive, #dc2626);
+  border-radius: 2px;
+}
+
+.swatch.missing,
+.swatch.unused {
+  border-style: dashed;
+}
+
+.swatch.unused {
+  border-color: var(--muted-foreground);
+}
+
+/* ── product.gdl ── */
+
+.gdl {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.gdlHead {
+  font-size: 0.8125rem;
+}
+
+.gdlBox {
+  max-height: 36rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+  background: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.gdlLine {
+  display: grid;
+  grid-template-columns: 1rem 2.5rem minmax(0, 1fr);
+}
+
+.gdlAdd {
+  background: color-mix(in srgb, var(--success, #16a34a) 15%, transparent);
+}
+
+.gdlDel {
+  background: color-mix(in srgb, var(--destructive, #dc2626) 15%, transparent);
+}
+
+.owned {
+  cursor: pointer;
+}
+
+.owned:hover {
+  background: var(--accent);
+}
+
+.gdlLine.on {
+  outline: none;
+  background: var(--accent);
+  font-weight: 600;
+}
+
+.gdlMark,
+.gdlN {
+  color: var(--muted-foreground);
+  text-align: right;
+  padding-right: 0.5rem;
+  user-select: none;
+}
+
+.gdlText {
+  white-space: pre;
+}

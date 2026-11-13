@@ -1,0 +1,18 @@
+{
+  "$id": "gts://gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.workspace.selected.v1~",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Shell-owned: the workspace the session is working in, as {id, name}, or null when the organization has none. A project's parent and the root of the Projects list — see docs/sdlc/FEATURE/workspace-scope.md.",
+  "allOf": [{ "$ref": "gts://gts.frontx.mfes.comm.shared_property.v1~" }],
+  "properties": {
+    "value": {
+      "type": ["object", "null"],
+      "$comment": "null is 'the organization has no workspace' — a published value, not an absent one. It must validate, or seeding at bootstrap throws inside updateSharedProperty.",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "name"],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,253 @@
+/* The frontend constructor (the prototype's `.fc-*` and `.pm-*`), over kit tokens. */
+
+.work {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(20rem, 2fr) minmax(12rem, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .work {
+    grid-template-columns: 1fr;
+  }
+}
+
+.box {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+  background: var(--card);
+  min-width: 0;
+}
+
+.box p {
+  margin: 0;
+}
+
+.over {
+  border-color: var(--primary);
+  border-style: dashed;
+}
+
+.h {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted-foreground);
+}
+
+.name {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+}
+
+.section {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.offer {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+  cursor: grab;
+}
+
+.glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  background: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  flex: none;
+}
+
+.frame {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+  overflow: hidden;
+}
+
+.top {
+  padding: var(--space-1) var(--space-2);
+  background: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 9rem 1fr 8rem;
+  min-height: 14rem;
+}
+
+.nav,
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--muted);
+}
+
+.page {
+  padding: var(--space-2);
+  min-width: 0;
+}
+
+.navItem,
+.chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm, 0.25rem);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.navItem.on,
+.step.on {
+  background: var(--accent);
+}
+
+.empty {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  padding: var(--space-2);
+}
+
+.zoneH {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.strips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.pageCard {
+  display: grid;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.shot {
+  padding: 0;
+  border: 1px solid var(--border);
+  background: none;
+  cursor: zoom-in;
+}
+
+.shot img,
+.shotBig {
+  display: block;
+  max-width: 100%;
+}
+
+.skeleton {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.skeleton i {
+  display: block;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--muted);
+}
+
+.place {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.8125rem;
+}
+
+.thumb {
+  display: inline-block;
+  width: 3rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  overflow: hidden;
+  flex: none;
+}
+
+.thumb img {
+  width: 100%;
+}
+
+.fix {
+  margin: 0;
+  padding-left: var(--space-4);
+  font-size: 0.8125rem;
+}
+
+.strip ol,
+ol.strip {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.fit {
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.fit td {
+  padding: 0.125rem var(--space-2) 0.125rem 0;
+}
+
+.fit tr[data-verdict='differs'] td {
+  color: var(--warning, #d97706);
+}

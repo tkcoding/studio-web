@@ -356,6 +356,18 @@ impl ConnectorDriver for GearRepositoryDriver {
             .await
     }
 
+    async fn read_file_bytes(
+        &self,
+        auth: &ConnectionAuth,
+        repo: &str,
+        path: &str,
+        git_ref: Option<&str>,
+    ) -> anyhow::Result<Option<Vec<u8>>> {
+        self.github
+            .read_file_bytes(&self.api(auth, repo)?, repo, path, git_ref)
+            .await
+    }
+
     async fn path_history(
         &self,
         auth: &ConnectionAuth,

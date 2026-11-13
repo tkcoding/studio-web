@@ -1,0 +1,7 @@
+.actionsButton {
+  color: var(--muted-foreground);
+}
+
+.item[data-disabled] {
+  pointer-events: auto;
+}

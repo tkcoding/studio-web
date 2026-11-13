@@ -1,0 +1,20 @@
+{
+  "$id": "gts://gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.artifact.selected.v1~",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Shell-owned: the artifact the editor is on, echoed from the address (#320), or null outside the editor. The shell -> MFE counterpart of the artifact.open action. No projectId — the project travels as its own property.",
+  "allOf": [{ "$ref": "gts://gts.frontx.mfes.comm.shared_property.v1~" }],
+  "properties": {
+    "value": {
+      "type": ["object", "null"],
+      "$comment": "null is 'no artifact open' — a published value, not an absent one. It must validate, or leaving the editor throws inside updateSharedProperty.",
+      "properties": {
+        "artifactId": { "type": "string", "minLength": 1 },
+        "repository": { "type": "string" },
+        "path": { "type": "string" },
+        "kind": { "enum": ["repo", "file", "issue", "pullRequest", "commit", "comment", "user", "document"] }
+      },
+      "required": ["artifactId", "repository", "path", "kind"],
+      "additionalProperties": false
+    }
+  }
+}

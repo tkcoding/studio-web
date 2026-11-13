@@ -1,0 +1,16 @@
+# This micro-frontend's passport (see tests-mfe/frontx.gdl for what each field is).
+#
+# Docs & API: the built-in kit `studio-api-docs` (ADR-0068 §7, ADR-0069), a base
+# kit by default. Its one screen is in the product menu on the wordmark.
+gdl_version = "1.5"
+
+mfe(
+    name = "@constructor-studio/api-docs-mfe",
+    version = "0.2.0-alpha.0",
+    requires = [],
+    screens = ["Docs & API"],
+    mounts = ["/api-docs"],
+    frontx = "0.2.0-alpha.15",
+    roles = [],
+    preview = ["/api-docs"],
+)

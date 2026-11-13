@@ -37,6 +37,7 @@ mod model_sweep; // moves every tenant's records into (or back out of) the domai
 mod llm_proxy; // studio-llm-proxy: Studio's one way out to a model provider (ADR-0039); always linked
 mod mcp; // studio-mcp: Studio's functions as MCP tools for a developer's own agent (docs/mcp.md)
 mod notify; // studio-notify: durable delivery queue for notifications (toolkit-db outbox)
+mod object_store; // the file-storage gear over REST: the bytes there, a reference here
 mod org_scope; // `?organization_id=`: a request acts in the organization it names, once the caller reaches it
 mod organizations; // studio-organizations: a person creates an organization and owns it (ADR-0018)
 mod outbox_repair; // bring pre-0.16 toolkit-db outboxes up to the schema 0.16 expects (gears-rust#5044)
@@ -46,6 +47,7 @@ mod product; // studio-product: a project's product, its gear repository, and th
 mod project_sources; // a project's repositories: one record, project.config sources[]
 mod registered_gears;
 mod reports; // studio-reports: report definitions, sources and drawing (ADR-0033)
+mod research_emulator; // `research-emulator`: a stand-in for Constructor Research until Studio can reach one (ADR-0049)
 mod scheduler; // studio-scheduler: cron/interval schedules that enqueue into studio-tasks
 mod secrets_bootstrap; // self-heal for config-seeded credstore secrets at boot
 mod spec_mapping; // studio-spec-mapping: from a project's specification to the gears that build it
@@ -186,6 +188,11 @@ enum Commands {
     /// Built from the code alone, like `gts-types`. `scripts/product-gdl.mjs`
     /// gives the list to the Gearbox engine, which writes `product.gdl`.
     Gears,
+    /// Serve a stand-in for Constructor Research (ADR-0049): its sign-in,
+    /// account API, desk files and build logs, as Studio calls them. For a
+    /// deployment that cannot reach a real Research yet; see
+    /// `docs/research-emulator.md`.
+    ResearchEmulator(research_emulator::Args),
     /// Audit a running deployment: diff both live registries against the
     /// inventory this binary would register, and exit non-zero on any
     /// disagreement (ADR-0013 §6.3).
@@ -265,6 +272,10 @@ pub async fn run_cli() -> Result<()> {
             .map(|_| ())
             .inspect_err(environments::build::say_failure);
     }
+    // A process of its own: no profile, no database.
+    if let Some(Commands::ResearchEmulator(args)) = &cli.command {
+        return research_emulator::run(args).await;
+    }
     if matches!(cli.command, Some(Commands::GtsTypes)) {
         print!("{}", gts_inventory::to_pretty_json()?);
         return Ok(());
@@ -341,6 +352,7 @@ pub async fn run_cli() -> Result<()> {
         | Commands::BuildPublish { .. }
         | Commands::GtsTypes
         | Commands::Gears
+        | Commands::ResearchEmulator(_)
         | Commands::GtsAudit { .. } => Ok(()),
     }
 }

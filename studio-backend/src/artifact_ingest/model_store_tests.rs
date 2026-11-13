@@ -24,6 +24,10 @@ struct Model {
     objects: Mutex<HashMap<String, (String, String, Value)>>,
     links: Mutex<Vec<(String, String, String)>>,
     types: Mutex<Vec<String>>,
+    /// Every query fails, as one does behind a saturated pool.
+    failing: std::sync::atomic::AtomicBool,
+    /// How many rows the queries have handed back, all told.
+    rows_read: std::sync::atomic::AtomicUsize,
 }
 
 fn matches(w: &Value, id: &str, v: &Value) -> bool {
@@ -107,9 +111,12 @@ impl DomainObjects for Model {
         _: &SecurityContext,
         body: Value,
     ) -> anyhow::Result<(Vec<StoredObject>, usize)> {
+        if self.failing.load(std::sync::atomic::Ordering::SeqCst) {
+            anyhow::bail!("pool timed out while waiting for an open connection");
+        }
         let ty = body["type"].as_str().unwrap();
         let w = body.get("where").cloned().unwrap_or(Value::Null);
-        let rows: Vec<StoredObject> = self
+        let mut rows: Vec<StoredObject> = self
             .objects
             .lock()
             .unwrap()
@@ -120,7 +127,50 @@ impl DomainObjects for Model {
                 payload: v.clone(),
             })
             .collect();
+        // As the read model orders: each key with an absent value last, then
+        // the object id.
+        let keys: Vec<(String, bool)> = body
+            .get("order_by")
+            .and_then(Value::as_array)
+            .map(|keys| {
+                keys.iter()
+                    .map(|k| {
+                        (
+                            k["field"].as_str().unwrap().to_string(),
+                            k.get("direction").and_then(Value::as_str) == Some("desc"),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        rows.sort_by(|a, b| {
+            for (field, desc) in &keys {
+                let (x, y) = (
+                    a.payload.get(field).and_then(Value::as_str),
+                    b.payload.get(field).and_then(Value::as_str),
+                );
+                let o = match (x, y) {
+                    (Some(x), Some(y)) if *desc => y.cmp(x),
+                    (Some(x), Some(y)) => x.cmp(y),
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (None, None) => std::cmp::Ordering::Equal,
+                };
+                if o != std::cmp::Ordering::Equal {
+                    return o;
+                }
+            }
+            a.instance_id.cmp(&b.instance_id)
+        });
         let n = rows.len();
+        let offset = body.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize;
+        let limit = body
+            .get("limit")
+            .and_then(Value::as_u64)
+            .map_or(usize::MAX, |l| l as usize);
+        let rows: Vec<StoredObject> = rows.into_iter().skip(offset).take(limit).collect();
+        self.rows_read
+            .fetch_add(rows.len(), std::sync::atomic::Ordering::SeqCst);
         Ok((rows, n))
     }
     async fn relations(
@@ -294,5 +344,168 @@ async fn after_the_move_only_the_model_is_written() {
             .await
             .unwrap()
             .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn a_marker_that_cannot_be_read_does_not_start_the_move() {
+    let (legacy, model, store) = setup();
+    let ctx = ctx();
+    legacy
+        .upsert_nodes(
+            &ctx,
+            &[node(
+                gts::REPO_TYPE,
+                "r1",
+                json!({"full_path": "acme/web", "workspace_id": WS}),
+            )],
+        )
+        .await
+        .unwrap();
+    model
+        .failing
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    for _ in 0..3 {
+        assert!(!store.0.ready(&ctx).await, "reads stay on the old store");
+    }
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(
+        model.objects.lock().unwrap().is_empty(),
+        "nothing was moved"
+    );
+    assert!(
+        model.types.lock().unwrap().is_empty(),
+        "no type was declared"
+    );
+    assert_eq!(
+        legacy.list(&ctx, Some(gts::REPO_TYPE)).await.unwrap().len(),
+        1
+    );
+
+    // Once the marker reads again, the move runs as before.
+    model
+        .failing
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    moved(&store, &ctx).await;
+    assert!(!model.objects.lock().unwrap().is_empty());
+}
+
+/// A scope's artifacts of the four listed types, some with no date, and a
+/// second scope's that no page of the first may show.
+async fn listed_fixture(store: &ModelGraph, ctx: &SecurityContext) -> Vec<GtsNode> {
+    let mut nodes = Vec::new();
+    for i in 0..40u32 {
+        let (type_id, scope) = match i % 5 {
+            0 => (gts::FILE_TYPE, WS),
+            1 => (gts::ISSUE_TYPE, WS),
+            2 => (gts::PULL_REQUEST_TYPE, WS),
+            3 => (gts::FILE_TYPE, "22222222-2222-2222-2222-222222222222"),
+            _ => (gts::REPO_TYPE, WS),
+        };
+        let mut value = json!({
+            "project_id": scope,
+            "repo": if i % 2 == 0 { "r-even" } else { "r-odd" },
+            "title": format!("t{i}"),
+        });
+        // Every seventh has no date; the rest repeat four dates, so ties
+        // are broken by id.
+        if i % 7 != 0 {
+            value["updated_at"] = json!(format!("2026-11-0{}T00:00:00Z", 1 + i % 4));
+        }
+        nodes.push(node(type_id, &format!("n{i:02}"), value));
+    }
+    store.upsert_nodes(ctx, &nodes).await.unwrap();
+    nodes
+}
+
+#[tokio::test]
+async fn a_page_cut_by_the_model_is_the_page_cut_here() {
+    use crate::artifact_ingest::graph::{NodePageQuery, PageStart, page_of_nodes};
+
+    let (_legacy, _model, store) = setup();
+    let ctx = ctx();
+    store.list(&ctx, None).await.unwrap();
+    moved(&store, &ctx).await;
+    let all = listed_fixture(&store, &ctx).await;
+
+    for type_filter in [None, Some("file"), Some("issue"), Some("commit")] {
+        let of_type: Vec<GtsNode> = all
+            .iter()
+            .filter(|n| gts::resolve_listable_types(type_filter).contains(&n.type_id))
+            .cloned()
+            .collect();
+        for repo in [None, Some("r-even")] {
+            for by_updated in [false, true] {
+                for (offset, limit) in [(0, 5), (3, 4), (0, 200), (7, 3), (500, 10)] {
+                    let q = NodePageQuery {
+                        type_filter,
+                        scope: Some(WS),
+                        repo,
+                        subject: None,
+                        needle: None,
+                        by_updated,
+                        start: PageStart::Offset(offset),
+                        limit,
+                    };
+                    let expected = page_of_nodes(&of_type, &q);
+                    let got = store.page(&ctx, &q).await.unwrap();
+                    let ids =
+                        |p: &[GtsNode]| p.iter().map(|n| n.instance_id.clone()).collect::<Vec<_>>();
+                    let what = format!(
+                        "type={type_filter:?} repo={repo:?} by_updated={by_updated} offset={offset} limit={limit}"
+                    );
+                    assert_eq!(ids(&got.nodes), ids(&expected.nodes), "{what}");
+                    assert_eq!(got.total, expected.total, "{what}");
+                    assert_eq!(got.start, expected.start, "{what}");
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_page_of_one_type_reads_the_page_not_the_scope() {
+    use crate::artifact_ingest::graph::{NodePageQuery, PageStart};
+    use std::sync::atomic::Ordering;
+
+    let (_legacy, model, store) = setup();
+    let ctx = ctx();
+    store.list(&ctx, None).await.unwrap();
+    moved(&store, &ctx).await;
+    listed_fixture(&store, &ctx).await;
+
+    model.rows_read.store(0, Ordering::SeqCst);
+    let page = store
+        .page(
+            &ctx,
+            &NodePageQuery {
+                type_filter: Some("file"),
+                scope: Some(WS),
+                repo: None,
+                subject: None,
+                needle: None,
+                by_updated: true,
+                start: PageStart::Offset(2),
+                limit: 3,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.nodes.len(), 3);
+    assert_eq!(page.total, 8, "the count still covers the whole scope");
+    assert_eq!(
+        model.rows_read.load(Ordering::SeqCst),
+        3,
+        "only the page's rows were read"
+    );
+
+    model.rows_read.store(0, Ordering::SeqCst);
+    assert_eq!(
+        store.count_in_scope(&ctx, Some("file"), WS).await.unwrap(),
+        8
+    );
+    assert!(
+        model.rows_read.load(Ordering::SeqCst) <= 1,
+        "a count reads at most one row"
     );
 }

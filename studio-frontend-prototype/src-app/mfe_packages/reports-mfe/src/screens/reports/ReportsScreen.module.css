@@ -1,0 +1,294 @@
+/*
+ * Organization › Reports over ui-kit semantic tokens (see theme.css in
+ * @gears-frontx/ui-kit). No Tailwind: inside the shadow root the re-anchored
+ * kit tokens shadow the shell's HSL triplets.
+ */
+
+.screen {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 100%;
+  padding: var(--space-6);
+  color: var(--foreground);
+}
+
+/* The kit's theme.css paints `[data-theme]`; the shell's screen keeps its own. */
+.screen[data-theme] {
+  background: transparent;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-heading-1-size);
+  line-height: var(--text-heading-1-line-height);
+  font-weight: var(--text-heading-1-weight);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.count {
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 60rem;
+  color: var(--muted-foreground);
+}
+
+.about p {
+  margin: 0;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+}
+
+.reportTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.grow {
+  flex: 1;
+}
+
+.start {
+  align-self: flex-start;
+}
+
+/* The source form: a label column and a field column. */
+.form {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: 0.875rem;
+}
+
+.control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+}
+
+.info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.infoBody {
+  max-width: 24rem;
+  font-size: 0.875rem;
+}
+
+.infoBody p {
+  margin: 0 0 var(--space-2);
+}
+
+.hint,
+.muted {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.mutedInline {
+  color: var(--muted-foreground);
+}
+
+.sub {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+
+.error {
+  margin: 0;
+  color: var(--destructive);
+}
+
+.dialog {
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+/* The kit's lg dialog caps at 36rem; the plan editor needs more. */
+@media (min-width: 640px) {
+  .dialog {
+    max-width: min(64rem, calc(100vw - 2rem));
+  }
+}
+
+.planBox {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+}
+
+.unit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+}
+
+.unitName {
+  width: 12rem;
+}
+
+.colour {
+  width: 6rem;
+}
+
+.numInput {
+  width: 4.5rem;
+}
+
+.needInput {
+  width: 5rem;
+}
+
+.gearInput {
+  min-width: 12rem;
+}
+
+.rowButtons {
+  display: inline-flex;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.unplanned {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.roadmap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+}
+
+.kpiWarn {
+  border-color: var(--warning, var(--border));
+}
+
+.kpiLabel {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.kpiValue {
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpiSub {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+
+.h3 {
+  margin: var(--space-1, 4px) 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.small {
+  font-size: 0.75rem;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.date,
+.nowrap {
+  white-space: nowrap;
+}
+
+.top {
+  vertical-align: top;
+}
+
+.skeleton {
+  height: 2rem;
+  width: 16rem;
+}

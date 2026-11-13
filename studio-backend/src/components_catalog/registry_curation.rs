@@ -46,6 +46,7 @@ const REQUEST_KIND: &str = "gear-publication";
 fn request_need() -> TypeNeed {
     let f = |n: &str, t: &str| (n.to_string(), t.to_string(), String::new());
     TypeNeed {
+        declared_by: "studio-components-catalog".to_owned(),
         id: REQUEST_TYPE.to_string(),
         fields: vec![
             f("kind", "string"),

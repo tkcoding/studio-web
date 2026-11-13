@@ -36,3 +36,25 @@ fn a_kit_names_itself_by_its_slug() {
     assert!(read("gdl_version = \"1.6\"\nkit(name = \"x\", visibility = \"open\")\n").is_err());
     assert!(read("gdl_version = \"1.6\"\nservice(name = \"x\")\n").is_err());
 }
+
+#[test]
+fn a_kit_with_screens_names_its_levels_and_bundles() {
+    let k = read(
+        r#"gdl_version = "1.7"
+kit(
+    name = "hello-kit",
+    version = "0.1.0",
+    levels = ["organization", "project"],
+    mfe = [path("mfe/hello"), path("mfe/other")],
+)
+"#,
+    )
+    .unwrap();
+    assert_eq!(k.levels, vec!["organization", "project"]);
+    assert_eq!(k.mfe, vec!["mfe/hello", "mfe/other"]);
+    let one = read("gdl_version = \"1.7\"\nkit(name = \"k\", mfe = path(\"mfe/a\"))\n").unwrap();
+    assert_eq!(one.mfe, vec!["mfe/a"]);
+    assert!(read("gdl_version = \"1.7\"\nkit(name = \"k\", levels = [\"galaxy\"])\n").is_err());
+    assert!(read("gdl_version = \"1.7\"\nkit(name = \"k\", mfe = path(\"/abs\"))\n").is_err());
+    assert!(read("gdl_version = \"1.7\"\nkit(name = \"k\", mfe = 3)\n").is_err());
+}

@@ -1,0 +1,163 @@
+/* The New project wizard's details step. */
+
+.goal {
+  field-sizing: fixed;
+  height: 4rem;
+  resize: none;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fieldLabel {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-size);
+  line-height: var(--text-mono-line-height);
+  font-weight: var(--text-mono-weight);
+  letter-spacing: var(--text-mono-tracking);
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.modeCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--muted);
+  cursor: pointer;
+}
+
+/* The mockup's picked card: primary border and a faint primary halo, not a
+   second solid ring. */
+.modeCard[data-selected] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 var(--border-width) color-mix(in oklab, var(--primary) 10%, transparent);
+}
+
+.modeCard[data-selected] .modeHead svg {
+  color: var(--primary);
+}
+
+.modeInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.modeHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.modeTitle {
+  font-weight: 600;
+}
+
+.modeHint {
+  font-size: var(--text-meta-size);
+  line-height: 1.45;
+  color: var(--muted-foreground);
+}
+
+.owner {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+}
+
+/* Same footprint as the kit's default Avatar. */
+.ownerAvatarSkeleton {
+  flex: none;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-full);
+}
+
+.ownerNameSkeleton {
+  height: var(--text-body-line-height);
+  width: 9ch;
+}
+
+.ownerEmailSkeleton {
+  height: var(--text-body-line-height);
+  width: 13ch;
+}
+
+.ownerText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: calc(2 * var(--text-body-line-height));
+}
+
+
+.ownerName {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ownerEmail {
+  font-size: var(--text-meta-size);
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* The server's run creating the project, step by step. */
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.progressTitle {
+  margin: 0;
+  font-weight: 600;
+}
+
+.progressSteps {
+  margin: 0;
+  padding-left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.progressSteps li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.progressSteps li[data-state='failed'] {
+  color: var(--destructive);
+}
+
+.progressState,
+.progressHint {
+  color: var(--muted-foreground);
+}

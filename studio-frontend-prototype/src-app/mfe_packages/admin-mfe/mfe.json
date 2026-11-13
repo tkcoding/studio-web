@@ -1,0 +1,287 @@
+{
+  "manifest": {
+    "id": "gts.frontx.mfes.mfe.mf_manifest.v1~constructor_studio.admin.mfe.manifest.v1",
+    "remoteEntry": "http://localhost:3243/assets/remoteEntry.js"
+  },
+  "entries": [
+    {
+      "id": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "requiredProperties": [
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.theme.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.language.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.project_section.selected.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.organization.selected.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.live.studio_events.last_event.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.workspace.selected.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.project.selected.v1~"
+      ],
+      "actions": [],
+      "domainActions": [
+        "gts.frontx.mfes.comm.action.v1~constructor_studio.context.workspaces.publish.v1~",
+        "gts.frontx.mfes.comm.action.v1~constructor_studio.shell.screen.open.v1~"
+      ],
+      "manifest": "gts.frontx.mfes.mfe.mf_manifest.v1~constructor_studio.admin.mfe.manifest.v1",
+      "exposedModule": "./lifecycle"
+    }
+  ],
+  "extensions": [
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.organizations.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Organizations",
+        "icon": "lucide:building-2",
+        "route": "/admin/organizations",
+        "order": 10,
+        "level": "admin",
+        "section": "organizations"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.people.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "People",
+        "icon": "lucide:users",
+        "route": "/admin/people",
+        "order": 20,
+        "level": "admin",
+        "section": "people"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.access.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Access",
+        "icon": "lucide:shield",
+        "route": "/admin/access",
+        "order": 30,
+        "level": "admin",
+        "section": "access"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.integrations.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Integrations",
+        "icon": "lucide:plug",
+        "route": "/admin/integrations",
+        "order": 40,
+        "level": "admin",
+        "section": "integrations"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.secrets.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Secrets",
+        "icon": "lucide:key-round",
+        "route": "/admin/secrets",
+        "order": 50,
+        "level": "admin",
+        "section": "secrets"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.domain_model.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Studio domain model",
+        "icon": "lucide:layers",
+        "route": "/admin/domain-model",
+        "order": 60,
+        "level": "admin",
+        "section": "domain-model"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.objects.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Objects",
+        "icon": "lucide:shapes",
+        "route": "/admin/objects",
+        "order": 70,
+        "level": "admin",
+        "section": "objects"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.views.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Views",
+        "icon": "lucide:table-properties",
+        "route": "/admin/views",
+        "order": 80,
+        "level": "admin",
+        "section": "views"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.identities.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "All identities",
+        "icon": "lucide:contact",
+        "route": "/admin/identities",
+        "order": 90,
+        "level": "admin",
+        "section": "identities"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.tenants.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Project tenants",
+        "icon": "lucide:folder-tree",
+        "route": "/admin/tenants",
+        "order": 95,
+        "level": "admin",
+        "section": "tenants"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.system.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "System",
+        "icon": "lucide:activity",
+        "route": "/admin/system",
+        "order": 105,
+        "level": "admin",
+        "section": "system",
+        "audience": "platform-admin"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.connections.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Connections",
+        "icon": "lucide:network",
+        "route": "/connections",
+        "order": 40,
+        "level": "organization",
+        "section": "connections",
+        "kit": "org-connections",
+        "modelTab": "connectors"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.model_organization.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Attributes",
+        "icon": "lucide:file-text",
+        "route": "/model-organization/attributes",
+        "order": 95,
+        "level": "organization",
+        "section": "attributes"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.model_organization_types.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Domain model tab",
+        "icon": "lucide:list",
+        "route": "/model-organization/types",
+        "order": 999,
+        "level": "organization",
+        "placement": "hidden",
+        "section": "type:",
+        "sectionPrefix": true
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.model_workspace.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Attributes",
+        "icon": "lucide:file-text",
+        "route": "/model-workspace/attributes",
+        "order": 30,
+        "level": "workspace",
+        "section": "attributes",
+        "modelTab": "about"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.model_workspace_types.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Domain model tab",
+        "icon": "lucide:list",
+        "route": "/model-workspace/types",
+        "order": 999,
+        "level": "workspace",
+        "placement": "hidden",
+        "section": "type:",
+        "sectionPrefix": true
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.model_project.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Attributes",
+        "icon": "lucide:file-text",
+        "route": "/model-project/attributes",
+        "order": 62,
+        "level": "project",
+        "section": "attributes"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.model_project_types.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Domain model tab",
+        "icon": "lucide:list",
+        "route": "/model-project/types",
+        "order": 999,
+        "level": "project",
+        "placement": "hidden",
+        "section": "type:",
+        "sectionPrefix": true
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.admin.screens.profile.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.admin.mfe.main.v1",
+      "presentation": {
+        "label": "Profile",
+        "icon": "lucide:circle-user-round",
+        "route": "/profile",
+        "order": 900,
+        "level": "organization",
+        "placement": "hidden",
+        "section": "profile"
+      }
+    }
+  ]
+}

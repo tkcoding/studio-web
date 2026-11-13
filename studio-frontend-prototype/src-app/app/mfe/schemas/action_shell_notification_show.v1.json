@@ -1,0 +1,34 @@
+{
+  "$id": "gts://gts.frontx.mfes.comm.action.v1~constructor_studio.shell.notification.show.v1~",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Shell-owned action an MFE executes against the screen domain to show a toast: the shell owns the only toaster (the kit's Toaster, layout/ShellToaster.tsx). The MFE sends the text already in the user's language — the dictionary is the MFE's, not the shell's. See notifyAction.ts.",
+  "allOf": [
+    {
+      "$ref": "gts://gts.frontx.mfes.comm.action.v1~"
+    }
+  ],
+  "properties": {
+    "payload": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": ["error", "success", "info", "loading"],
+          "$comment": "STUDIO_NOTICE_KINDS in mfe-shared (host/hostActions.ts); picks the toast's icon and colour. A loading toast stays until a notice with its id replaces it."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "$comment": "A notice with the id of a shown toast updates it in place. Required for a loading notice: nothing else can end that toast."
+        }
+      },
+      "required": ["kind", "text"],
+      "if": { "properties": { "kind": { "const": "loading" } } },
+      "then": { "required": ["id"] }
+    }
+  },
+  "required": ["payload"]
+}

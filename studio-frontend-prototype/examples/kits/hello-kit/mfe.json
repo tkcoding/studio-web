@@ -1,0 +1,79 @@
+{
+  "manifest": {
+    "id": "gts.frontx.mfes.mfe.mf_manifest.v1~example.hello_kit.mfe.manifest.v1",
+    "remoteEntry": "http://localhost:3900/assets/remoteEntry.js"
+  },
+  "entries": [
+    {
+      "id": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~example.hello_kit.mfe.main.v1",
+      "requiredProperties": [
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.theme.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.language.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.project.selected.v1~"
+      ],
+      "actions": [],
+      "domainActions": [],
+      "manifest": "gts.frontx.mfes.mfe.mf_manifest.v1~example.hello_kit.mfe.manifest.v1",
+      "exposedModule": "./lifecycle"
+    },
+    {
+      "id": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~example.hello_kit.mfe.panel.v1",
+      "requiredProperties": [
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.theme.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.language.v1~"
+      ],
+      "actions": [],
+      "domainActions": [],
+      "manifest": "gts.frontx.mfes.mfe.mf_manifest.v1~example.hello_kit.mfe.manifest.v1",
+      "exposedModule": "./panel"
+    },
+    {
+      "id": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~example.hello_kit.mfe.status.v1",
+      "requiredProperties": [
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.theme.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.language.v1~"
+      ],
+      "actions": [],
+      "domainActions": [],
+      "manifest": "gts.frontx.mfes.mfe.mf_manifest.v1~example.hello_kit.mfe.manifest.v1",
+      "exposedModule": "./status"
+    }
+  ],
+  "extensions": [
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~example.hello_kit.screens.main.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~example.hello_kit.mfe.main.v1",
+      "presentation": {
+        "label": "Hello",
+        "icon": "lucide:hand",
+        "route": "/hello-kit",
+        "order": 90,
+        "level": "project",
+        "kit": "hello-kit"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~constructor_studio.shell.slots.contribution.v1~example.hello_kit.slots.overview_panel.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~constructor_studio.shell.slots.screen_panels.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~example.hello_kit.mfe.panel.v1",
+      "presentation": {
+        "label": "Hello panel",
+        "order": 90,
+        "level": "project",
+        "screen": "/projects/overview",
+        "kit": "hello-kit"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~constructor_studio.shell.slots.contribution.v1~example.hello_kit.slots.project_status.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~constructor_studio.shell.slots.project_header_status.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~example.hello_kit.mfe.status.v1",
+      "presentation": {
+        "label": "Hello status",
+        "order": 90,
+        "kit": "hello-kit"
+      }
+    }
+  ]
+}

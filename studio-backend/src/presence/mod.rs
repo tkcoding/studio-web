@@ -20,6 +20,11 @@
 //! will read tomorrow out of context. That is a deliberate limit, and the
 //! endpoint states it.
 //!
+//! **Who may look.** The list names everybody in Studio, across organizations,
+//! so it is a platform administrator's (403 `PLATFORM_ADMIN_REQUIRED` for
+//! anybody else, #1044). Saying you are here, and leaving a note, are every
+//! signed-in person's.
+//!
 //! State is per-process and resets on restart — like the event hub's replay
 //! window. A restart makes everybody look offline for one heartbeat interval
 //! and then the truth comes back on its own, which is a better failure than a
@@ -61,11 +66,23 @@ impl RestApiCapability for PresenceGear {
         router: Router,
         openapi: &dyn OpenApiRegistry,
     ) -> anyhow::Result<Router> {
-        let _ = ctx;
+        // Who is a platform administrator, asked of studio-user: resolved in
+        // the REST phase, after every gear's `init`, so it has published it.
+        // Absent when that gear is inert, and then nobody reads the list.
+        let admins = rest::Admins(
+            ctx.client_hub()
+                .get_scoped::<dyn crate::user_profile::OrganizationReader>(
+                    &toolkit::client_hub::ClientScope::gts_id(
+                        crate::user_profile::IDENTITY_INSTANCE_ID,
+                    ),
+                )
+                .ok(),
+        );
         Ok(rest::register_routes(
             router,
             openapi,
             self.registry.clone(),
+            admins,
         ))
     }
 }

@@ -308,24 +308,32 @@ pub struct ConnectorService {
 /// set one comes through here: creating a connection, editing one, and probing
 /// a credential before it is stored.
 ///
-/// The driver's own default is checked too. It is ours and it passes, so the
-/// check costs nothing and means the rule has no exception to remember. A
-/// driver without one (a gear repository) is refused an empty address.
+/// The driver's own default is not a member's input: it is the deployment's
+/// configuration (Research's address is the operator's, and on a stand that
+/// runs the Research emulator it is `http://research.localhost:…`). It is
+/// parsed, not held to the rule a typed address is. A driver without one (a
+/// gear repository) is refused an empty address.
 fn resolve_base_url(
     driver: &dyn ConnectorDriver,
     supplied: Option<&str>,
 ) -> anyhow::Result<String> {
-    let raw = supplied
-        .map(str::trim)
-        .filter(|u| !u.is_empty())
-        .unwrap_or_else(|| driver.default_base_url());
+    let typed = supplied.map(str::trim).filter(|u| !u.is_empty());
+    let raw = typed.unwrap_or_else(|| driver.default_base_url());
     if raw.is_empty() {
         anyhow::bail!(
             "a {} connection needs its Server URL: there is no default to connect to",
             driver.display_name().to_lowercase()
         );
     }
-    let url = check_url(raw, "Server URL", driver.base_url_rule())?;
+    let url = match typed {
+        Some(raw) => check_url(raw, "Server URL", driver.base_url_rule())?,
+        None => reqwest::Url::parse(raw).map_err(|e| {
+            anyhow::anyhow!(
+                "this Studio's {} address '{raw}' is not a URL: {e}",
+                driver.display_name()
+            )
+        })?,
+    };
     // Parsed and re-rendered rather than passed through: `Url` has already
     // normalised the host, and what the driver joins paths onto should be what
     // was checked, not the string beside it.
@@ -544,6 +552,27 @@ impl ConnectorService {
         tenant: Uuid,
     ) -> anyhow::Result<Vec<Connection>> {
         Ok(self.load(ctx, tenant).await?.items)
+    }
+
+    /// `tenant`'s own connections together with those held above it up to its
+    /// organization -- a project's, its workspace's and its organization's --
+    /// each once, nearest first (#1043). [`Self::list`] stops at the nearest
+    /// tenant with a catalogue, so a project with a connection of its own hid
+    /// its organization's.
+    ///
+    /// Nothing held above the organization: the platform root's connections
+    /// are not the organization's to use (`ownership`), so a list of what a
+    /// project can use does not offer them -- unless the tenant asked about is
+    /// the root itself. The tenant's own catalogue failing to read fails the
+    /// list; an ancestor that cannot be read is left out.
+    pub async fn list_with_ancestors(
+        &self,
+        ctx: &SecurityContext,
+        tenant: Uuid,
+    ) -> anyhow::Result<Vec<Connection>> {
+        let own = self.list(ctx, tenant).await?;
+        let reachable = reachable_connections(self.am.as_ref(), ctx, tenant).await;
+        Ok(merge_reachable(tenant, own, reachable))
     }
 
     /// The gear repositories `tenant` itself holds (ADR-0046), oldest first,
@@ -1672,6 +1701,28 @@ async fn reachable_connections(
     out
 }
 
+/// The list [`ConnectorService::list_with_ancestors`] answers: `own` first (the
+/// nearest catalogue's, as [`ConnectorService::list`] reads it), then every
+/// other reachable connection not already in it, leaving out what the
+/// platform root holds unless `tenant` is the root.
+fn merge_reachable(
+    tenant: Uuid,
+    own: Vec<Connection>,
+    reachable: Vec<Connection>,
+) -> Vec<Connection> {
+    use super::ownership::PLATFORM_ROOT_TENANT;
+    let allowed = |c: &Connection| {
+        tenant == PLATFORM_ROOT_TENANT || c.owner_tenant_id != PLATFORM_ROOT_TENANT
+    };
+    let mut out: Vec<Connection> = own.into_iter().filter(|c| allowed(c)).collect();
+    for c in reachable {
+        if allowed(&c) && !out.iter().any(|seen| seen.id == c.id) {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// The `provider` connections a model key may come from, in the order to try
 /// them: personal, then workspace (only when the request named a workspace),
 /// then organization -- nearest tenant first within each.
@@ -2159,6 +2210,38 @@ mod default_connection_tests {
     }
 
     #[test]
+    fn a_project_lists_its_own_connections_and_its_organizations_but_not_the_platforms() {
+        use super::super::ownership::PLATFORM_ROOT_TENANT;
+        let (project, org) = (Uuid::from_u128(30), Uuid::from_u128(10));
+        let held = |label: &str, at: Uuid| Connection {
+            owner_tenant_id: at,
+            ..conn(label, "github", "organization")
+        };
+        let own = held("own", project);
+        let org_row = held("org", org);
+        let root = held("root", PLATFORM_ROOT_TENANT);
+        // The walk reads the project's catalogue again before its ancestors'.
+        let reachable = vec![own.clone(), org_row.clone(), root.clone()];
+        let out = merge_reachable(project, vec![own], reachable);
+        let labels: Vec<&str> = out.iter().map(|c| c.label.as_str()).collect();
+        assert_eq!(labels, ["own", "org"]);
+
+        // A project with no catalogue of its own reads its organization's as
+        // the nearest one: the same rows, once.
+        let out = merge_reachable(
+            project,
+            vec![org_row.clone()],
+            vec![org_row.clone(), org_row.clone(), root.clone()],
+        );
+        let labels: Vec<&str> = out.iter().map(|c| c.label.as_str()).collect();
+        assert_eq!(labels, ["org"]);
+
+        // The platform itself does see its own.
+        let out = merge_reachable(PLATFORM_ROOT_TENANT, vec![root.clone()], vec![root]);
+        assert_eq!(out.len(), 1);
+    }
+
+    #[test]
     fn one_gear_repository_of_a_tenant_is_where_new_gears_go() {
         let mut a = conn("a", "gear-repository", "organization");
         a.options = [("create_target".to_string(), "true".to_string())].into();
@@ -2410,6 +2493,25 @@ mod base_url_rule_tests {
                 .unwrap_or_else(|e| panic!("{} rejects its own default: {e}", driver.provider()));
             assert_eq!(resolved, driver.default_base_url());
         }
+    }
+
+    /// The deployment's own Research address is taken as configured -- a stand
+    /// on the Research emulator runs it over plain http on a `.localhost` name
+    /// -- while the same address typed by a member is still refused.
+    #[test]
+    fn a_configured_research_address_is_the_operators_not_a_members() {
+        let oauth = crate::connectors::oauth::OAuthClient {
+            authorize_url: "http://research.localhost:8095/idp/connect/authorize".into(),
+            token_url: "http://research.localhost:8095/idp/connect/token".into(),
+            client_id: "constructor-studio".into(),
+            client_secret: "research-emulator".into(),
+            scope: "openid offline_access".into(),
+            redirect_uris: vec!["http://localhost:8081/connections/oauth/callback".into()],
+        };
+        let api = "http://research.localhost:8095/api/platform-account/v1";
+        let driver = crate::connectors::research::ResearchDriver::new(http(), oauth, api.into());
+        assert_eq!(resolve_base_url(&driver, None).unwrap(), api);
+        assert!(resolve_base_url(&driver, Some(api)).is_err());
     }
 
     /// A gear repository is one repository; none is assumed for it.

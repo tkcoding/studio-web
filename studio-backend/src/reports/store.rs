@@ -167,6 +167,7 @@ impl ModelStore {
     fn need() -> crate::domain_model::port::TypeNeed {
         let f = |n: &str, t: &str| (n.to_owned(), t.to_owned(), String::new());
         crate::domain_model::port::TypeNeed {
+            declared_by: "studio-reports".to_owned(),
             id: SOURCE_ENTITY.to_owned(),
             name: "Report Source".to_owned(),
             description: "Where an organization's report reads from: its connection, plan file, board, and the plan as last read.".to_owned(),
@@ -371,17 +372,34 @@ mod graph {
             use toolkit_odata::ODataQuery;
             self.ensure_types(ctx).await?;
             let key = gts::source_key(report);
-            // A handful of reports per organization: one page holds them all.
+            // The one row, by key: `node_key` is a column the projection
+            // filters on, so this reads one payload instead of every report
+            // the organization has (each carries its compressed plan), and a
+            // report past the first page is still found.
+            let raw = format!("node_key eq '{}'", key.replace('\'', "''"));
+            let filter = toolkit_odata::parse_filter_string(&raw)
+                .map_err(|e| anyhow!("report filter `{raw}`: {e}"))?
+                .into_expr();
             let page = self
                 .client
                 .project_nodes(
                     ctx,
                     &[gts::graph_type_id()],
-                    ODataQuery::default().with_limit(200),
+                    // More than one: the key is the same in every tenant, and a
+                    // caller reaching several sees each tenant's row.
+                    ODataQuery::default().with_filter(filter).with_limit(50),
                 )
                 .await
                 .map_err(|e| anyhow!("graph-storage projection: {e}"))?;
-            let Some(row) = page.items.into_iter().find(|r| r.node_key == key) else {
+            let tenant = ctx.subject_tenant_id();
+            let mut rows: Vec<_> = page
+                .items
+                .into_iter()
+                .filter(|r| r.node_key == key)
+                .collect();
+            // The caller's own tenant first, as any one of them was before.
+            rows.sort_by_key(|r| r.envelope.tenant_id != tenant);
+            let Some(row) = rows.into_iter().next() else {
                 return Ok(None);
             };
             let Some(payload) = row.payload else {

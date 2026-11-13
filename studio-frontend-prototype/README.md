@@ -1,47 +1,231 @@
-# Constructor Studio Frontend
+# FrontX Standard Template
 
-Walking-skeleton SPA for the Studio backend: Vite + React 19 + TypeScript, vitest for tests. A small tenant workbench over the live API: sign-in with a bearer token (validated via `/me`; dev tokens `studio-admin-token` / `studio-user-token`), list child tenants of your home tenant, create organizations/workspaces (the backend's type barrier surfaces as a form error if you try a workspace under root), open a tenant's users and invite new ones through the IdP contract.
+A complete, runnable **FrontX application** — a host shell wired to the FrontX
+microfrontend runtime, a set of demo microfrontends, solution packages
+(theming, i18n, state, auth, a development Studio), and the build/test tooling
+to develop and ship it.
+
+You are (typically) reading this inside a project that was scaffolded from this
+template with the FrontX CLI:
 
 ```bash
-npm install
-npm run dev      # http://localhost:5173, /cf proxied to http://127.0.0.1:8090
-npm test         # vitest
-npm run build    # type-check + production bundle in dist/
+frontx seed frontx-template-shell ./my-app
 ```
 
-Start the backend first (`../studio-backend`, `cargo run -- --config config/dev.yaml run`), open http://localhost:5173, press **Connect** (dev token is pre-filled).
+From here on, this repository is **your application**. This template gives you a
+working starting point; what you build on top is yours.
 
-## Gear coverage
+## What you get
 
-| Gear | Portal surface |
-|---|---|
-| account-management | login `/me` · org/workspace CRUD + type barrier · users invite/list · workspace settings (tenant metadata) · **dual-consent mode conversions** (request per org + pending-approvals inbox) |
-| resource-group | Projects (RG groups + metadata binding) · project members (memberships) |
-| mini-chat (+ oagw, credstore, model-policy) | Ask AI on the dashboard · **Chats view**: thread list, history, streamed replies, delete, model catalog |
-| simple-user-settings | Profile → Preferences (server-side theme/language; dark theme) |
-| file-storage | **Project artifacts**: signed S3 upload for manual/generated files; Files view for observability |
-| gear-orchestrator, oagw, types-registry | **System view**: live gears list, OAGW upstreams (the LLM egress), GTS entities |
-| api-gateway, authn/authz, tenant-resolver, grpc-hub, nodes-registry, credstore | infrastructure — exercised by every call rather than shown as screens |
+- **A host application** (`src-app/app`) — the shell that boots the FrontX
+  runtime, renders the layout (menu, header, footer, screen container), and
+  mounts microfrontends on demand.
+- **The MFE runtime, pre-wired** — screens are contributed by microfrontends and
+  appear in the menu automatically; no central screen registry to maintain.
+- **Demo microfrontends** (`src-app/mfe_packages`, added separately via
+  [`frontx-template-mfe`](../template-mfe/README.md)) — `demo-mfe` (Hello World,
+  Profile, Current Theme, UIKit Elements, Widgets Host), a minimal `_blank-mfe`
+  to copy from, and two widget fixtures. A shell-only seed has zero MFEs; the
+  host, build, and manifest pipeline all work with none present.
+- **Solution packages** — `@gears-frontx/react`, `framework`, `state`, `i18n`,
+  `studio`, `auth`, from npm: the application-layer libraries the FrontX
+  ecosystem deliberately does not bundle.
+- **Theming, i18n, and a dev Studio** — CSS-variable theme tokens, translation
+  scaffolding, and an in-app FrontX Studio panel for toggling mock APIs, themes,
+  and language during development.
 
-The API client (`src/api.ts`) is hand-written for now; the plan is to generate it from the backend's live OpenAPI (`/cf/docs`) once the surface stabilizes.
+## Who it's for
 
-## The two pages beside the portal
+Applications built from this template target teams delivering modern SaaS
+control panels:
 
-The product menu on the wordmark opens two pages of their own, each a separate
-Vite entry served by the same image:
+- **Cloud SaaS providers** needing multitenant architectures with tenant isolation and customization
+- **Service vendors** building white-label solutions with per-customer branding and feature sets
+- **Corporate software vendors** building control panels for complex business applications
+- **System integrators** creating pluggable control panels with third-party integrations
+- **Platform/IT teams** building internal tools and admin portals with role-based access control
 
-- **Docs & API** — `/api-docs/` (`api-docs/index.html`, `src/api-docs.ts`): the
-  backend's live `/cf/openapi.json`, grouped by the gear that serves each path.
-  `?component=<gear>` narrows it to one gear.
-- **Architecture** — `/architecture/` (`architecture/index.html`,
-  `src/architecture.ts`): how Studio is built, for people who did not build it.
-  The gears come from the running backend (`GET /cf/studio-assembly/v1/manifest`,
-  [docs/design/studio-assembly.md](../docs/design/studio-assembly.md)), their
-  REST paths from `/cf/openapi.json`, and which screen calls which gear from
-  `architecture/prototype-map.json`, which the build extracts from `src/`
-  (`../scripts/prototype-api-map.mjs`, the same reader as the CI API-usage
-  check). Nothing on it is written by hand, so it cannot drift; the header shows
-  the backend's and the prototype's commits and warns when they differ. It
-  renews the portal's session in this browser for the one authenticated read.
+## What you can build with it
 
-**Product shape.** This app is the **portal** (control plane UI): sign in → pick an organization/workspace → manage members. Selecting a workspace hands off to the **Studio workbench** — a Theia-based per-user session bound to that workspace tenant (the "Open Studio" button stakes out the `/studio/{workspace_id}` contract; the session manager — docker-compose MVP, then theia-cloud on k8s — and the Studio Theia extension are future work). Longer term the portal views converge with the gears-frontx / fabric-poc UI (see `../../fabric-poc`).
+This template is designed for the hard problems of modern control-panel UIs and
+gives you a foundation for:
+
+- **Multitenancy** — isolated data, configuration, and branding per customer/organization
+- **Role-based access control** — permissions that show/hide/disable UI by user role
+- **White-label support** — per-tenant branding and themes via the theme registry
+- **Plugin ecosystems** — runtime-composable microfrontends without core code changes
+- **Global enablement** — multi-language, RTL/LTR, locale-aware formatting
+- **Flexible builds** — web today, with room to grow to desktop / on-prem / cloud
+- **High customization** — configurable views, dashboards, and workflows
+
+Its aim is to make powerful in-product UI development approachable — as capable
+as hand-rolled control-panel engineering, but structured so AI agents and humans
+can build and evolve screens together.
+
+## Capabilities
+
+- **Human-configurable UI core** — layout, styles, and build targets
+- **Layout-safe screen generation** — AI/human code separation
+- **Component & style consistency** — design-system enforcement
+- **Modular screen architecture** — composable building blocks
+- **Pluggable UI microfrontends** — a secure plugin ecosystem
+- **Shared/private store & global/local state** — performance and offline-first
+- **Unified API layer** — typed contracts and observability
+- **Security, multitenancy & RBAC** — enterprise SSO and compliance foundations
+- **Internationalization & localization** — global-deployment ready
+- **Testing & quality gates** — an automated QA pipeline
+
+## Building UI with AI
+
+This template is optimized for AI + human co-creation of UI, in three stages:
+
+1. **Drafts (AI-driven)** — an AI agent generates initial screen layouts from
+   prompts, requirements, and any existing API specs. Multiple variants can be
+   generated and compared; drafts stay isolated from production code.
+2. **Mockups (AI-assisted, human-refined)** — designers and PMs refine drafts
+   with visual and interaction detail, with the agent assisting on component
+   selection and style consistency.
+3. **Production (human-polished)** — engineers integrate mockups with business
+   logic and APIs, then review, test, and ship. Production screens inherit the
+   template's theming, i18n, and access-control capabilities.
+
+The result: up to 10x faster UI development with maintainable, enterprise-grade
+code.
+
+## Requirements
+
+- Node.js 24+
+- npm 10+
+
+## Getting started
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Build the library
+npm run build:package
+
+# 3. Start everything — host + any MFE dev servers present
+npm run dev:all
+
+# 4. Open the app
+#    Host:  http://localhost:5173
+```
+
+A shell-only seed has no MFEs yet, so `dev:all` just runs the host, and
+`generate:mfe-manifests` writes an empty manifest set — both expected, not
+errors. Add MFE packages with `frontx add frontx-template-mfe` (see
+[`template-mfe`](../template-mfe/README.md)), then run `npm install` again —
+`add` changes what the workspace glob matches, so the lock must be
+regenerated — before their preview ports (`:3001` demo, `:3099` blank,
+`:3201`/`:3202` widget fixtures) come up alongside the host.
+
+Every `@gears-frontx/*` package resolves from the npm registry at an exact pinned
+version, the same one in the root, every MFE and mfe-shared. Install them with the
+version: npm's `latest` tag of several of them is still 0.1.0.
+
+See **[QUICK_START.md](QUICK_START.md)** for the hands-on development workflow —
+creating screens and microfrontends, layout, state, styling, and commands.
+
+## This application
+
+Everything above describes the template. What follows is specific to
+Constructor Studio Web and lives under [`docs/`](docs) — it is ours, not the
+template's, and survives a `frontx upgrade` only because it sits outside the
+files the CLI manages.
+
+The dev server talks to a *stand*, not to a stack on this machine: by default
+`npm run dev:all` faces the shared `dev` Studio — its backend, its data, its
+Keycloak (sign in with GitHub) — and needs nothing here but Node.
+`STUDIO_STAND=local npm run dev:all` turns it to the compose stack instead.
+
+- **[`docs/studio-events.md`](docs/studio-events.md)** — the backend's push
+  channel: how a screen is told that background work finished instead of
+  polling for it, with worked examples and the traps.
+- **[`docs/stands.md`](docs/stands.md)** — the stand switch: `dev`, `test`,
+  `local`, the overrides, what a stand must allow, and how the end-to-end
+  suite is pointed at each.
+- [`../docs/feature/`](../docs/feature) — per-feature specs (moved from `docs/sdlc/FEATURE/`).
+
+The short version of the first one: the shell registers `StudioEventsApiService`
+for its own screens; an MFE registers its own in `init.ts`, since module realms
+are isolated. Then a screen only subscribes.
+
+```tsx
+import { useApiStream, apiRegistry } from '@gears-frontx/react';
+import { StudioEventsApiService, type StudioEvent, type StudioRunEvent } from '@constructor-studio/mfe-shared';
+
+function RunTicker() {
+  const service = apiRegistry.getService(StudioEventsApiService);
+  const { data, status } = useApiStream(service.events);
+  if (status !== 'connected') return null;
+
+  const event = data as StudioEvent<StudioRunEvent> | undefined;
+  // The stream carries everything the assembly publishes, not only runs.
+  if (event?.subject_type !== 'task_run') return null;
+
+  return <span>{event.subject_id.slice(0, 8)}: {event.payload.state}</span>;
+}
+```
+
+To follow a job you are about to start, read `service.cursor.fetch()` first and
+subscribe with `service.streamFrom(latest_seq)` — a task can finish before the
+connection is open, and a stream opened "from now on" would never mention it.
+
+## Project structure
+
+```text
+my-app/
+├── src-app/                 # Host application
+│   ├── app/                 # Shell: App, providers, wiring
+│   │   ├── components/ui/   # App-owned UI primitives (shadcn)
+│   │   ├── layout/          # CoreLayout: menu, header, footer, screen slot
+│   │   ├── mfe/             # MFE bootstrap + generated manifests
+│   │   ├── themes/          # Themes: appearance, --font-sans, Dracula overrides
+│   │   └── globals.css      # Tailwind entry; imports ui-kit theme.css
+│   └── mfe_packages/        # Microfrontends (empty until `frontx add frontx-template-mfe`)
+├── src/                     # Shared solution lib (api, build, gts)
+├── public/                  # Static assets + generated-mfe-manifests.json
+├── scripts/                 # dev-all, build-mfes, manifest generation
+├── tailwind.config.ts       # TailwindCSS configuration
+├── vite.config.ts           # Host Vite + Module Federation config
+└── .frontx/                 # Template provenance (managed by the frontx CLI)
+```
+
+## Scripts
+
+| Script | What it does |
+|--------|--------------|
+| `npm run dev:all` | Build MFEs, then run the host + every MFE preview server together |
+| `npm run dev` | Host only (rebuilds the library + MFEs, then Vite dev server) |
+| `npm run build` | Full production build |
+| `npm run build:mfes` | Build all microfrontend packages |
+| `npm run generate:mfe-manifests` | Regenerate the host's MFE manifest index |
+| `npm run preview` | Preview a production build |
+| `npm run type-check` | Type-check the library, host app, MFEs and e2e |
+| `npm run lint` | ESLint across the project |
+| `npm run arch:deps` | Dependency-boundary rules check |
+| `npm run test:unit` | Unit tests (package + host app + workspace MFEs) |
+
+## Tech stack
+
+- **React** + **TypeScript** + **Vite** with **Module Federation** for MFEs
+- **Tailwind CSS** with CSS-variable theme tokens (shadcn/ui primitives)
+- Built on the FrontX ecosystem: `@gears-frontx/mfes` (runtime),
+  `@gears-frontx/gts-plugin` (type system), `@gears-frontx/api` (API layer)
+
+## Upgrading
+
+This project records its template provenance under `.frontx/`. When a newer
+template version is released, upgrade with the FrontX CLI — changes are shown as
+a reviewable change set before anything is written:
+
+```bash
+frontx upgrade . <targetVersion>
+```
+
+> **Multi-template repositories.** `frontx upgrade` is not yet supported once a
+> second template has been added (e.g. after `frontx add frontx-template-mfe`) —
+> it currently reads a single provenance record. Upgrading a shell+mfe project
+> is not supported in this release.

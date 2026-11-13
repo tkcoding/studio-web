@@ -1,0 +1,77 @@
+{
+  "$id": "gts://gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Leveled Screen Extension Schema (Derived). Constructor Studio has five levels — platform, organization, workspace, project, admin (ADR-0069) — and the tabs show the items of the level in scope. FrontX's ExtensionPresentation carries label/icon/route/order and is not ours to widen, so the level is added the way the framework intends: a further derived Extension type, chained after frontx.screensets.layout.screen.v1 so the screen domain's extensionsTypeId still matches by prefix. An extension that does not chain through this type has no declared level and the shell reads it as the organization level.",
+  "allOf": [
+    {
+      "$ref": "gts://gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~"
+    }
+  ],
+  "properties": {
+    "presentation": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": [
+            "platform",
+            "organization",
+            "workspace",
+            "project",
+            "admin"
+          ],
+          "$comment": "Which level's tabs this screen appears in. REQUIRED here: opting into this type is the act of declaring the level, so a leveled extension without one is a mistake rather than a default."
+        },
+        "section": {
+          "type": "string",
+          "minLength": 1,
+          "$comment": "For items that share their entry with the item already mounted: the token the MFE understands for this one. The shell relays it through the section property instead of mounting again, so a row of sections costs one mount rather than seven. Opaque to the shell — it never parses it. Whether it is REQUIRED, and that it is unique, cannot be stated here: both depend on the other extensions of the same level, and a schema sees one instance at a time. The rule — every item sharing an entry with another of its level carries a section of its own — is enforced by overlayContract.test.ts over the whole generated aggregate."
+        },
+        "parentSection": {
+          "type": "string",
+          "minLength": 1,
+          "$comment": "For a hidden screen: the section of its level it belongs to, whose tab is active while it is mounted — the editor's is 'artifacts'. Not 'section': the editor is an address group of its own, and a section there would be one of that group, written into its address (ADR-0028)."
+        },
+        "placement": {
+          "type": "string",
+          "enum": [
+            "main",
+            "settings",
+            "hidden",
+            "product"
+          ],
+          "$comment": "Where in the level's tabs the item sits. 'settings' pins it to the end regardless of order — the rule that replaced the order >= 100 band the shell used to read. 'hidden' keeps the screen registered and mountable but out of the tabs, and so never the screen a level opens on: it is reached some other way, such as opening an artifact. Defaults to 'main' when absent. 'product' puts it in the product menu on the wordmark (Docs & API, Architecture — ADR-0069) and out of every level's tabs; it opens across the screen."
+        },
+        "sectionPrefix": {
+          "type": "boolean",
+          "$comment": "'section' is a prefix: the screen answers every section that starts with it, as 'type:' answers 'type:reports'. How a generic screen takes the tabs the Studio domain model adds (ADR-0066), whose names no manifest knows; the shell then lets such a section into the address."
+        },
+        "modelTab": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+$",
+          "$comment": "The name of the 'shows' relation on the level's type in the Studio domain model that this tab is (ADR-0066). Absent: the section, else the route's last segment. A relation of that name is this tab rather than a generic one, and the level's hidden_tabs names the tab by it."
+        },
+        "experimental": {
+          "type": "boolean",
+          "$comment": "The tab works but its place is not settled: the tabs mark it EXP, as the prototype did. A kit sets it in its own manifest; the shell only draws the mark."
+        },
+        "kit": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "$comment": "The slug of the kit that brings this screen (ADR-0068 §2, ADR-0069 §4). The shell shows it only where the kit is installed — as a base kit or by the organization — and shows it while that is not yet known. Absent: the shell's own screen, always shown."
+        },
+        "needs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "$comment": "Domain types (ontology ids, e.g. 'milestone') the screen shows that another kit brings (ADR-0070 §2). The shell shows it only where every one is installed for the organization in scope, hides it where any is absent or dormant, and shows it while that is not yet known."
+        }
+      },
+      "required": [
+        "level"
+      ]
+    }
+  },
+  "required": [
+    "presentation"
+  ]
+}

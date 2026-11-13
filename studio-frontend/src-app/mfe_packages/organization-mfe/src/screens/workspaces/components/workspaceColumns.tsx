@@ -19,31 +19,24 @@ export interface WorkspaceColumnLabels {
 export interface WorkspaceColumnDeps {
   labels: WorkspaceColumnLabels;
   formatRelative: (value: string) => string;
-  onOpen: (row: Tenant) => void;
 }
 
 // @cpt-dod:cpt-studiofrontend-dod-workspaces-screen-counts:p2
 export function workspaceColumns({
   labels,
   formatRelative,
-  onOpen,
 }: WorkspaceColumnDeps): DataGridTableColumn<Tenant>[] {
   return [
     {
       id: "workspace",
       label: labels.workspace,
       render: (row) => (
-        // @cpt-dod:cpt-studiofrontend-dod-workspaces-screen-row-opens:p1
-        <button
-          type="button"
-          className={styles.nameButton}
-          onClick={() => onOpen(row)}
-        >
+        <span className={styles.nameCell}>
           <span className={styles.rowGlyph} aria-hidden>
             <Layers size={16} strokeWidth={1.3} />
           </span>
           <span className={styles.name}>{row.name}</span>
-        </button>
+        </span>
       ),
     },
     {

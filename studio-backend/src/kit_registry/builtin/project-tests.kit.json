@@ -1,0 +1,154 @@
+{
+  "manifest_version": "1",
+  "slug": "project-tests",
+  "name": "Tests",
+  "description": "The project's Tests tab: its test runs and their results.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "project"
+  ],
+  "model": {
+    "types": [
+      {
+        "name": "check",
+        "id": "check",
+        "label": "Check",
+        "description": "One verification step performed while producing a Report — a rule evaluated, a query run, a file scanned, a comparison made — recording what was done and its outcome, whether or not it produced a Finding.",
+        "entity": {
+          "id": "check",
+          "bucket": "automation",
+          "name": "Check",
+          "kind": "verification step",
+          "description": "One verification step performed while producing a Report — a rule evaluated, a query run, a file scanned, a comparison made — recording what was done and its outcome, whether or not it produced a Finding.",
+          "meta": {
+            "relationship": "control-loop",
+            "priority": "P3",
+            "level": 5,
+            "badge": "",
+            "note": "",
+            "badge-style": "neutral",
+            "profiles": [
+              "Arch",
+              "Dev",
+              "QA",
+              "Sec"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "EntityId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "name",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "check_kind",
+              "type": "rule | query | scan | comparison | manual",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "status",
+              "type": "passed | failed | skipped | error",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "input_ref",
+              "type": "EntityRef?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "details",
+              "type": "JSON",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "started_at",
+              "type": "timestamp",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "completed_at",
+              "type": "timestamp?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "belongs_to",
+              "type": "Report",
+              "description": "",
+              "relation": "report",
+              "relationType": "references",
+              "relationLabel": "belongs to",
+              "required": false,
+              "cardinality": "N:1",
+              "extends": "edge"
+            },
+            {
+              "name": "produced",
+              "type": "Finding",
+              "description": "",
+              "relation": "finding",
+              "relationType": "derives",
+              "relationLabel": "produced",
+              "required": false,
+              "extends": "edge"
+            }
+          ],
+          "methods": [
+            {
+              "name": "mark_result",
+              "description": "",
+              "input": "status, details",
+              "result": "void"
+            },
+            {
+              "name": "to_evidence",
+              "description": "",
+              "input": "",
+              "result": "Evidence"
+            }
+          ],
+          "examples": [
+            "A schema rule evaluated against an Object Type",
+            "A cross-document comparison query for contradiction detection",
+            "A manual reviewer check of an Approval Request"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "managed-object"
+        }
+      }
+    ],
+    "properties": [
+      {
+        "on": "project",
+        "property": {
+          "name": "tests",
+          "type": "check",
+          "relation": "check",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Tests",
+          "description": "A tab of the project: what it shows."
+        }
+      }
+    ]
+  }
+}

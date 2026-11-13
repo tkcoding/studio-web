@@ -1,6 +1,6 @@
 //! One build of a project's model: the documents nobody has extracted at
 //! their current revision are read by a model on the key of the member who
-//! asked (`docs/spec-domain-model.md`, "A person's key, never Studio's").
+//! asked (`docs/project-domain-model.md`, "A person's key, never Studio's").
 //!
 //! WHY NOT A studio-tasks RUN. A run is executed by the queue worker, which
 //! acts as `studio-tasks` and never as the person who asked
@@ -48,6 +48,8 @@ pub struct BuildState {
     pub estimated_seconds: Option<u64>,
     /// The one document this build reads again, when it was asked for one.
     pub path: Option<String>,
+    /// Every document this build reads again, when some were named.
+    pub paths: Vec<String>,
 }
 
 /// Most documents read at once. Each is a model call on the caller's key, so
@@ -444,6 +446,7 @@ mod tests {
             doc_type: None,
             node: String::new(),
             binding: None,
+            at: None,
         }
     }
 

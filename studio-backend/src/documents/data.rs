@@ -23,10 +23,10 @@ use uuid::Uuid;
 use super::entity::{
     analysis, application_part, delivery_history, delivery_limit, delivery_scope, doc_type,
     document, document_binding, spec_decision, spec_extraction, spec_judgement, spec_review,
-    spec_term,
+    spec_term, spec_upload,
 };
 use super::model_table::{ModelTable, TableRow, TableStorage, need};
-use super::repo::{DocScope, DocumentsRepo, spec_review_id};
+use super::repo::{DocScope, DocumentsRepo, spec_review_id, spec_upload_id};
 use crate::domain_model::port::{DomainObjects, TypeNeed};
 
 macro_rules! row {
@@ -102,6 +102,8 @@ row!(
         ("provider", "string"),
         ("model", "string"),
         ("created_at", "timestamp"),
+        ("source_commit", "string?"),
+        ("source_ref", "string?"),
     ]
 );
 row!(
@@ -124,7 +126,7 @@ row!(
     spec_decision,
     "finding-decision",
     "Finding Decision",
-    "A member's confirm or dismiss on a spec-model finding.",
+    "A member's confirm or dismiss on a project domain model finding.",
     |r| Some(r.project_id),
     [
         ("project_id", "string"),
@@ -149,8 +151,28 @@ row!(
         ("path", "string"),
         ("revision", "string"),
         ("note", "string?"),
+        ("value", "string?"),
         ("decided_by", "string"),
         ("decided_at", "timestamp"),
+    ]
+);
+row!(
+    spec_upload,
+    "spec-upload",
+    "Uploaded Source",
+    "A CSV, JSON or plain-text file a member uploaded for a project's domain model to read.",
+    |r| Some(r.project_id),
+    [
+        ("project_id", "string"),
+        ("name", "string"),
+        ("kind", "csv | json | text"),
+        ("revision", "string"),
+        ("size", "integer"),
+        ("storage", "string"),
+        ("file_id", "string?"),
+        ("content", "string?"),
+        ("created_by", "string"),
+        ("created_at", "timestamp"),
     ]
 );
 row!(
@@ -438,6 +460,7 @@ impl DocumentsData {
                     spec_decision => all_spec_decisions,
                     spec_review => all_spec_reviews,
                     spec_term => all_spec_terms,
+                    spec_upload => all_spec_uploads,
                     document => all_docs,
                     document_binding => all_bindings,
                     application_part => all_parts,
@@ -528,6 +551,7 @@ impl DocumentsData {
                 spec_decision => restore_spec_decisions,
                 spec_review => restore_spec_reviews,
                 spec_term => restore_spec_terms,
+                spec_upload => restore_spec_uploads,
                 application_part => restore_parts,
                 delivery_scope => restore_scopes,
                 delivery_limit => restore_limits,
@@ -729,7 +753,7 @@ impl DocumentsData {
         Ok(())
     }
 
-    // ── the spec model ──────────────────────────────────────────────────────
+    // ── the project domain model ──────────────────────────────────────────────────────
 
     pub async fn list_extractions(
         &self,
@@ -770,6 +794,8 @@ impl DocumentsData {
                 "provider",
                 "model",
                 "created_at",
+                "source_commit",
+                "source_ref",
             ];
             return self
                 .table
@@ -896,6 +922,7 @@ impl DocumentsData {
                 "path",
                 "revision",
                 "note",
+                "value",
                 "decided_by",
                 "decided_at",
             ];
@@ -933,6 +960,64 @@ impl DocumentsData {
         self.repo
             .delete_spec_review(workspace_id, project_id, fact_key)
             .await
+    }
+
+    pub async fn list_spec_uploads(
+        &self,
+        ctx: &SecurityContext,
+        workspace_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<Vec<spec_upload::Model>> {
+        if let Some((port, ref ctx)) = at!(
+            self,
+            ctx,
+            spec_upload::Model,
+            workspace_id,
+            all_spec_uploads
+        ) {
+            return self
+                .in_project(ctx, port.as_ref(), workspace_id, project_id)
+                .await;
+        }
+        self.repo.list_spec_uploads(workspace_id, project_id).await
+    }
+
+    pub async fn put_spec_upload(
+        &self,
+        ctx: &SecurityContext,
+        m: spec_upload::Model,
+    ) -> Result<()> {
+        if let Some((port, ref ctx)) =
+            at!(self, ctx, spec_upload::Model, m.tenant_id, all_spec_uploads)
+        {
+            // A replaced upload is replaced whole: no column of the old one
+            // is worth keeping.
+            return self.table.put(ctx, port.as_ref(), vec![m], None).await;
+        }
+        self.repo.put_spec_upload(m).await
+    }
+
+    pub async fn delete_spec_upload(
+        &self,
+        ctx: &SecurityContext,
+        workspace_id: Uuid,
+        project_id: Uuid,
+        name: &str,
+    ) -> Result<()> {
+        let id = spec_upload_id(project_id, name);
+        if let Some((port, ref ctx)) = at!(
+            self,
+            ctx,
+            spec_upload::Model,
+            workspace_id,
+            all_spec_uploads
+        ) {
+            self.table
+                .remove::<spec_upload::Model>(ctx, port.as_ref(), &[id])
+                .await?;
+            return Ok(());
+        }
+        self.repo.delete_spec_upload(workspace_id, id).await
     }
 
     pub async fn list_spec_decisions(

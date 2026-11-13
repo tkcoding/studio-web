@@ -321,6 +321,10 @@ pub struct ConnectionDto {
     /// own connections are listed on their profile, a tenant's shared ones on
     /// the tenant. The creator is not said otherwise.
     pub mine: bool,
+    /// Held above the tenant the list was asked for (`owner_tenant_id` names
+    /// where): the organization's, or a workspace's, seen from a project.
+    /// Such a row is used from here and edited where it is held.
+    pub inherited: bool,
 }
 
 #[derive(Debug)]
@@ -563,6 +567,18 @@ pub struct ScopeQuery {
     tenant: Option<Uuid>,
 }
 
+/// The list's query: the scope, and whether to reach past the tenant's own.
+#[derive(Debug, Deserialize)]
+pub struct ListConnectionsQuery {
+    #[serde(default)]
+    tenant: Option<Uuid>,
+    /// The tenant's own connections together with those of every tenant
+    /// above it up to its organization, each once and marked `inherited`.
+    /// Without it, the nearest tenant that has a catalogue answers alone.
+    #[serde(default)]
+    with_ancestors: bool,
+}
+
 /// A filtered listing through a connection — repositories, or notification
 /// channels. One struct: the three parameters mean the same thing for both,
 /// and the providers differ only in whether the filtering happens server-side.
@@ -601,9 +617,11 @@ pub struct TenantQuery {
     tenant: Option<Uuid>,
 }
 
-fn to_dto(c: Connection, mine: bool) -> ConnectionDto {
+/// A connection as `viewed` sees it: `inherited` when it is held above.
+fn to_dto(c: Connection, mine: bool, viewed: Option<Uuid>) -> ConnectionDto {
     ConnectionDto {
         mine,
+        inherited: viewed.is_some_and(|v| v != c.owner_tenant_id),
         id: c.id,
         owner_tenant_id: c.owner_tenant_id,
         provider: c.provider,
@@ -625,9 +643,14 @@ fn check_dto(c: super::driver::DriverCheck) -> ConnectionTestCheckDto {
     }
 }
 
-fn to_test_dto(c: Connection, id: DriverIdentity, mine: bool) -> ConnectionTestDto {
+fn to_test_dto(
+    c: Connection,
+    id: DriverIdentity,
+    mine: bool,
+    viewed: Option<Uuid>,
+) -> ConnectionTestDto {
     ConnectionTestDto {
-        connection: to_dto(c, mine),
+        connection: to_dto(c, mine, viewed),
         account: id.account,
         display_name: id.display_name,
         checks: id.checks.into_iter().map(check_dto).collect(),
@@ -686,13 +709,16 @@ async fn list_connections(
     Extension(ctx): Extension<SecurityContext>,
     Extension(connectors): Extension<Connectors>,
     Extension(people): Extension<People>,
-    Query(q): Query<ScopeQuery>,
+    Query(q): Query<ListConnectionsQuery>,
 ) -> ApiResult<JsonBody<ConnectionListDto>> {
     let svc = connectors.get()?;
-    let items = svc
-        .list(&ctx, q.tenant.unwrap_or_else(|| ctx.subject_tenant_id()))
-        .await
-        .map_err(|e| CanonicalError::internal(format!("{e:#}")).create())?;
+    let tenant = q.tenant.unwrap_or_else(|| ctx.subject_tenant_id());
+    let items = if q.with_ancestors {
+        svc.list_with_ancestors(&ctx, tenant).await
+    } else {
+        svc.list(&ctx, tenant).await
+    }
+    .map_err(|e| CanonicalError::internal(format!("{e:#}")).create())?;
     // Whose each row is, side by side: one identity lookup per row whose
     // creator is not the caller's current sign-in.
     let mine = futures_util::future::join_all(
@@ -705,7 +731,7 @@ async fn list_connections(
         items: items
             .into_iter()
             .zip(mine)
-            .map(|(c, mine)| to_dto(c, mine.unwrap_or(false)))
+            .map(|(c, mine)| to_dto(c, mine.unwrap_or(false), Some(tenant)))
             .collect(),
     }))
 }
@@ -747,7 +773,7 @@ async fn patch_connection(
     let mine = super::service::same_person(&ctx, &connection.created_by, people.0.as_deref())
         .await
         .unwrap_or(false);
-    Ok(Json(to_test_dto(connection, identity, mine)))
+    Ok(Json(to_test_dto(connection, identity, mine, Some(tenant))))
 }
 
 async fn create_connection(
@@ -781,7 +807,7 @@ async fn create_connection(
         })?;
     Ok((
         StatusCode::CREATED,
-        Json(to_test_dto(connection, identity, true)),
+        Json(to_test_dto(connection, identity, true, None)),
     ))
 }
 
@@ -855,7 +881,7 @@ async fn confirm_sign_in(
         })?;
     Ok((
         StatusCode::CREATED,
-        Json(to_test_dto(connection, identity, true)),
+        Json(to_test_dto(connection, identity, true, None)),
     ))
 }
 
@@ -884,7 +910,7 @@ async fn test_connection(
     let mine = super::service::same_person(&ctx, &connection.created_by, people.0.as_deref())
         .await
         .unwrap_or(false);
-    Ok(Json(to_test_dto(connection, identity, mine)))
+    Ok(Json(to_test_dto(connection, identity, mine, Some(tenant))))
 }
 
 /// Publish one file into a repository through a connection.
@@ -1175,11 +1201,23 @@ pub fn register_routes(
         .summary("List connections visible to the caller")
         .description(
             "The caller's own tenant catalogue, or the nearest ancestor's when the \
-             tenant has none of its own (organization-scoped connections).",
+             tenant has none of its own (organization-scoped connections). With \
+             `with_ancestors=true`, the tenant's own connections together with its \
+             workspace's and its organization's (never one held above the \
+             organization, which it may not use), each once, nearest first, each \
+             marked `inherited` when it is held above the tenant asked for. A \
+             project's Sources reads it so a repository attached through the \
+             project's own connection and one through the organization's both \
+             resolve.",
         )
         .tag("StudioConnectors")
         .authenticated()
         .require_license_features::<License>([])
+        .query_param(
+            "with_ancestors",
+            false,
+            "`true`: the tenant's own connections and those held above it up to its organization, each marked `inherited`",
+        )
         .handler(list_connections)
         .json_response_with_schema::<ConnectionListDto>(openapi, StatusCode::OK, "Connections")
         .error_401(openapi)

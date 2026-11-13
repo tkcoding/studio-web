@@ -81,7 +81,7 @@ graph = [
 mimalloc = "0.1"
 anyhow = "1"
 tokio = { version = "1", features = ["full"] }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 
 # ── studio-session gear (in-crate; per-workspace Theia IDE containers) ──
 bollard = "0.17"
@@ -90,6 +90,9 @@ async-trait = "0.1"
 axum = { version = "0.8", features = ["macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# The portal's fact keys split a subject on what is not a Unicode letter or number (documents
+# spec_model::fact_key). Already in the lockfile as a transitive dependency.
+regex = "1"
 # RFC-6902 patches: how a model edit records what it did and how to undo it
 # (studio-domain-model). Already in the lockfile as a transitive dependency.
 json-patch = "4"
@@ -283,3 +286,8 @@ testcontainers-modules = { version = "0.11", features = ["postgres"] }
 # see `src/test_pg.rs`. An exit hook is the one place left to stop it, and the
 # C runtime's is the only exit hook there is.
 libc = "0.2"
+# The gear's in-memory store (`infra::fake_store`, behind `test-support`), so a
+# test can drive the real graph-storage service in process: type updates, the
+# `index` trait and the projection's payload `$filter` are the gear's rules,
+# and a fake of the client would only restate what we think they are.
+graph_storage = { package = "weftgraph", version = "=0.3.0-rc.2", features = ["test-support"] }

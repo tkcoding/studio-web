@@ -1,0 +1,70 @@
+.frame {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+  background: var(--card);
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.body {
+  grid-row: 3;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-8) var(--space-6) var(--space-6);
+}
+
+/* The artifacts strip and table run edge to edge. */
+.body[data-section='artifacts'] {
+  padding: 0;
+}
+
+.repoFailure {
+  margin: 0;
+  font-size: var(--text-meta-size);
+  line-height: var(--text-meta-line-height);
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.header {
+  grid-row: 2;
+}
+
+.sectionBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.blockSkeleton {
+  height: var(--space-8);
+}
+
+.people {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.personName {
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line-height);
+}

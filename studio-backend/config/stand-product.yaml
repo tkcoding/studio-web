@@ -282,6 +282,16 @@ gears:
             - "$ref": "gts://gts.cf.core.am.tenant_metadata.v1~"
           x-gts-traits:
             inheritance_policy: "override_only"
+        - "$id": "gts://gts.cf.core.am.tenant_metadata.v1~cf.studio.kits.installed.v1~"
+          # Installed kits (ADR-0069 §4): the base kits on the platform root, an
+          # organization's own kits on the organization. Written by studio-kits alone.
+          "$schema": "http://json-schema.org/draft-07/schema#"
+          description: "Constructor Studio kits installed for every organization (root), one organization, or one project"
+          type: "object"
+          allOf:
+            - "$ref": "gts://gts.cf.core.am.tenant_metadata.v1~"
+          x-gts-traits:
+            inheritance_policy: "override_only"
 
         - "$id": "gts://gts.cf.core.am.tenant_metadata.v1~cf.studio.access.config.v1~"
           # Organization access config (ADR-0009): {model, roles[]}. Free-form

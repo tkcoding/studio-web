@@ -93,6 +93,12 @@ pub struct TaskContext {
     /// 1 on the first attempt. A handler that wants to behave differently on a
     /// later attempt (skip an expensive precheck, say) reads this.
     pub attempt: i16,
+    /// What the run had recorded when this attempt began: the last
+    /// [`SyncReporter::set_with`] detail, or the result of an earlier
+    /// attempt. A retry (`POST /runs/{id}/retry`) keeps it, so a handler that
+    /// records each step it finished continues where the last attempt
+    /// stopped. `None` on a first attempt.
+    pub recorded: Option<Value>,
     /// The worker's identity for this tenant. Not the identity of whoever
     /// asked: see the module note in [`super::dispatch`].
     ///
@@ -183,6 +189,7 @@ impl TaskContext {
             task_type: String::new(),
             payload,
             attempt: 1,
+            recorded: None,
             security,
             cancel: CancellationToken::new(),
             progress: Arc::new(Nowhere),

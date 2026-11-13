@@ -226,6 +226,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: studio-backend
+          # Only main saves. Every branch and PR can restore main's cache, but
+          # their own (1-2 GB each) pushed the repository past its 10 GB limit
+          # and evicted main's, and a cold release build takes ~19 min, not ~6.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Format
         run: cargo fmt --check
@@ -307,11 +311,13 @@ jobs:
           if-no-files-found: ignore
 
   # The prototype is independently deployable on its dedicated POC host, so changes to
-  # it must now pass Test before an immutable image may be published.
+  # it must now pass Test before an immutable image may be published. Since
+  # ADR-0069 it is a copy of the FrontX app growing to the old prototype's
+  # features, so it passes the same gates as test-frontend.
   test-prototype:
     needs: test-changes
     if: needs.test-changes.outputs.prototype == 'true'
-    runs-on: ${{ (vars.STUDIO_FORCE_GITHUB_HOSTED == 'true' || github.repository != 'constructorfabric/studio-web' || github.event.pull_request.head.repo.fork) && 'ubuntu-latest' || 'studio-small' }}
+    runs-on: ${{ (vars.STUDIO_FORCE_GITHUB_HOSTED == 'true' || github.repository != 'constructorfabric/studio-web' || github.event.pull_request.head.repo.fork) && 'ubuntu-latest' || 'studio-large' }}
     permissions:
       contents: read
     defaults:
@@ -324,16 +330,18 @@ jobs:
           ref: ${{ github.event.inputs.source_ref || github.sha }}
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: studio-frontend-prototype/package-lock.json
       - name: Install
         run: npm ci
+      - name: Lint
+        run: npm run lint
+      # Build precedes Test, as in test-frontend: the suites read build output.
+      - name: Build
+        run: npm run build
       - name: Test
         run: npm test
-      # The commit the /architecture/ page names as the prototype's.
-      - name: Build
-        run: STUDIO_BUILD_COMMIT="$(git rev-parse HEAD)" npm run build
       - uses: actions/upload-artifact@v6
         with:
           name: studio-frontend-prototype-dist
@@ -558,6 +566,20 @@ jobs:
             echo "claim-owner rendered with no claim to hand over" >&2
             exit 1
           fi
+          # `never` (a class whose fsType lets fsGroup through) drops it (#1040);
+          # an unknown mode fails the render.
+          if helm template guard "$chart" -f deploy/helm/values-dev.example.yaml \
+               --set backend.image.tag=t --set frontend.image.tag=t --set backend.claimOwner=never \
+               --show-only templates/backend/deployment.yaml | grep -q 'name: claim-owner'; then
+            echo "claim-owner rendered with backend.claimOwner=never" >&2
+            exit 1
+          fi
+          if helm template guard "$chart" -f deploy/helm/values-dev.example.yaml \
+               --set backend.image.tag=t --set frontend.image.tag=t --set backend.claimOwner=sometimes \
+               >/dev/null 2>&1; then
+            echo "Chart rendered with backend.claimOwner=sometimes" >&2
+            exit 1
+          fi
   test-complete:
     # This is an aggregate gate and therefore appears after the individual
     # component test jobs in GitHub's graph.
@@ -706,6 +728,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: studio-backend
+          # Only main saves. Every branch and PR can restore main's cache, but
+          # their own (1-2 GB each) pushed the repository past its 10 GB limit
+          # and evicted main's, and a cold release build takes ~19 min, not ~6.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build (release)
         working-directory: studio-backend
@@ -836,8 +862,8 @@ jobs:
           name: studio-frontend-dist
           path: studio-frontend/dist
 
-  # The pre-FrontX prototype ships as its OWN image and rides along in
-  # compose on :8081. It is tested and built only here, at release time —
+  # The prototype (a FrontX app since ADR-0069) ships as its OWN image and
+  # rides along in compose on :8081. It is tested and built only here, at release time —
   # ci.yml deliberately does not gate on it.
   build-prototype-dist:
     needs: build-require-ci
@@ -870,13 +896,13 @@ jobs:
       - uses: actions/setup-node@v6
         if: steps.test_dist.outcome != 'success'
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: studio-frontend-prototype/package-lock.json
       - if: steps.test_dist.outcome != 'success'
         run: npm ci
       - if: steps.test_dist.outcome != 'success'
-        run: STUDIO_BUILD_COMMIT="$(git rev-parse HEAD)" npm run build
+        run: npm run build
       - uses: actions/upload-artifact@v6
         with:
           name: studio-frontend-prototype-dist
@@ -1808,8 +1834,11 @@ jobs:
           # other name, server-side apply keeps every field helm owns, so a
           # volume that changes type (emptyDir → claim) renders with both and
           # is rejected, although the upgrade would pass.
+          # --dry-run=server lets the chart's `lookup` see the cluster, so it
+          # renders what the upgrade will: `claim-owner` only for a claim that
+          # does not exist yet (backend.claimOwner, #1040).
           helm template studio deploy/helm/studio-web \
-            -n "$NAMESPACE" --no-hooks "${common_args[@]}" \
+            -n "$NAMESPACE" --no-hooks --dry-run=server "${common_args[@]}" \
             | kubectl apply --server-side --force-conflicts --dry-run=server \
                 --field-manager=helm \
                 -n "$NAMESPACE" -f - >/dev/null
@@ -2137,8 +2166,9 @@ jobs:
             --set-string "keycloak.image.tag=$INFRA_TAG"
           )
           helm lint deploy/helm/studio-web "${common_args[@]}"
+          # --dry-run=server: the chart's `lookup` sees the cluster (#1040).
           helm template studio deploy/helm/studio-web \
-            -n "$NAMESPACE" --no-hooks "${common_args[@]}" \
+            -n "$NAMESPACE" --no-hooks --dry-run=server "${common_args[@]}" \
             | kubectl apply --server-side --force-conflicts --dry-run=server \
                 --field-manager=helm \
                 -n "$NAMESPACE" -f - >/dev/null

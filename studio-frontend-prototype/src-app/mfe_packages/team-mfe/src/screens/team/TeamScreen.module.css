@@ -1,0 +1,118 @@
+/*
+ * Team over ui-kit semantic tokens (see theme.css in @gears-frontx/ui-kit).
+ * No Tailwind: inside the shadow root the re-anchored kit tokens shadow the
+ * shell's HSL triplets.
+ */
+
+.screen {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 100%;
+  padding: var(--space-6);
+  color: var(--foreground);
+}
+
+.screen[data-theme] {
+  background: transparent;
+}
+
+.skeleton {
+  height: 12rem;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-heading-1-size);
+  line-height: var(--text-heading-1-line-height);
+  font-weight: var(--text-heading-1-weight);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.headerAction {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 60rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.about p {
+  margin: 0;
+}
+
+.muted {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.error {
+  margin: 0;
+  color: var(--destructive);
+  font-size: 0.875rem;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.pcell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pname {
+  font-weight: 500;
+}
+
+.photo {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.actions {
+  text-align: right;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

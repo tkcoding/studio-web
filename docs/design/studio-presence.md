@@ -130,7 +130,7 @@ The gear is one component; the registry is its state.
 |--------|------|-------------|-----------|
 | `POST` | `/studio-presence/v1/me` | Heartbeat: the caller's record, the notes waiting for them, how many are online | stable |
 | `DELETE` | `/studio-presence/v1/me` | Sign out now instead of lapsing; answers who is left | stable |
-| `GET` | `/studio-presence/v1/online` | Everybody online, most recently seen first, with `online_ttl_ms` and `heartbeat_ms` | stable |
+| `GET` | `/studio-presence/v1/online` | Everybody online, most recently seen first, with `online_ttl_ms` and `heartbeat_ms`. A platform administrator's; anybody else 403 `PLATFORM_ADMIN_REQUIRED` (#1044) | stable |
 | `POST` | `/studio-presence/v1/messages` | Leave a note; `delivered: false` when the recipient is not online | stable |
 
 Every route needs only an authenticated caller. The list is not paged: it is

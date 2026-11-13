@@ -37,7 +37,7 @@ describe('studio kits client', () => {
         await client.installations('p 1');
 
         expect(urls).toEqual([
-            'http://ide/studio-api/studio-kits/v1/catalog?limit=200',
+            'http://ide/studio-api/studio-kits/v1/catalog?shelf=official&limit=200',
             'http://ide/studio-api/studio-kits/v1/projects/p%201/installations?limit=200',
         ]);
     });

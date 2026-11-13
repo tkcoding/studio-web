@@ -1,0 +1,153 @@
+# What a cluster administrator applies once so that Constructor Studio can
+# deploy every project of an organization into the cluster (ADR-0043):
+#
+#   kubectl apply -f bootstrap.yaml
+#   kubectl -n studio-environments get secret deployer-token -o jsonpath='{.data.token}' | base64 -d
+#
+# The token, the API server's address and its CA go into the Studio's
+# "Connect a cluster" form; nothing else in the cluster is prepared by hand.
+#
+# Studio gives each project its own namespace, `<project>-<environment>`. The
+# account may create such a namespace and give itself `admin` inside it, and
+# nothing more: the admission policy below holds it to namespaces labelled as
+# made by Studio, so it can neither label its way into one it did not make nor
+# bind itself anywhere else. It may delete only a namespace it made for a
+# preview (ADR-0055), labelled studio.constructor.tech/preview=true, when
+# the preview ends. Needs Kubernetes 1.30 or newer
+# (ValidatingAdmissionPolicy).
+#
+# Studio checks it rather than assuming it. Testing the cluster connection
+# reports whether the account holds each right the ClusterRole below gives
+# (create namespaces, create rolebindings, bind clusterroles/admin), one
+# SelfSubjectAccessReview each, without failing the test. A build or a deploy
+# into a namespace that is not there yet is refused before it is queued,
+# CLUSTER_CANNOT_CREATE_NAMESPACE naming this file, when one of them is
+# missing; into one that is there, when the account may not create secrets,
+# Jobs and Deployments in it (studio-backend/src/environments/README.md).
+#
+# Version 2 (ADR-0062 §6). The ClusterRole carries the label
+# studio.constructor.tech/bootstrap-version, and the account may read that
+# ClusterRole alone, so Studio tells a current bootstrap from an old or a
+# partial one. A cluster's readiness is one of: bootstrapped (this file, at
+# this version, with the admission policy refusing a namespace without
+# Studio's label -- asked as a dry run), namespace-limited (no create right,
+# but the environment lists namespaces the cluster gives), or partial (what
+# is missing is named). A build or a deploy on a partial cluster is refused,
+# CLUSTER_NOT_BOOTSTRAPPED. Version 1 had no label: apply this file again.
+#
+# Each project gets a namespace of its own per environment, recorded at the
+# first build or deploy and named from the project's immutable slug, and a
+# build namespace (`<slug>-build` by default) where its build Jobs and their
+# repository and push tokens live; the runtime namespace holds only the pull
+# secret.
+#
+# The Studio prototype shows this file, as it is, in its "Connect a cluster"
+# form (studio-frontend-prototype/src/kubeconfig-field.tsx reads it at build
+# time).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: studio-environments
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deployer
+  namespace: studio-environments
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: deployer-token
+  namespace: studio-environments
+  annotations:
+    kubernetes.io/service-account.name: deployer
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: constructor-studio-environments
+  labels:
+    studio.constructor.tech/bootstrap-version: "2"
+rules:
+  # Read this role, whose label says which version of this file is applied.
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    resourceNames: ["constructor-studio-environments"]
+    verbs: ["get"]
+  # Find a project's namespace, and make it when it is not there; delete a
+  # preview's (the policy below allows no other).
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "create", "delete"]
+  # Give itself `admin` in the namespace it made, and only `admin`.
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["rolebindings"]
+    verbs: ["get", "create", "patch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    resourceNames: ["admin"]
+    verbs: ["bind"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: constructor-studio-environments
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: constructor-studio-environments
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+    namespace: studio-environments
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: constructor-studio-environments
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE", "DELETE"]
+        resources: ["namespaces"]
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["rolebindings"]
+  matchConditions:
+    - name: studio-deployer
+      expression: "request.userInfo.username == 'system:serviceaccount:studio-environments:deployer'"
+  validations:
+    - expression: >-
+        request.resource.resource != 'namespaces' || request.operation == 'DELETE' ||
+        (has(object.metadata.labels) &&
+         'app.kubernetes.io/managed-by' in object.metadata.labels &&
+         object.metadata.labels['app.kubernetes.io/managed-by'] == 'constructor-studio')
+      message: "Studio makes only namespaces labelled app.kubernetes.io/managed-by=constructor-studio"
+    - expression: >-
+        request.operation != 'DELETE' ||
+        (has(oldObject.metadata.labels) &&
+         'app.kubernetes.io/managed-by' in oldObject.metadata.labels &&
+         oldObject.metadata.labels['app.kubernetes.io/managed-by'] == 'constructor-studio' &&
+         'studio.constructor.tech/preview' in oldObject.metadata.labels &&
+         oldObject.metadata.labels['studio.constructor.tech/preview'] == 'true')
+      message: "Studio deletes only the namespaces it made for previews"
+    - expression: >-
+        request.resource.resource != 'rolebindings' ||
+        (has(namespaceObject.metadata.labels) &&
+         'app.kubernetes.io/managed-by' in namespaceObject.metadata.labels &&
+         namespaceObject.metadata.labels['app.kubernetes.io/managed-by'] == 'constructor-studio')
+      message: "Studio binds roles only in the namespaces it made"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: constructor-studio-environments
+spec:
+  policyName: constructor-studio-environments
+  validationActions: ["Deny"]

@@ -3,19 +3,13 @@ import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiRegistry, useApiQuery, useQueryCache } from '@gears-frontx/react';
 import {
-  type ConnectionDto,
   ConnectorsApiService,
   type ListRows,
   type OrganizationRef,
   useListRows,
   useOrganization,
 } from '@constructor-studio/mfe-shared';
-
-export interface ConnectionRow {
-  id: string;
-  connection: ConnectionDto;
-  providerName: string;
-}
+import { matchesQuery, type ConnectionRow } from '../model/connection';
 
 export interface ConnectionListView extends ListRows<ConnectionRow> {
   loading: boolean;
@@ -23,15 +17,6 @@ export interface ConnectionListView extends ListRows<ConnectionRow> {
   org: OrganizationRef | null;
   total: number;
   retry: () => void;
-}
-
-export function matchesQuery(row: ConnectionRow, query: string): boolean {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return true;
-  const { label, account, provider } = row.connection;
-  return [label, account, provider, row.providerName].some((field) =>
-    field.toLowerCase().includes(needle)
-  );
 }
 
 function searchConnections(rows: readonly ConnectionRow[], query: string): readonly ConnectionRow[] {

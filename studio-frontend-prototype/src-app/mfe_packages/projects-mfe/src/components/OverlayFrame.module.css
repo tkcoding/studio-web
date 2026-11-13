@@ -1,0 +1,87 @@
+/* The card an overlay of this MFE draws inside the shell's frame. */
+
+.card {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 35rem;
+  height: min(38.75rem, calc(100vh - 8rem - 2px));
+  padding: var(--space-8);
+  font-family: var(--font-sans);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line-height);
+  background: var(--card);
+  color: var(--foreground);
+}
+
+/* The kit's theme.css paints `body, [data-theme]` with --background, and this
+ * root carries data-theme. A class and an attribute (0,2,0) keep the card
+ * surface wherever the sheets land. */
+.card[data-theme] {
+  background: var(--card);
+}
+
+/* The repositories step, in the wizard and in Connect source: small while a
+   provider is being chosen, then one height for every connection, the one the
+   tallest empty state (tabs, Try GitHub sample) needs whole, so only a longer list
+   scrolls. 40rem is that height with Connect source's title. */
+.card[data-step='providers'] {
+  height: auto;
+}
+
+.card[data-step='repositories'] {
+  height: min(calc(40rem + var(--space-5)), calc(100vh - 4rem - 2px));
+}
+
+.card[data-fit][data-step='repositories'] {
+  height: min(40rem, calc(100vh - 4rem - 2px));
+}
+
+/* Connect source: the title sits as close to the chips as the prototype's. */
+.card[data-fit] .title {
+  margin-bottom: 0;
+}
+
+.title {
+  margin: 0 0 var(--space-5);
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.titleSkeleton {
+  margin: 0 0 var(--space-5);
+  height: var(--text-body-line-height);
+  width: 14ch;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.bodySkeleton {
+  flex: 1;
+  min-height: 0;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.footerNote {
+  flex: 1;
+  font-size: var(--text-label-size);
+  color: var(--muted-foreground);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--text-label-size);
+  color: var(--destructive);
+}

@@ -36,6 +36,7 @@
 pub(crate) mod build; // a product built by Studio in the organization's cluster (ADR-0048 §9)
 mod database;
 mod deploy;
+mod failure; // why a build or a deploy failed, and the action that fixes it (#1054)
 mod gear_overrides; // a configuration secret that sets a gear's field the description sets
 mod image_tasks; // delete, copy (promote, import) and sweep of image records
 pub(crate) mod images; // a project's images and charts as records (ADR-0062 §4)
@@ -45,6 +46,7 @@ mod mcp;
 pub(crate) use mcp::tools as mcp_tools;
 mod migrations;
 mod model;
+mod path; // a project's path from its product to running (#1050)
 mod placement; // a project's slug, namespaces and registry path (ADR-0062 §3, §7)
 pub(crate) mod port; // what another gear asks of this one directly
 mod preflight; // what a deploy checks before and while it installs

@@ -68,6 +68,18 @@ This README is what you need to work in the directory.
   here). Insight missing, unconfigured or failing is `insight.state` with a
   reason, and the rest still answers. Rules are tests in `metrics_tests.rs`.
 
+- A project's status ([`status.rs`](status.rs), read in
+  [`status_read.rs`](status_read.rs)): `GET
+  /studio-organizations/v1/project-status?project_id=` — one verdict
+  (`blocked` / `at_risk` / `on_track`), the signals behind it, and the path
+  from an empty tenant to a passing build, with the step to do next. Moved
+  from the portal's Overview so an agent reads the verdict a person does
+  (MCP tool `project_status`, [`mcp.rs`](mcp.rs)). The other gears' facts are
+  read through their REST routes as the caller (`crate::mcp::sdk::Api`), so
+  the status never shows more than those routes would; a failed read lands in
+  `unread` and is never counted as nothing wrong. The rules are unit tests in
+  `status_tests.rs`, ported from the portal's.
+
 ## Working here
 
 - `clean_name` and the rollup rules are unit tests in `service.rs` and

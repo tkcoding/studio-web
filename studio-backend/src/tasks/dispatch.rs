@@ -637,6 +637,7 @@ impl LeasedMessageHandler for TaskDispatcher {
             task_type: row.task_type.clone(),
             payload: row.payload.clone(),
             attempt,
+            recorded: row.result.clone(),
             security,
             cancel: token.clone(),
             progress: Arc::clone(&self.progress),

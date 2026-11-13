@@ -851,3 +851,145 @@ impl GearScaffolds for Scaffolds {
         })
     }
 }
+
+/// A repository a project's creation made.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MadeRepository {
+    /// `owner/name`.
+    pub full_name: String,
+    pub default_branch: String,
+    pub clone_url: String,
+}
+
+/// What a project's creation asks of studio-product, as one run of
+/// studio-organizations (`organizations.project_create`): the repository its
+/// gears go to, made or attached. The caller's right to the connection was
+/// checked when the run was asked for; `ctx` is the run's service context.
+#[async_trait]
+pub trait ProjectRepositories: Send + Sync {
+    /// Create a repository through `connection_id` (the organization's own)
+    /// and record it as the project's gear repository and one of its
+    /// sources.
+    #[allow(clippy::too_many_arguments)]
+    async fn create(
+        &self,
+        ctx: &SecurityContext,
+        project_id: Uuid,
+        tenant: Uuid,
+        connection_id: Option<Uuid>,
+        owner: Option<&str>,
+        is_org: bool,
+        name: &str,
+        private: bool,
+    ) -> anyhow::Result<MadeRepository>;
+
+    /// Record an existing repository as the project's gear repository,
+    /// adding it to the project's sources when it is not one.
+    async fn attach(
+        &self,
+        ctx: &SecurityContext,
+        project_id: Uuid,
+        target: &RepositoryTarget,
+    ) -> anyhow::Result<()>;
+
+    /// The repository the project's gears go to, when one is recorded.
+    async fn gear_repository(
+        &self,
+        ctx: &SecurityContext,
+        project_id: Uuid,
+    ) -> anyhow::Result<Option<RepositoryTarget>>;
+}
+
+/// studio-product's [`ProjectRepositories`].
+pub struct Repositories {
+    service: Arc<super::service::ProductService>,
+}
+
+impl Repositories {
+    pub(super) fn new(service: Arc<super::service::ProductService>) -> Self {
+        Self { service }
+    }
+}
+
+#[async_trait]
+impl ProjectRepositories for Repositories {
+    async fn create(
+        &self,
+        ctx: &SecurityContext,
+        project_id: Uuid,
+        tenant: Uuid,
+        connection_id: Option<Uuid>,
+        owner: Option<&str>,
+        is_org: bool,
+        name: &str,
+        private: bool,
+    ) -> anyhow::Result<MadeRepository> {
+        let made = self
+            .service
+            .create_project_repo(
+                ctx,
+                &project_id.to_string(),
+                tenant,
+                connection_id,
+                owner,
+                is_org,
+                name,
+                private,
+            )
+            .await?;
+        Ok(MadeRepository {
+            full_name: made.full_name,
+            default_branch: made.default_branch,
+            clone_url: made.html_url,
+        })
+    }
+
+    async fn attach(
+        &self,
+        ctx: &SecurityContext,
+        project_id: Uuid,
+        target: &RepositoryTarget,
+    ) -> anyhow::Result<()> {
+        self.service.ensure_owned(ctx, project_id, target).await?;
+        self.service
+            .set_project_repo(
+                ctx,
+                &project_id.to_string(),
+                serde_json::json!({
+                    "tenant": target.tenant,
+                    "connection_id": target.connection_id,
+                    "repo": target.repo,
+                    "branch": target.base_branch,
+                }),
+            )
+            .await
+            .map(|_| ())
+    }
+
+    async fn gear_repository(
+        &self,
+        ctx: &SecurityContext,
+        project_id: Uuid,
+    ) -> anyhow::Result<Option<RepositoryTarget>> {
+        let Some(node) = self
+            .service
+            .get_project_repo(ctx, &project_id.to_string())
+            .await?
+        else {
+            return Ok(None);
+        };
+        let v = &node.value;
+        let text = |k: &str| v.get(k).and_then(Value::as_str).map(str::to_string);
+        let Some(repo) = text("repo").filter(|r| !r.is_empty()) else {
+            return Ok(None);
+        };
+        Ok(Some(RepositoryTarget {
+            tenant: text("tenant")
+                .and_then(|t| Uuid::parse_str(&t).ok())
+                .unwrap_or(project_id),
+            connection_id: text("connection_id").and_then(|c| Uuid::parse_str(&c).ok()),
+            repo,
+            base_branch: text("branch").unwrap_or_else(|| "main".to_string()),
+        }))
+    }
+}

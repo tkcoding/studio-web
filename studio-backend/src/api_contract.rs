@@ -100,7 +100,7 @@ const VERBS: &[&str] = &[
     // synonyms: `save`, `set`, `put` and `edit` all mean `update` or `upsert`,
     // `add` means `create`, `remove` means `delete`.
     "accept", "analyze", "assign", "backfill", "cancel", "claim", "classify", "close", "confirm",
-    "count", "decide",
+    "count", "decide", "detach",
     "enqueue", "export", "import", "invite", "leave", "materialize", "merge", "open", "probe",
     "pull", "push", "query", "reconcile", "resolve", "retry", "revert", "revoke", "run",
     "scaffold", "search", "send", "start", "stream", "sync", "test", "validate",
@@ -147,6 +147,10 @@ struct Operation {
     errors: BTreeSet<String>,
     /// The request body DTO, where the operation takes one.
     request_type: Option<String>,
+    /// The query parameters the chain declares, by name. Read by the test
+    /// that holds every MCP tool to its route.
+    #[cfg_attr(not(test), allow(dead_code))]
+    query_params: BTreeSet<String>,
     /// Response types registered with a schema.
     response_types: Vec<String>,
     /// The operation answers `204` and has no body by design.
@@ -386,6 +390,30 @@ fn call_type(chain: &str, name: &str) -> Option<String> {
     Some(rest[..end].trim().to_string())
 }
 
+/// The names of the query parameters a chain declares: the first argument of
+/// each `.query_param(` and `.query_param_typed(`, a literal or
+/// `org_scope::PARAM`.
+fn query_params_of(chain: &str) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for call in [".query_param(", ".query_param_typed("] {
+        let mut from = 0usize;
+        while let Some(at) = chain[from..].find(call) {
+            let open = from + at + call.len() - 1;
+            from = open + 1;
+            let Some(args) = balanced(chain, open) else {
+                continue;
+            };
+            let first = args.split(',').next().unwrap_or_default().trim();
+            if first.ends_with("org_scope::PARAM") {
+                out.insert(crate::org_scope::PARAM.to_string());
+            } else if let Some(name) = first.split('"').nth(1) {
+                out.insert(name.to_string());
+            }
+        }
+    }
+    out
+}
+
 /// Parse every `OperationBuilder` chain in one file.
 fn operations_in(file: &Path, crate_root: &Path, src: &str) -> Vec<Operation> {
     const OPEN: &str = "OperationBuilder::";
@@ -435,6 +463,7 @@ fn operations_in(file: &Path, crate_root: &Path, src: &str) -> Vec<Operation> {
                 .map(str::to_string)
                 .collect(),
             request_type: call_type(chain, ".json_request::<"),
+            query_params: query_params_of(chain),
             response_types: [".json_response_with_schema::<", ".sse_json::<"]
                 .into_iter()
                 .filter_map(|name| call_type(chain, name))
@@ -937,6 +966,115 @@ mod tests {
                 .any(|operation| operation.path.as_deref() == Some("/studio-events/v1/stream")),
             "the events stream is missing from the scan"
         );
+    }
+
+    /// Every MCP tool calls a route that is there and reads what it sends.
+    ///
+    /// A tool is a request the backend makes to itself (`crate::mcp::sdk`),
+    /// so nothing else notices when a route moves, a query parameter is
+    /// renamed or a body field goes away: the agent's call would just be
+    /// refused, or worse, the argument quietly ignored. Each argument has to
+    /// land where the route reads it: a path segment, a declared query
+    /// parameter, or a field of the request DTO.
+    #[test]
+    fn every_mcp_tool_calls_a_route_that_reads_its_arguments() {
+        use crate::mcp::sdk::Run;
+
+        let (operations, _) = audit(&crate_root());
+        let sources = read_sources(&crate_root());
+        let structs = struct_shapes(&sources);
+        // `type`, `where`, `ref`: keywords, so the DTO renames a field to them.
+        let renamed_to = |name: &str, argument: &str| -> bool {
+            let open = format!("pub struct {name} ");
+            let rename = format!("rename = \"{argument}\"");
+            sources.iter().any(|(_, src)| {
+                src.find(&open).is_some_and(|at| {
+                    let body = &src[at..];
+                    let end = body
+                        .find(
+                            "
+}",
+                        )
+                        .unwrap_or(body.len());
+                    body[..end].contains(&rename)
+                })
+            })
+        };
+        let segments = |path: &str| -> Vec<String> {
+            path.split('/')
+                .map(|s| {
+                    if s.starts_with('{') {
+                        "{}".to_string()
+                    } else {
+                        s.to_string()
+                    }
+                })
+                .collect()
+        };
+        let mut problems = Vec::new();
+        for tool in crate::mcp::tools() {
+            let (method, template, in_query): (&str, &str, Option<&[&str]>) = match &tool.run {
+                Run::Get(path) => ("GET", path, None),
+                Run::Delete(path) => ("DELETE", path, None),
+                Run::Post { path, query } => ("POST", path, Some(query)),
+                Run::Put { path, query } => ("PUT", path, Some(query)),
+                Run::Patch(path) => ("PATCH", path, Some(&[])),
+                Run::Custom(_) => continue,
+            };
+            let Some(operation) = operations.iter().find(|o| {
+                o.method == method
+                    && o.path
+                        .as_deref()
+                        .is_some_and(|p| segments(p) == segments(template))
+            }) else {
+                problems.push(format!("{}: no route {method} {template}", tool.name));
+                continue;
+            };
+            let in_path: BTreeSet<&str> = template
+                .split('/')
+                .filter_map(|s| s.strip_prefix('{')?.strip_suffix('}'))
+                .collect();
+            let schema = (tool.input_schema)();
+            let arguments: Vec<String> = schema["properties"]
+                .as_object()
+                .map(|p| p.keys().cloned().collect())
+                .unwrap_or_default();
+            let body = operation
+                .request_type
+                .as_deref()
+                .and_then(|name| structs.get(name));
+            for argument in arguments.iter().filter(|a| !in_path.contains(a.as_str())) {
+                let as_query = in_query.is_none_or(|names| names.contains(&argument.as_str()));
+                if as_query {
+                    if !operation.query_params.contains(argument) {
+                        problems.push(format!(
+                            "{}: sends `{argument}` as a query parameter, which {method} {template} does not declare",
+                            tool.name
+                        ));
+                    }
+                    continue;
+                }
+                match (&operation.request_type, body) {
+                    (None, _) => problems.push(format!(
+                        "{}: sends `{argument}` in a body, and {method} {template} takes none",
+                        tool.name
+                    )),
+                    (Some(name), Some(shape))
+                        if !shape.fields.iter().any(|(f, _)| f == argument)
+                            && !renamed_to(name, argument) =>
+                    {
+                        problems.push(format!(
+                            "{}: sends `{argument}` in the body, which {} does not have",
+                            tool.name,
+                            operation.request_type.as_deref().unwrap_or_default()
+                        ));
+                    }
+                    // A body read as a `Value`, or a type this scan cannot see.
+                    _ => {}
+                }
+            }
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 
     /// The committed snapshot still describes the surface the code declares.

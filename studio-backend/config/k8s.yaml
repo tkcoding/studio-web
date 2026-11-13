@@ -38,8 +38,8 @@ database:
         # and a gear inherits this block unless it declares its own. This is
         # therefore not "three connections to pg_main" — it is three PER GEAR,
         # and fourteen gear databases below inherit it: 14 x 3 = 42, plus the
-        # gears with their own `pool` (20), 62 per replica. Two replicas need
-        # 124, and 144 with Keycloak, the bootstrap Job, the operator and the
+        # gears with their own `pool` (24), 66 per replica. Two replicas need
+        # 132, and 152 with Keycloak, the bootstrap Job, the operator and the
         # reserved slots, against `max_connections: 160`;
         # deploy/k8s/cloudnative-pg/README.md carries the table. It was 4, and
         # two replicas then needed 172. Two replicas at 3 still give each gear
@@ -450,6 +450,16 @@ gears:
             - "$ref": "gts://gts.cf.core.am.tenant_metadata.v1~"
           x-gts-traits:
             inheritance_policy: "override_only"
+        - "$id": "gts://gts.cf.core.am.tenant_metadata.v1~cf.studio.kits.installed.v1~"
+          # Installed kits (ADR-0069 §4): the base kits on the platform root, an
+          # organization's own kits on the organization. Written by studio-kits alone.
+          "$schema": "http://json-schema.org/draft-07/schema#"
+          description: "Constructor Studio kits installed for every organization (root), one organization, or one project"
+          type: "object"
+          allOf:
+            - "$ref": "gts://gts.cf.core.am.tenant_metadata.v1~"
+          x-gts-traits:
+            inheritance_policy: "override_only"
         - "$id": "gts://gts.cf.core.am.tenant_metadata.v1~cf.studio.access.config.v1~"
           # Organization access config (ADR-0009): {model, roles[]}. Free-form
           # object like workspace.settings; shape enforced client-side until the
@@ -822,7 +832,9 @@ gears:
       server: "pg_main"
       dbname: "studio_domain_model"
       pool:
-        max_conns: 2
+        # Six, not two: one screen of a project asks it a dozen reads at
+        # once, and two connections queued them past the 30 s gateway.
+        max_conns: 6
         min_conns: 0
         acquire_timeout: "10s"
         idle_timeout: "5m"

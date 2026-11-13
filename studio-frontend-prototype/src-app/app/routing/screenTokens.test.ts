@@ -1,0 +1,114 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import { parseGrammar, serializeGrammar, type ExtensionToken } from '@gears-frontx/routing';
+import { screen } from '@frontx-test-utils/screenFixture';
+import { EDITOR_SCREEN_TOKEN, SCREEN_DOMAIN_KEY } from './route';
+import { entryTokenOf, groupOfExtension, groupOfToken, groupScreens, tokenOf } from './screenTokens';
+import type { StudioScreenExtension } from '@/app/mfe/screenLevels';
+
+const projectsList = screen('projects.main', '/projects', 'workspace', { order: 20 });
+const projectsOverview = screen('projects.overview', '/projects/overview', 'project', { section: 'overview', order: 10 });
+const projectsArtifacts = screen('projects.artifacts', '/projects/artifacts', 'project', { section: 'artifacts', order: 20 });
+const orgWorkspaces = screen('org.workspaces', '/organization/workspaces', 'organization', { section: 'workspaces', order: 20 });
+const orgSettings = screen('org.settings', '/organization/settings', 'organization', { section: 'settings', order: 100, placement: 'settings' });
+const people = screen('people', '/people', 'organization', { order: 30 });
+const kitsList = screen('kits.main', '/kits', 'organization', { order: 50 });
+const kitsCatalog = screen('kits.catalog', '/kits/catalog', 'organization', { section: 'catalog', order: 10 });
+const fixture = screen('fixture', '/fixture/frame', 'organization', { section: 'frame-fixture', order: 900, placement: 'hidden' });
+const badRoute = screen('bad', '/Bad_Route', 'organization');
+
+describe('tokenOf', () => {
+  it('is the first segment of the route', () => {
+    expect(tokenOf(projectsArtifacts)).toBe('projects');
+    expect(tokenOf(people)).toBe('people');
+    expect(tokenOf(fixture)).toBe('fixture');
+  });
+
+  it('is undefined for a segment the library would refuse', () => {
+    expect(tokenOf(badRoute)).toBeUndefined();
+  });
+});
+
+describe('groupScreens', () => {
+  const groups = groupScreens([projectsOverview, projectsArtifacts, projectsList, orgSettings, orgWorkspaces, people, fixture, badRoute]);
+
+  it('groups by token and keeps every member', () => {
+    expect(groups.map((g) => g.token).sort()).toEqual(['fixture', 'organization', 'people', 'projects']);
+    expect(groupOfToken(groups, 'projects')?.members.map((m) => m.id)).toEqual(
+      expect.arrayContaining(['projects.main', 'projects.overview', 'projects.artifacts'])
+    );
+  });
+
+  it('mounts the lowest level first, so the projects group opens on the workspace list, not the project overview', () => {
+    expect(groupOfToken(groups, 'projects')?.owner.id).toBe('projects.main');
+  });
+
+  it('falls back to the lowest order when every member has a section', () => {
+    expect(groupOfToken(groups, 'organization')?.owner.id).toBe('org.workspaces');
+  });
+
+  // Reviewer finding (vasylcf): the middle tiebreaker had no fixture of its own.
+  it('prefers the member with no section over a lower order at the same level', () => {
+    expect(groupOfToken(groupScreens([kitsCatalog, kitsList]), 'kits')?.owner.id).toBe('kits.main');
+  });
+
+  it('leaves out a screen with no valid token', () => {
+    expect(groupOfExtension(groups, 'bad')).toBeUndefined();
+  });
+
+  it('finds the group of a mounted extension id, whichever member it is', () => {
+    expect(groupOfExtension(groups, 'projects.artifacts')?.token).toBe('projects');
+    expect(groupOfExtension(groups, undefined)).toBeUndefined();
+  });
+});
+
+describe('entryTokenOf', () => {
+  const all = [projectsOverview, projectsArtifacts, projectsList, orgSettings, orgWorkspaces, people, fixture];
+  it("is the token of the level's entry point, hidden items excluded", () => {
+    expect(entryTokenOf(all, 'organization')).toBe('organization');
+    expect(entryTokenOf(all, 'workspace')).toBe('projects');
+    expect(entryTokenOf(all, 'project')).toBe('projects');
+  });
+});
+
+describe('the real manifests', () => {
+  const packagesDir = join(dirname(fileURLToPath(import.meta.url)), '../../mfe_packages');
+  const extensions = readdirSync(packagesDir)
+    .filter((dir) => existsSync(join(packagesDir, dir, 'mfe.json')))
+    .flatMap((dir) => (JSON.parse(readFileSync(join(packagesDir, dir, 'mfe.json'), 'utf-8')).extensions ?? []) as StudioScreenExtension[])
+    .filter((extension) => extension.domain === 'gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1');
+
+  // The library is the judge of a token, not `ROUTE_NAME`: a screen whose token
+  // it would refuse is not routable, and nothing else would say so.
+  it('give every screen a token the library writes into the address and reads back', () => {
+    for (const extension of extensions) {
+      const token = tokenOf(extension);
+      expect(token, extension.id).toBeDefined();
+      const address = serializeGrammar({
+        shellSubroute: '',
+        hash: undefined,
+        entries: [{ domainKey: SCREEN_DOMAIN_KEY, extension: token as ExtensionToken, params: [] }],
+      });
+      expect(parseGrammar(address).entries, extension.id).toEqual([
+        expect.objectContaining({ domainKey: SCREEN_DOMAIN_KEY, extension: token }),
+      ]);
+    }
+  });
+
+  it('register space-mfe as the one owner of the editor token', () => {
+    const space = groupOfToken(groupScreens(extensions), EDITOR_SCREEN_TOKEN);
+    expect(space?.members.map((member) => member.id)).toEqual([
+      'gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.space.screens.main.v1',
+    ]);
+    expect(space?.owner.presentation).toMatchObject({ level: 'project', placement: 'hidden' });
+  });
+
+  it('open the organization on its Overview, as the prototype does', () => {
+    expect(entryTokenOf(extensions, 'organization')).toBe('organization');
+    expect(groupOfToken(groupScreens(extensions), 'organization')?.owner.presentation.route).toBe(
+      '/organization/overview'
+    );
+  });
+});

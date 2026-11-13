@@ -1,5 +1,5 @@
 //! Stages 3 and 4: the facts of every document merged into one model, and the
-//! candidates for a disagreement found in it (`docs/spec-domain-model.md`,
+//! candidates for a disagreement found in it (`docs/project-domain-model.md`,
 //! "The rule catalogue").
 //!
 //! No model is asked here, and nothing here is a finding yet: a candidate is

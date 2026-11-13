@@ -1,0 +1,33 @@
+# This micro-frontend's passport (see tests-mfe/frontx.gdl for what each field is).
+#
+# The Product kit: Project › Product and Project › Components, one entry
+# switched on the shell's section. Product is the `product-releases` kit's,
+# Components (the project's inventory) the `components` kit's.
+gdl_version = "1.5"
+
+mfe(
+    name = "@constructor-studio/product-mfe",
+    version = "0.2.0-alpha.0",
+
+    # The backend gears its screens call, by gear id.
+    requires = [
+        "account-management",
+        "studio-artifact-ingest",
+        "studio-components-catalog",
+        "studio-connector",
+        "studio-documents",
+        "studio-environments",
+        "studio-product",
+        "studio-spec-mapping",
+        "studio-tasks",
+    ],
+
+    screens = ["Product", "Components"],
+    mounts = ["/product", "/project-components"],
+
+    frontx = "0.2.0-alpha.15",
+
+    roles = [],
+
+    preview = ["/product", "/project-components"],
+)

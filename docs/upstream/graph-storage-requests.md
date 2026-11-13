@@ -391,6 +391,27 @@ count and no offset. The deployment blocker is now item 8.
 index behind a payload ordering, no field selection, and the artifact types
 declare no `index` paths or the typed properties an `index` path needs.
 
+**Status, 2026-11-11: what Studio now uses.** Artifacts are kept as domain
+objects (`config.storage.artifacts: model`, ADR-0066 §8a), so the types that
+carry the hot reads are the domain node types, not the artifact types above.
+Every domain node type now declares one index path, `/payload/_scope` (a
+`string`-or-`null` property beside the open payload), and is registered with
+`register_types_with(on_existing: Update, revalidate: true)`, so a type
+registered before the path existed takes it on the first registration after a
+deploy (one revalidation scan per type, then `Unchanged`). A scoped
+`list_objects` — `DomainObjects::list_in`, the `/objects` listing and the
+domain query's graph executor — sends `$filter=payload/_scope eq '…'` with
+every page instead of walking the type and narrowing in process. A type the
+update cannot reach (a stored row whose `_scope` is not a string, more rows
+than `type_update_max_rows`) keeps its schema, is reported as `pinned`, and
+its reads still walk: the projection refuses the filter (`invalid_argument`)
+and the store falls back. Checked in process against the gear's own service
+and in-memory store (`domain_model::store_graph_tests`). The legacy artifact
+types still declare no `index`, and `studio_artifact_index` stays for the
+reasons in the table; a count (`count_nodes`) is not used yet, because every
+count Studio shows excludes retired nodes or other tenants' rows, which a
+count over a type cannot.
+
 **So: keep the index.** Delete it when the projection has a count (or the
 screens stop needing one), a payload ordering can use an index, and the client
 can update a stored type. The migration then is: declare `index` on the listed
@@ -494,7 +515,9 @@ report for free.
 **Status, weftgraph 0.3.0-rc.2 (#966): landed.**
 `GraphStorageClientV1::register_types_with` takes the options and returns
 `RegisteredType`. The artifact and catalog registrations pass
-`on_existing: Update`, and `scripts/graph-storage-update-edge-types.sh` is
+`on_existing: Update`, the domain registrations (model types and the meta
+layer) pass `Update` with `revalidate` (since 2026-11-11, to add the `_scope`
+index path, item 5), and `scripts/graph-storage-update-edge-types.sh` is
 deleted. The batch is still atomic (item 1 stays open).
 
 **How we would know it works.** In process, register a node type with no

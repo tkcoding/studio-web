@@ -1,0 +1,171 @@
+{
+  "manifest_version": "1",
+  "slug": "components",
+  "name": "Components",
+  "description": "The platform's and the organization's component catalogue and registry, their gear repositories and publication requests.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "organization",
+    "project"
+  ],
+  "model": {
+    "types": [
+      {
+        "name": "approval-request",
+        "id": "approval-request",
+        "label": "Approval Request",
+        "description": "A routed request for an explicit approval decision on a candidate change, gate, release, risk acceptance or lifecycle transition.",
+        "entity": {
+          "id": "approval-request",
+          "bucket": "collaboration",
+          "name": "Approval Request",
+          "kind": "requested decision",
+          "description": "A routed request for an explicit approval decision on a candidate change, gate, release, risk acceptance or lifecycle transition.",
+          "meta": {
+            "relationship": "human-loop",
+            "priority": "P1",
+            "level": 2,
+            "badge": "",
+            "note": "Routes an approval decision, separate from the recorded Approval; accepted 2026-08-03.",
+            "badge-style": "neutral",
+            "profiles": [
+              "CTO",
+              "PdM",
+              "Arch",
+              "Sec",
+              "GRC"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "EntityId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "subject_ref",
+              "type": "EntityRef",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "gate_ref",
+              "type": "EntityId?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "requester_ref",
+              "type": "ActorRef",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "approver_refs",
+              "type": "ActorRef[]",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "status",
+              "type": "requested | approved | rejected | expired | withdrawn",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "due_at",
+              "type": "timestamp?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "collects_decisions",
+              "type": "Approval",
+              "description": "",
+              "relation": "approval",
+              "relationType": "composes",
+              "relationLabel": "collects decisions",
+              "required": false,
+              "extends": "link"
+            }
+          ],
+          "methods": [
+            {
+              "name": "approve",
+              "description": "",
+              "input": "actor, reason?",
+              "result": "Approval"
+            },
+            {
+              "name": "reject",
+              "description": "",
+              "input": "actor, reason",
+              "result": "Approval"
+            },
+            {
+              "name": "withdraw",
+              "description": "",
+              "input": "actor, reason?",
+              "result": "void"
+            },
+            {
+              "name": "list_decisions",
+              "description": "",
+              "input": "",
+              "result": "Approval[]"
+            }
+          ],
+          "examples": [
+            "Release approval request",
+            "Production change approval request",
+            "Risk acceptance request",
+            "Tool authorization request"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "managed-object"
+        }
+      }
+    ],
+    "properties": [
+      {
+        "on": "organization",
+        "property": {
+          "name": "gears",
+          "type": "gear",
+          "relation": "gear",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Components",
+          "description": "A tab of the organization: what it shows."
+        }
+      },
+      {
+        "on": "project",
+        "property": {
+          "name": "parts",
+          "type": "gear",
+          "relation": "gear",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Components",
+          "description": "A tab of the project: what it shows."
+        }
+      }
+    ]
+  }
+}

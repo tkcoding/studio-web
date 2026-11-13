@@ -101,6 +101,31 @@ pub fn tools() -> Vec<Tool> {
             run: Run::Custom(inbox),
         },
         Tool {
+            name: "me_inbox",
+            description: "Your Inbox as the server composes it (`GET /studio-user/v1/me/inbox`, \
+                ADR-0068 §6), across every workspace of your organizations, overdue first: \
+                review requests waiting for your verdict, pull requests whose next step is \
+                yours, and what the installed kits' sources say waits on you (a project waiting \
+                in its phase, from Project lifecycle), each of those with its `kit`. Each item \
+                names its `source` and carries the source's record; `unread` \
+                names a source that could not be read. `view: hidden` lists what you marked \
+                done or snoozed instead. `inbox` lists more kinds of item for one organization.",
+            input_schema: || {
+                object(
+                    json!({
+                        "view": { "type": "string", "enum": ["open", "hidden"] },
+                        "offset": { "type": "integer", "minimum": 0 },
+                        "limit": { "type": "integer", "minimum": 1, "maximum": 200,
+                            "description": "Items per page. Default 50." }
+                    }),
+                    &[],
+                )
+            },
+            effect: Effect::Read,
+            experimental: false,
+            run: Run::Get("/studio-user/v1/me/inbox"),
+        },
+        Tool {
             name: "inbox_mark",
             description: "Mark one inbox item by its `key` from `inbox`: `done` hides it until \
                 its fact changes (a pull request's key carries when it last changed, so new \
@@ -548,6 +573,13 @@ mod tests {
     fn every_source_has_its_own_kind() {
         let kinds: Vec<&str> = SOURCES.iter().map(|s| s.kind).collect();
         assert_eq!(kinds, vec!["deploy", "review", "pull", "run"]);
+    }
+
+    #[test]
+    fn the_server_inbox_is_read_with_its_view() {
+        let r = request_of(&tools(), "me_inbox", json!({ "view": "hidden" }));
+        assert_eq!(r.path, "/studio-user/v1/me/inbox");
+        assert_eq!(r.query, vec![("view".to_owned(), "hidden".to_owned())]);
     }
 
     #[test]

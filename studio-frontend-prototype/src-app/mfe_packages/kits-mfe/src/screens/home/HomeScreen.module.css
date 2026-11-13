@@ -1,0 +1,286 @@
+/*
+ * Placeholder screen styles over ui-kit semantic tokens (see theme.css in
+ * @gears-frontx/ui-kit). No Tailwind here: inside the shadow root the
+ * re-anchored kit tokens shadow the shell's HSL triplets, so Tailwind color
+ * utilities would silently resolve to hsl(<hex>) and drop.
+ *
+ * The skeleton silhouette literals are the stated exception — the kit ships
+ * no skeleton dimensions.
+ */
+
+.screen {
+  /* The document registers Inter under the family name 'Inter Variable'
+   * (@fontsource-variable). ui-kit's own --font-sans says 'Inter', which no
+   * longer matches any @font-face — so restate the token here, or this screen
+   * silently falls back to system-ui. See globals.css in the shell. */
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  min-height: 100%;
+  padding: var(--space-6);
+  color: var(--foreground);
+}
+
+.title {
+  margin: 0 0 1rem;
+  font-size: var(--text-heading-1-size);
+  line-height: var(--text-heading-1-line-height);
+  font-weight: var(--text-heading-1-weight);
+  letter-spacing: var(--text-heading-1-tracking);
+}
+
+.description {
+  margin: 0 0 1.5rem;
+  color: var(--muted-foreground);
+}
+
+.skeletonTitle {
+  height: 2rem;
+  width: 16rem;
+  margin-bottom: 1rem;
+}
+
+.skeletonLine {
+  height: 1rem;
+  width: 24rem;
+  max-width: 100%;
+}
+
+/* The kit's theme.css paints `body, [data-theme]`, and this root carries
+ * data-theme so its palette applies — which would repaint the shell's screen.
+ * A class and an attribute (0,2,0) outrank that rule wherever the sheets land. */
+.screen[data-theme] {
+  background: transparent;
+}
+
+/* ui-kit 0.4.0-alpha.6 caps Empty at 32rem with no auto margins; centring it is
+ * the placing screen's job. */
+.empty {
+  margin-inline: auto;
+}
+
+/* The library: one card per kit. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 0.5rem);
+  background: var(--card);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-heading-3-size, 1.125rem);
+  font-weight: 600;
+}
+
+.cardText {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem var(--space-3);
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.facts dt {
+  color: var(--muted-foreground);
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.error {
+  color: var(--destructive);
+}
+
+.badges,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The card's way into the kit. */
+.cardLink,
+.inside {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cardLink:hover {
+  text-decoration: underline;
+}
+
+.inside {
+  align-self: flex-start;
+  color: var(--primary);
+  font-size: 0.875rem;
+}
+
+.summary {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--foreground);
+}
+
+/* The kit's own page: its header, then one block per manifest section. */
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.detailHeader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: var(--space-4);
+}
+
+.detailSection {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 0.5rem);
+  background: var(--card);
+}
+
+.detailTitle {
+  margin: 0 0 0.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.detailHint {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.detailEmpty {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+.detailList {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.detailNote {
+  color: var(--muted-foreground);
+}
+
+/* "Add a kit from a repository": the form and what the kit would bring. */
+.addForm {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.addFields {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  font-size: 0.8125rem;
+}
+
+.addFields label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.addFields select {
+  height: 2.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  padding: 0 0.5rem;
+}
+
+.addPreview {
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  background: var(--muted);
+}
+
+/* Project › Kits › In the IDE: the official kits `cfs` writes into checkouts. */
+.ide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.ideHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.input {
+  height: 2.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  padding: 0 0.5rem;
+  font: inherit;
+}
+
+.addFields label.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.8125rem;
+}

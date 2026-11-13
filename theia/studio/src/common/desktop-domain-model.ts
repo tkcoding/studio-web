@@ -1,5 +1,5 @@
 // The project's domain model in the IDE: what its documents say the
-// application is, and where they disagree about it (docs/spec-domain-model.md).
+// application is, and where they disagree about it (docs/project-domain-model.md).
 //
 // The model is the documents gear's (`/studio-documents/v1/spec-model`), the
 // one the portal's project tab Domain model draws. This file is its arithmetic

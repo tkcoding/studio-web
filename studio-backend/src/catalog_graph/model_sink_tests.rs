@@ -220,3 +220,212 @@ async fn switching_back_returns_the_catalogue_to_the_graph_store() {
         .unwrap();
     assert!(left.is_empty(), "the model keeps no copy");
 }
+
+#[tokio::test]
+async fn every_catalogue_component_type_survives_the_model_storage_boundary() {
+    // SERVICE_TYPE used to be absent from ModelSink's mapping. Reads sent its
+    // graph GTS id to the domain query as an unknown type; writes dropped it.
+    let org = Uuid::new_v4();
+    let (sink, _, _) = rig();
+    let nodes: Vec<_> = cgts::ALL_NODE_TYPES
+        .into_iter()
+        .enumerate()
+        .map(|(at, type_id)| GtsNode {
+            type_id,
+            instance_id: format!("catalog-boundary-{at}"),
+            value: json!({"name": format!("Component {at}")}),
+        })
+        .collect();
+    sink.upsert(&ctx(org), &nodes, &[]).await.unwrap();
+    let graph_types: Vec<_> = cgts::ALL_NODE_TYPES
+        .into_iter()
+        .map(cgts::graph_type_id)
+        .collect();
+    let (rows, truncated) = sink
+        .list_of_types(&ctx(org), &graph_types, 100)
+        .await
+        .unwrap();
+    assert!(!truncated);
+    assert_eq!(rows.len(), nodes.len());
+    for node in nodes {
+        let found = rows
+            .iter()
+            .find(|r| r.instance_id == node.instance_id)
+            .unwrap();
+        assert_eq!(found.type_id, node.type_id);
+        assert_eq!(found.value, node.value);
+    }
+}
+
+#[tokio::test]
+async fn upgrading_a_completed_v1_catalogue_migrates_services_without_replaying_other_sources() {
+    use crate::domain_model::port::OwnedObject;
+    let org = Uuid::new_v4();
+    let (sink, legacy, port) = rig();
+    let service = GtsNode {
+        type_id: cgts::SERVICE_TYPE,
+        instance_id: "service-existing".into(),
+        value: json!({"name":"Existing service", "image":"service:1"}),
+    };
+    legacy
+        .upsert(&ctx(org), &[service.clone(), gear("late-legacy-copy")], &[])
+        .await
+        .unwrap();
+    legacy
+        .write_snapshots(
+            &ctx(org),
+            &[GtsNode {
+                type_id: cgts::COMPONENT_SNAPSHOT_TYPE,
+                instance_id: "old-snapshot".into(),
+                value: json!({"component":"old", "day":1, "fields":{}}),
+            }],
+        )
+        .await
+        .unwrap();
+    port.put_objects(
+        &ctx(org),
+        "sync-state",
+        vec![OwnedObject {
+            id: format!("catalog-moved-v1:studio-components-catalog:{org}"),
+            scope: String::new(),
+            payload: json!({"status":"done"}),
+        }],
+    )
+    .await
+    .unwrap();
+    let rows = sink
+        .list(&ctx(org), Some(cgts::SERVICE_TYPE))
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].instance_id, service.instance_id);
+    assert_eq!(rows[0].value, service.value);
+    assert!(
+        sink.list(&ctx(org), Some(cgts::GEAR_TYPE))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        sink.snapshots(&ctx(org), None, i64::MIN, i64::MAX)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    // Retrying an incomplete v2 migration must not overwrite a domain copy
+    // updated after v1 with the older still-live legacy service.
+    let mut current = service.value.clone();
+    current["image"] = json!("service:2");
+    current["catalog_id"] = json!(service.instance_id);
+    current["catalog_tenant"] = json!(org);
+    port.put_objects(
+        &ctx(org),
+        "catalog-service",
+        vec![OwnedObject {
+            id: format!("cat-{}", service.instance_id),
+            scope: String::new(),
+            payload: current,
+        }],
+    )
+    .await
+    .unwrap();
+    legacy
+        .upsert(&ctx(org), std::slice::from_ref(&service), &[])
+        .await
+        .unwrap();
+    port.put_objects(
+        &ctx(org),
+        "sync-state",
+        vec![OwnedObject {
+            id: format!("catalog-moved-v2:studio-components-catalog:{org}"),
+            scope: String::new(),
+            payload: json!({"status":"pending"}),
+        }],
+    )
+    .await
+    .unwrap();
+    let retry = ModelSink::with_port(legacy.clone(), port.clone(), "studio-components-catalog");
+    let kept = retry
+        .list(&ctx(org), Some(cgts::SERVICE_TYPE))
+        .await
+        .unwrap();
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].value["image"], "service:2");
+    // A restart reads the v2 marker and cannot copy late v1 sources again.
+    let restarted = ModelSink::with_port(legacy.clone(), port.clone(), "studio-components-catalog");
+    assert_eq!(
+        restarted
+            .list(&ctx(org), Some(cgts::SERVICE_TYPE))
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        restarted
+            .list(&ctx(org), Some(cgts::GEAR_TYPE))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn a_v1_catalogue_can_return_to_graph_storage_without_needing_the_new_service_type() {
+    use crate::domain_model::port::{OwnedObject, TypeNeed};
+    let org = Uuid::new_v4();
+    let (sink, legacy, port) = rig();
+    port.ensure_type(
+        &ctx(org),
+        &TypeNeed {
+            declared_by: "studio-components-catalog".into(),
+            id: "gear".into(),
+            name: "Gear".into(),
+            extends: Some("record".into()),
+            held_by: Some("studio-components-catalog".into()),
+            fields: vec![
+                ("catalog_id".into(), "string".into(), String::new()),
+                ("catalog_tenant".into(), "string".into(), String::new()),
+            ],
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let original = gear("v1-existing");
+    let mut payload = original.value.clone();
+    payload["catalog_id"] = json!(original.instance_id);
+    payload["catalog_tenant"] = json!(org);
+    port.put_objects(
+        &ctx(org),
+        "gear",
+        vec![OwnedObject {
+            id: format!("cat-{}", original.instance_id),
+            scope: String::new(),
+            payload,
+        }],
+    )
+    .await
+    .unwrap();
+    port.put_objects(
+        &ctx(org),
+        "sync-state",
+        vec![OwnedObject {
+            id: format!("catalog-moved-v1:studio-components-catalog:{org}"),
+            scope: String::new(),
+            payload: json!({"status":"done"}),
+        }],
+    )
+    .await
+    .unwrap();
+    let back =
+        ModelSink::returning_with_port(legacy.clone(), port.clone(), "studio-components-catalog");
+    let returned = back.list(&ctx(org), Some(cgts::GEAR_TYPE)).await.unwrap();
+    assert_eq!(returned.len(), 1);
+    assert_eq!(returned[0].instance_id, original.instance_id);
+    // Switching forward again must migrate the returned gear, not mistake the
+    // old v1 marker for a completed source and only look for services.
+    let forward = sink.list(&ctx(org), Some(cgts::GEAR_TYPE)).await.unwrap();
+    assert_eq!(forward.len(), 1);
+    assert_eq!(forward[0].instance_id, original.instance_id);
+}

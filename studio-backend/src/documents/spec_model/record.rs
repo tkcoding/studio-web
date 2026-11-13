@@ -1,6 +1,6 @@
 //! Stage 6: the findings as `spec_finding` verdicts, one per document, so the
 //! Specs list counts them and the IDE's Quality rail places them in the text
-//! (`docs/spec-domain-model.md`, "A build"; the shape is
+//! (`docs/project-domain-model.md`, "A build"; the shape is
 //! `docs/spec-findings.md`, "The finding").
 //!
 //! Pure: what each document's verdict says. The caller writes them through
@@ -49,9 +49,9 @@ pub fn verdicts(
                 path: (*path).to_string(),
                 severity: if n == 0 { "clean" } else { "high" },
                 summary: match n {
-                    0 => "domain model: no problems".to_string(),
-                    1 => "domain model: 1 problem".to_string(),
-                    n => format!("domain model: {n} problems"),
+                    0 => "project domain model: no problems".to_string(),
+                    1 => "project domain model: 1 problem".to_string(),
+                    n => format!("project domain model: {n} problems"),
                 },
                 details: json!({ "findings": placed }),
             }
@@ -119,7 +119,7 @@ mod tests {
             &BTreeSet::new(),
         );
         assert_eq!(out[0].severity, "high");
-        assert_eq!(out[0].summary, "domain model: 1 problem");
+        assert_eq!(out[0].summary, "project domain model: 1 problem");
         let placed = &out[0].details["findings"][0];
         assert_eq!(placed["id"], f.fingerprint.as_str());
         assert_eq!(placed["anchor"]["line_start"], 3);

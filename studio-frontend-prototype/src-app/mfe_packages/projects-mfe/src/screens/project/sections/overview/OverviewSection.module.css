@@ -1,0 +1,241 @@
+/* Project › Overview over ui-kit semantic tokens; no Tailwind inside the shadow root. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  color: var(--foreground);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.verdict {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.reason {
+  font-size: 0.875rem;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.about {
+  margin: 0;
+  max-width: 60rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.muted {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.error {
+  margin: 0;
+  color: var(--destructive);
+}
+
+/* Project lifecycle's phase chip and its moves, above the verdict. */
+.phase {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.skeleton {
+  height: 2rem;
+  width: 20rem;
+}
+
+.skeletonWide {
+  height: 8rem;
+  width: 100%;
+}
+
+/* The path: one row of steps, the current one outlined. */
+.path {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.pathHead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pathTitle {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stepItem {
+  display: flex;
+}
+
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.step:hover {
+  background: var(--accent);
+}
+
+.stepNo {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  background: var(--muted);
+  font-size: 0.6875rem;
+}
+
+.flow_done .stepNo {
+  background: var(--success, #16a34a);
+  color: var(--background);
+}
+
+.flow_current {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.flow_todo,
+.flow_later {
+  color: var(--muted-foreground);
+}
+
+.flow_later {
+  border-style: dashed;
+}
+
+.flow_failed {
+  border-color: var(--destructive);
+}
+
+.flow_failed .stepNo {
+  background: var(--destructive);
+  color: var(--background);
+}
+
+.flow_warn {
+  border-color: var(--warning, #d97706);
+}
+
+.picked {
+  background: var(--accent);
+}
+
+.stepDetail {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+}
+
+/* Needs attention: one sentence and one action a row, its tone on the left edge. */
+.cardTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.count {
+  padding: 0 0.375rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--foreground);
+  font-size: 0.6875rem;
+}
+
+.list {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.25rem 0.625rem;
+  min-height: 2.125rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.danger {
+  border-left-color: var(--destructive);
+}
+
+.warn {
+  border-left-color: var(--warning, #d97706);
+}
+
+.info {
+  border-left-color: var(--primary);
+}
+
+.rowText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  font-size: 0.8125rem;
+}
+
+.missing {
+  margin: 0.5rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}

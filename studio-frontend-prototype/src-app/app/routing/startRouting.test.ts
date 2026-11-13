@@ -1,0 +1,192 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FrontXApp } from '@gears-frontx/react';
+
+const { SCREEN_DOMAIN, mocks } = vi.hoisted(() => ({
+  SCREEN_DOMAIN: 'gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1',
+  mocks: { mounted: [] as string[], mountScreen: vi.fn(), publish: vi.fn() },
+}));
+vi.mock('@gears-frontx/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@gears-frontx/react')>()),
+  screenDomain: { id: SCREEN_DOMAIN },
+}));
+vi.mock('@/app/mfe/mountScreen', () => ({ mountScreen: mocks.mountScreen }));
+vi.mock('@/app/mfe/sharedContext', () => ({ publishStudioContext: mocks.publish }));
+vi.mock('@/app/mfe/domainOccupancy', () => ({ occupancyOf: () => ({ mounted: () => mocks.mounted }) }));
+
+import { freshNavigationHistory } from '@frontx-test-utils/memoryNavigationHistory';
+import { screen } from '@frontx-test-utils/screenFixture';
+import reducer, { APP_CONTEXT_SLICE_KEY, type AppContextState } from '@/app/slices/appContextSlice';
+import { startRouting } from './startRouting';
+import { unresolvedScreenOf } from './unresolvedScreen';
+import { runtimeKitsOf } from '@/app/mfe/runtimeKits';
+import type { StudioScreenExtension } from '@/app/mfe/screenLevels';
+
+const screens = [
+  screen('org.workspaces', '/organization/workspaces', 'organization', { section: 'workspaces', order: 20 }),
+  screen('people', '/people', 'organization', { order: 30 }),
+  screen('projects.main', '/projects', 'workspace', { order: 20 }),
+  screen('projects.overview', '/projects/overview', 'project', { section: 'overview', order: 10 }),
+  screen('projects.artifacts', '/projects/artifacts', 'project', { section: 'artifacts', order: 20 }),
+];
+const ORG = { id: 'o1', name: 'Org' };
+const WS = { id: 'w1', name: 'Work' };
+const ATLAS = { id: 'p1', name: 'Atlas' };
+const ready: Partial<AppContextState> = { org: ORG, orgs: [ORG], access: 'ready', workspace: WS, workspaces: [WS], workspacesStatus: 'ready', projects: [ATLAS] };
+
+function fakeApp(initial: Partial<AppContextState>) {
+  let state: AppContextState = { ...reducer(undefined, { type: '@@init' }), ...initial };
+  const app = {
+    store: { dispatch: (action: unknown) => { state = reducer(state, action as never); }, getState: () => ({ [APP_CONTEXT_SLICE_KEY]: state }) },
+    mfeRegistry: { getExtensionsForDomain: () => screens },
+  } as unknown as FrontXApp;
+  return { app, state: () => state };
+}
+const catalogs = () => ({ loadOrganizations: vi.fn(), loadWorkspaces: vi.fn(), loadProjects: vi.fn(), resolveProject: vi.fn() });
+
+beforeEach(() => {
+  mocks.mounted = [];
+  mocks.mountScreen.mockImplementation(async (_r: unknown, ext: StudioScreenExtension) => { mocks.mounted = [ext.id]; });
+});
+afterEach(() => vi.clearAllMocks());
+
+describe('startRouting', () => {
+  it('applies a deep link with its first, synchronous report', () => {
+    const { history } = freshNavigationHistory('/?screen=projects;org=o1;workspace=w1;project=p1;section=artifacts');
+    const { app, state } = fakeApp(ready);
+    startRouting(app, catalogs(), history);
+    expect(mocks.mountScreen).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'projects.main' }));
+    expect(state().project).toEqual(ATLAS);
+    expect(state().section).toBe('artifacts');
+  });
+
+  it('opens the organization entry point on an empty address and writes it with replace', () => {
+    const { history, adapter } = freshNavigationHistory('/');
+    const { app } = fakeApp(ready);
+    startRouting(app, catalogs(), history);
+    expect(adapter.url()).toBe('/?screen=organization;org=o1;section=workspaces');
+    expect(adapter.length()).toBe(1);
+  });
+
+  it('follows a navigate, and Back brings the previous state back', async () => {
+    const { history, adapter } = freshNavigationHistory('/?screen=projects;org=o1;workspace=w1');
+    const { app, state } = fakeApp(ready);
+    const handle = startRouting(app, catalogs(), history);
+    await vi.waitFor(() => expect(mocks.mounted).toEqual(['projects.main']));
+
+    handle.navigation.navigate({ token: 'projects', org: 'o1', workspace: 'w1', project: 'p1' }, 'push');
+    expect(state().project).toEqual(ATLAS);
+    expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1;project=p1;section=overview');
+    expect(adapter.length()).toBe(2);
+
+    history.go(-1);
+    await adapter.settle();
+    expect(state().project).toBeNull();
+    expect(adapter.url()).toBe('/?screen=projects;org=o1;workspace=w1');
+    expect(mocks.mountScreen).toHaveBeenCalledTimes(1);
+  });
+
+  it('switches screens on Back, across a level', async () => {
+    const { history, adapter } = freshNavigationHistory('/?screen=people;org=o1');
+    const { app } = fakeApp(ready);
+    const handle = startRouting(app, catalogs(), history);
+    await vi.waitFor(() => expect(mocks.mounted).toEqual(['people']));
+    handle.navigation.navigate({ token: 'projects', org: 'o1', workspace: 'w1' }, 'push');
+    await vi.waitFor(() => expect(mocks.mounted).toEqual(['projects.main']));
+    history.go(-1);
+    await adapter.settle();
+    await vi.waitFor(() => expect(mocks.mounted).toEqual(['people']));
+  });
+
+  // Review Focus 2
+  it('applies the entry a Back landed on after an in-flight mount finishes', async () => {
+    const { history, adapter } = freshNavigationHistory('/?screen=people;org=o1');
+    const { app } = fakeApp(ready);
+    let landProjects!: () => void;
+    mocks.mountScreen.mockImplementation((_r: unknown, ext: StudioScreenExtension) =>
+      ext.id === 'projects.main'
+        ? new Promise<void>((resolve) => { landProjects = () => { mocks.mounted = [ext.id]; resolve(); }; })
+        : Promise.resolve().then(() => { mocks.mounted = [ext.id]; })
+    );
+    const handle = startRouting(app, catalogs(), history);
+    await vi.waitFor(() => expect(mocks.mounted).toEqual(['people']));
+
+    handle.navigation.navigate({ token: 'projects', org: 'o1', workspace: 'w1' }, 'push');
+    history.go(-1);
+    await adapter.settle();
+    expect(mocks.mounted).toEqual(['people']);
+
+    landProjects();
+    await vi.waitFor(() => expect(mocks.mounted).toEqual(['people']));
+    expect(mocks.mountScreen).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ id: 'people' }));
+  });
+
+  it('stops listening once released', () => {
+    const { history } = freshNavigationHistory('/?screen=people;org=o1');
+    const { app, state } = fakeApp(ready);
+    const handle = startRouting(app, catalogs(), history);
+    handle.release();
+    handle.navigation.navigate({ token: 'projects', org: 'o1', workspace: 'w1', project: 'p1' }, 'push');
+    expect(state().project).toBeNull();
+  });
+});
+
+/**
+ * Issue #1006: the kits' screens arrive after routing has started. A cold
+ * deep link to one is held until the runtime kits register it; their change
+ * re-reads the groups and applies the address again.
+ */
+describe('startRouting with runtime kits', () => {
+  const hello = screen('hello.main', '/hello-kit', 'project', { order: 90, kit: 'hello-kit' });
+
+  function runtimeApp() {
+    const extensions: StudioScreenExtension[] = [...screens];
+    let state: AppContextState = { ...reducer(undefined, { type: '@@init' }), ...ready };
+    const app = {
+      store: { dispatch: (action: unknown) => { state = reducer(state, action as never); }, getState: () => ({ [APP_CONTEXT_SLICE_KEY]: state }) },
+      mfeRegistry: { getExtensionsForDomain: () => extensions },
+    } as unknown as FrontXApp;
+    const kits = runtimeKitsOf(app.mfeRegistry!);
+    let revision = 0;
+    vi.spyOn(kits, 'revision').mockImplementation(() => revision);
+    /** What `RuntimeKits.sync` amounts to for routing: the registry changed, and the listeners hear it. */
+    const registered = (extension: StudioScreenExtension) => {
+      extensions.push(extension);
+      revision += 1;
+      kits.settle('project:p1');
+    };
+    return { app, kits, registered, extensions };
+  }
+
+  it('opens a cold deep link to a kit screen once the kit registers it', async () => {
+    const { history, adapter } = freshNavigationHistory('/?screen=hello-kit;org=o1;workspace=w1;project=p1');
+    const { app, kits, registered } = runtimeApp();
+    const handle = startRouting(app, catalogs(), history);
+    expect(mocks.mountScreen).not.toHaveBeenCalled();
+    expect(unresolvedScreenOf(app.mfeRegistry!).get()?.status).toBe('waiting');
+    kits.begin('project:p1');
+    registered(hello);
+    await vi.waitFor(() => expect(mocks.mounted).toEqual(['hello.main']));
+    expect(handle.groups().some((group) => group.token === 'hello-kit')).toBe(true);
+    expect(unresolvedScreenOf(app.mfeRegistry!).get()).toBeNull();
+    expect(adapter.url()).toBe('/?screen=hello-kit;org=o1;workspace=w1;project=p1');
+  });
+
+  it('says the address is unknown once the scope settles without it', () => {
+    const { history } = freshNavigationHistory('/?screen=hello-kit;org=o1;workspace=w1;project=p1');
+    const { app, kits } = runtimeApp();
+    startRouting(app, catalogs(), history);
+    kits.begin('project:p1');
+    kits.settle('project:p1');
+    expect(unresolvedScreenOf(app.mfeRegistry!).get()?.status).toBe('unknown');
+  });
+
+  it('stops hearing the runtime kits once released', () => {
+    const { history } = freshNavigationHistory('/?screen=hello-kit;org=o1;workspace=w1;project=p1');
+    const { app, kits, registered } = runtimeApp();
+    const handle = startRouting(app, catalogs(), history);
+    handle.release();
+    kits.begin('project:p1');
+    registered(hello);
+    expect(mocks.mountScreen).not.toHaveBeenCalled();
+  });
+});

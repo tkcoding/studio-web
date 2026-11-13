@@ -1,0 +1,99 @@
+{
+  "manifest": {
+    "id": "gts.frontx.mfes.mfe.mf_manifest.v1~constructor_studio.organization.mfe.manifest.v1",
+    "remoteEntry": "http://localhost:3060/assets/remoteEntry.js"
+  },
+  "entries": [
+    {
+      "id": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.organization.mfe.main.v1",
+      "requiredProperties": [
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.theme.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~frontx.mfes.comm.language.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.project_section.selected.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.organization.selected.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.workspace.selected.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.live.studio_events.last_event.v1~",
+        "gts.frontx.mfes.comm.shared_property.v1~constructor_studio.context.screens.available.v1~"
+      ],
+      "actions": [],
+      "domainActions": [
+        "gts.frontx.mfes.comm.action.v1~constructor_studio.context.projects.publish.v1~",
+        "gts.frontx.mfes.comm.action.v1~constructor_studio.context.workspaces.publish.v1~",
+        "gts.frontx.mfes.comm.action.v1~constructor_studio.shell.screen.open.v1~"
+      ],
+      "manifest": "gts.frontx.mfes.mfe.mf_manifest.v1~constructor_studio.organization.mfe.manifest.v1",
+      "exposedModule": "./lifecycle"
+    }
+  ],
+  "extensions": [
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.organization.screens.overview.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.organization.mfe.main.v1",
+      "presentation": {
+        "label": "Overview",
+        "icon": "lucide:layout-dashboard",
+        "route": "/organization/overview",
+        "order": 10,
+        "level": "organization",
+        "section": "overview",
+        "modelTab": "org"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.organization.screens.workspaces.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.organization.mfe.main.v1",
+      "presentation": {
+        "label": "Workspaces",
+        "icon": "lucide:folder",
+        "route": "/organization/workspaces",
+        "order": 20,
+        "level": "organization",
+        "section": "workspaces",
+        "modelTab": "projects"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.organization.screens.main.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.organization.mfe.main.v1",
+      "presentation": {
+        "label": "Settings",
+        "icon": "lucide:settings",
+        "route": "/organization/settings",
+        "order": 100,
+        "level": "organization",
+        "placement": "settings",
+        "section": "settings"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.organization.screens.tasks.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.organization.mfe.main.v1",
+      "presentation": {
+        "label": "Background work",
+        "icon": "lucide:activity",
+        "route": "/organization/tasks",
+        "order": 90,
+        "level": "organization",
+        "section": "tasks"
+      }
+    },
+    {
+      "id": "gts.frontx.mfes.ext.extension.v1~frontx.screensets.layout.screen.v1~constructor_studio.screensets.layout.leveled_screen.v1~constructor_studio.organization.screens.inbox.v1",
+      "domain": "gts.frontx.mfes.ext.domain.v1~frontx.screensets.layout.screen.v1",
+      "entry": "gts.frontx.mfes.mfe.entry.v1~frontx.mfes.mfe.entry_mf.v1~constructor_studio.organization.mfe.main.v1",
+      "presentation": {
+        "label": "Inbox",
+        "icon": "lucide:inbox",
+        "route": "/inbox",
+        "order": 15,
+        "level": "organization",
+        "placement": "hidden",
+        "section": "inbox"
+      }
+    }
+  ]
+}

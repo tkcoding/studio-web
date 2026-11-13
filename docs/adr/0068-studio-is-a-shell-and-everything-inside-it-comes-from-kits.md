@@ -324,7 +324,7 @@ installs only when its publisher's signature is one the organization trusts.
 | 2 | The installer for tabs and the model overlay (ADR-0067 phase 6), as runs, REST routes and MCP tools; the library screen | 1 |
 | 3 | Project lifecycle as the first built-in kit: type fields, tab, filters, inbox source | 2 |
 | 4 | Inbox sources as a contribution point; the shell's own sources; today's Inbox items moved into their kits | 2 |
-| 5 | Micro-frontends mounted for `shows` relations and sections | 2, ADR-0050 |
+| 5 | Micro-frontends mounted for `shows` relations and sections. *Built for tabs: a kit's FrontX bundles (`kit.gdl` `mfe = [path("mfe/<package>")]`) are served by `studio-kits` and registered by the shell at run time, with no portal rebuild (`docs/design/studio-kits.md` §3.9); bytes from a configured directory until phase 7's sources. Uninstall and upgrade unload and remount without a page reload, and a cold deep link to a kit's screen waits for its registration (issue #1006). Sections go into the shell's named slots (`project.header.status`, `screen.toolbar.actions`, `screen.panels`; `docs/design/studio-kits.md` §3.12). Slots inside a kit's own page and `shows` relations from the domain model are not yet.* | 2, ADR-0050 |
 | 6 | Today's tabs moved into built-in kits, one per change | 3, 5 |
 | 7 | Organization kits: publish from a connected repository | 2 |
 | 8 | The WebAssembly function runtime, host functions and limits (§9) | ADR-0067 phase 5 |

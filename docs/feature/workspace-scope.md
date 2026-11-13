@@ -391,7 +391,7 @@ into.
 
 **Touches**:
 - API: `GET /cf/account-management/v1/tenants/{workspace}/children?$filter=tenant_type eq '{project type}'`
-- Entities: `workspaceProjects`, `useProjectList`, `ProjectsTable`, `workspace` (shared)
+- Entities: `workspaceProjects`, `ProjectListScreen`, `projectColumns`, `workspace` (shared)
 
 ### A project is created inside the current workspace
 

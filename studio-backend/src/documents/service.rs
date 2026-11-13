@@ -39,7 +39,7 @@ pub struct DocumentsService {
     process: Arc<super::process_store::ProcessStore>,
     /// Where review requests, verdicts and decisions live (ADR-0066).
     reviews: Arc<super::review_store::ReviewStore>,
-    /// Where documents, bindings, verdicts, the spec model, parts and
+    /// Where documents, bindings, verdicts, the project domain model, parts and
     /// delivery scopes live (ADR-0066 §8a).
     data: Arc<super::data::DocumentsData>,
     account_management: Arc<dyn AccountManagementClient>,
@@ -47,6 +47,12 @@ pub struct DocumentsService {
     /// The last requirement trace of each project, for a while
     /// (see [`Self::requirement_trace`]).
     trace_cache: super::spec_model::trace::TraceCache,
+    /// One read of a project's sources shared by the concurrent requests of
+    /// one caller, and kept a few seconds (see [`Self::read_spec_model_sources`]).
+    sources_flight: super::sources_flight::FlightCache<SourcesKey, ReadSources>,
+    /// Where uploaded sources keep their bytes: the file-storage gear, when
+    /// this deployment configured it (`crate::object_store`).
+    objects: Option<Arc<dyn crate::object_store::ObjectStore>>,
 }
 
 /// Spec Quality analysis a source sync starts for the documents it changed.
@@ -91,6 +97,10 @@ impl DocumentsService {
             account_management,
             sync_analysis: None,
             trace_cache: super::spec_model::trace::TraceCache::default(),
+            sources_flight: super::sources_flight::FlightCache::new(
+                super::sources_flight::SOURCES_KEPT_FOR,
+            ),
+            objects: crate::object_store::from_env(),
         }
     }
 
@@ -1274,6 +1284,7 @@ impl DocumentsService {
             updated_at: now,
         };
         self.data.upsert_doc(ctx, model.clone()).await?;
+        self.sources_changed(workspace_id);
         doc_from_row(model)
     }
 
@@ -1553,6 +1564,7 @@ impl DocumentsService {
             serde_json::to_string(&inferred_for(&row.content, &vocabulary))?;
         row.updated_at = OffsetDateTime::now_utc();
         self.data.upsert_doc(ctx, row.clone()).await?;
+        self.sources_changed(workspace_id);
         doc_from_row(row)
     }
 
@@ -1580,7 +1592,9 @@ impl DocumentsService {
         workspace_id: Uuid,
         id: Uuid,
     ) -> Result<bool> {
-        self.data.delete_doc(ctx, workspace_id, id).await
+        let deleted = self.data.delete_doc(ctx, workspace_id, id).await;
+        self.sources_changed(workspace_id);
+        deleted
     }
 }
 
@@ -2106,12 +2120,12 @@ impl DocumentsService {
         Ok(quality::docs_for(&wanted, &by_path))
     }
 
-    /// The project's documents as the spec model reads them, and every path
+    /// The project's documents as the project domain model reads them, and every path
     /// of its checkouts to resolve references against.
     ///
     /// The documents are the project's documentation: the bindings whose type
     /// a person settled in the Specs tab (its Bound queue), read as written
-    /// (`docs/spec-domain-model.md`). A file a detector only guessed at --
+    /// (`docs/project-domain-model.md`). A file a detector only guessed at --
     /// an agent's prompt, a tool's reference page -- is not read until
     /// somebody types it there.
     pub async fn spec_model_sources(
@@ -2124,7 +2138,8 @@ impl DocumentsService {
         Ok(self
             .read_spec_model_sources(ctx, workspace_id, project_id, reader)
             .await?
-            .sources)
+            .sources
+            .clone())
     }
 
     /// Where each of the project's requirements is cited -- documents, code,
@@ -2152,14 +2167,14 @@ impl DocumentsService {
         let read = self
             .read_spec_model_sources(ctx, workspace_id, project_id, reader)
             .await?;
-        let mut sources = read.sources;
+        let mut sources = read.sources.clone();
         let scope = (workspace_id, project_id);
         let fingerprint = trace::fingerprint(&sources.documents, &sources.tree);
         if let Some(traced) = self.trace_cache.get(scope, fingerprint) {
             tracing::info!(
                 %project_id,
                 elapsed_ms = millis(started.elapsed()),
-                "spec-model trace: answered from the cache"
+                "project domain model trace: answered from the cache"
             );
             return Ok(traced);
         }
@@ -2211,12 +2226,45 @@ impl DocumentsService {
             bytes_read,
             trace_ms = millis(tracing_started.elapsed()),
             total_ms = millis(started.elapsed()),
-            "spec-model trace: computed"
+            "project domain model trace: computed"
         );
         Ok(traced)
     }
 
+    /// The project's sources, read once for every request of the same caller
+    /// that wants them at the same time, and kept for
+    /// [`super::sources_flight::SOURCES_KEPT_FOR`] after (#1041): the Project
+    /// domain model screen asks for them from some eight requests at once.
+    ///
+    /// Keyed by the caller as well as the project, because the reads go
+    /// through the caller's context: one caller's reading is never another's
+    /// answer. A write this process does to bindings, Studio documents or
+    /// uploads forgets the workspace's entries ([`Self::sources_changed`]);
+    /// anything else (a checkout refreshed by another replica, a domain-model
+    /// edit merged upstream) shows once the entry expires.
     async fn read_spec_model_sources(
+        &self,
+        ctx: &SecurityContext,
+        workspace_id: Uuid,
+        project_id: Uuid,
+        reader: &dyn crate::artifact_ingest::port::RepoFileReader,
+    ) -> Result<Arc<ReadSources>> {
+        let key = (workspace_id, project_id, ctx.subject_id());
+        self.sources_flight
+            .get_or_read(key, || {
+                self.read_spec_model_sources_now(ctx, workspace_id, project_id, reader)
+            })
+            .await
+    }
+
+    /// Forget the kept sources of every project under `workspace_id`, after a
+    /// write that changes what they are read from.
+    fn sources_changed(&self, workspace_id: Uuid) {
+        self.sources_flight
+            .forget(|(workspace, _, _)| *workspace == workspace_id);
+    }
+
+    async fn read_spec_model_sources_now(
         &self,
         ctx: &SecurityContext,
         workspace_id: Uuid,
@@ -2243,7 +2291,17 @@ impl DocumentsService {
             })
             .collect();
         if rows.is_empty() {
-            return Ok(ReadSources::default());
+            // No typed repository document yet; uploaded sources are read
+            // all the same, so a project can start from them.
+            let (documents, unread) = self.upload_sources(ctx, workspace_id, project_id).await?;
+            return Ok(ReadSources {
+                sources: super::spec_model::Sources {
+                    documents,
+                    unread,
+                    ..super::spec_model::Sources::default()
+                },
+                ..ReadSources::default()
+            });
         }
         let tenants = checkout_tenants(
             rows.iter().map(|r| r.project_id),
@@ -2258,9 +2316,30 @@ impl DocumentsService {
             .map(|r| r.path.clone())
             .chain([DOMAIN_DOC_PATH.to_owned()])
             .collect();
-        let mut by_path = self
-            .checkout_listing(ctx, &tenants, reader, Some(&wanted))
-            .await;
+        // The commit and branch each document is read at.
+        let mut at = std::collections::BTreeMap::new();
+        // Under the gateway's deadline: resolving the project's sources asks
+        // account-management, and after a start that can take longer than the
+        // whole request may. Past it every document is unread, and the model
+        // answers what was last read of them (`spec_model::last_read`) rather
+        // than the gateway answering 504.
+        let listing = tokio::time::timeout(
+            CHECKOUT_DEADLINE,
+            self.checkout_listing_at(ctx, &tenants, reader, Some(&wanted), Some(&mut at)),
+        )
+        .await;
+        let (mut by_path, late) = match listing {
+            Ok(by_path) => (by_path, false),
+            Err(_) => {
+                tracing::warn!(
+                    %project_id,
+                    deadline_ms = millis(CHECKOUT_DEADLINE),
+                    "project domain model: the checkout was not listed in time; answering the last read"
+                );
+                at.clear();
+                (std::collections::BTreeMap::new(), true)
+            }
+        };
         let tree = by_path.keys().cloned().collect();
         // Written by Studio but not synced yet: no binding, so no graph node
         // to record a verdict on, but read all the same.
@@ -2273,6 +2352,7 @@ impl DocumentsService {
                 doc_type: Some(DOMAIN_DOC_TYPE.to_owned()),
                 node: String::new(),
                 binding: None,
+                at: at.get(DOMAIN_DOC_PATH).cloned(),
             });
         let mut unread = Vec::new();
         let documents: Vec<super::spec_model::SourceText> = rows
@@ -2280,6 +2360,7 @@ impl DocumentsService {
             .filter_map(|row| match by_path.remove(&row.path).flatten() {
                 Some(text) => Some(super::spec_model::SourceText {
                     binding: Some(row.id),
+                    at: at.get(&row.path).cloned(),
                     path: row.path,
                     text,
                     doc_type: row.type_key,
@@ -2293,12 +2374,21 @@ impl DocumentsService {
             .collect();
         let unread_because = if unread.is_empty() {
             None
+        } else if late {
+            Some(CHECKOUT_LATE.to_owned())
         } else {
-            self.clone_failure(ctx, &tenants, reader).await
+            // Bounded the same way: it resolves the sources again.
+            tokio::time::timeout(CHECKOUT_DEADLINE, self.clone_failure(ctx, &tenants, reader))
+                .await
+                .ok()
+                .flatten()
         };
         let documents = documents.into_iter().chain(unbound_domain_doc);
         let mut documents: Vec<super::spec_model::SourceText> = documents.collect();
         documents.extend(self.studio_sources(ctx, workspace_id, project_id).await?);
+        let (uploaded, uploads_unread) = self.upload_sources(ctx, workspace_id, project_id).await?;
+        documents.extend(uploaded);
+        unread.extend(uploads_unread);
         Ok(ReadSources {
             sources: super::spec_model::Sources {
                 documents,
@@ -2340,6 +2430,7 @@ impl DocumentsService {
                 doc_type: Some(d.type_key),
                 node: String::new(),
                 binding: None,
+                at: None,
             })
             .collect())
     }
@@ -2767,17 +2858,20 @@ impl DocumentsService {
             .await
     }
 
-    /// Keep what reading one document revision gave.
+    /// Keep what reading one document revision gave, with the repository
+    /// commit and branch its text was read at.
     pub async fn put_spec_extraction(
         &self,
         ctx: &SecurityContext,
         workspace_id: Uuid,
         project_id: Uuid,
-        path: &str,
-        revision: &str,
+        doc: &super::spec_model::SourceText,
         read: &super::spec_model::build::Read,
     ) -> Result<()> {
         let version = super::spec_model::extract::EXTRACTOR_VERSION;
+        let path = doc.path.as_str();
+        let revision = super::spec_model::extract::revision(&doc.text);
+        let revision = revision.as_str();
         self.data
             .put_extraction(
                 ctx,
@@ -2794,6 +2888,8 @@ impl DocumentsService {
                     provider: read.provider.clone(),
                     model: read.model.clone(),
                     created_at: OffsetDateTime::now_utc(),
+                    source_commit: doc.at.as_ref().map(|a| a.commit.clone()),
+                    source_ref: doc.at.as_ref().and_then(|a| a.git_ref.clone()),
                 },
             )
             .await
@@ -2909,17 +3005,26 @@ impl DocumentsService {
             .await
     }
 
-    /// Record a member's review of each fact: `accepted`, `rejected`, or
-    /// `proposed` to withdraw an earlier one. One call for a whole selection.
+    /// Record a member's review of each fact: `accepted`, `rejected`,
+    /// `corrected` with the value to show instead, or `proposed` to withdraw
+    /// an earlier one. One call for a whole selection.
     pub async fn put_spec_reviews(
         &self,
         ctx: &SecurityContext,
         workspace_id: Uuid,
         project_id: Uuid,
-        items: Vec<(String, String, String, String, Option<String>)>,
+        items: Vec<SpecReviewItem>,
     ) -> Result<Vec<super::entity::spec_review::Model>> {
         let mut saved = Vec::new();
-        for (fact_key, state, path, revision, note) in items {
+        for SpecReviewItem {
+            fact_key,
+            state,
+            path,
+            revision,
+            note,
+            value,
+        } in items
+        {
             if state == "proposed" {
                 self.data
                     .delete_spec_review(ctx, workspace_id, project_id, &fact_key)
@@ -2935,6 +3040,7 @@ impl DocumentsService {
                 path,
                 revision,
                 note,
+                value,
                 decided_by: ctx.subject_id(),
                 decided_at: OffsetDateTime::now_utc(),
             };
@@ -2942,6 +3048,147 @@ impl DocumentsService {
             saved.push(model);
         }
         Ok(saved)
+    }
+
+    /// Every source uploaded to the project's model, by name.
+    pub async fn spec_uploads(
+        &self,
+        ctx: &SecurityContext,
+        workspace_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<Vec<super::entity::spec_upload::Model>> {
+        let mut rows = self
+            .data
+            .list_spec_uploads(ctx, workspace_id, project_id)
+            .await?;
+        rows.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(rows)
+    }
+
+    /// Keep an uploaded source for the project's model to read: its bytes in
+    /// the file-storage gear when this deployment has one, in the row
+    /// otherwise. One of the same name is replaced (its earlier file
+    /// removed). `Err` from [`super::uploads::accept`] is the caller's
+    /// mistake; the message says which.
+    pub async fn put_spec_upload(
+        &self,
+        ctx: &SecurityContext,
+        workspace_id: Uuid,
+        project_id: Uuid,
+        name: &str,
+        content: &str,
+    ) -> Result<std::result::Result<super::entity::spec_upload::Model, String>> {
+        let accepted = match super::uploads::accept(name, content) {
+            Ok(a) => a,
+            Err(why) => return Ok(Err(why)),
+        };
+        let existing = self.spec_uploads(ctx, workspace_id, project_id).await?;
+        let earlier = existing.iter().find(|u| u.name == accepted.name);
+        if earlier.is_none() && existing.len() >= super::uploads::MAX_PER_PROJECT {
+            return Ok(Err(format!(
+                "a project keeps at most {} uploaded sources: remove one first",
+                super::uploads::MAX_PER_PROJECT
+            )));
+        }
+        let revision = super::spec_model::extract::revision(&accepted.content);
+        let (storage, file_id, kept) = match &self.objects {
+            Some(store) => {
+                let stored = store
+                    .put(
+                        &accepted.name,
+                        super::uploads::mime(accepted.kind),
+                        accepted.content.clone().into_bytes(),
+                    )
+                    .await?;
+                ("file-storage", Some(stored.file_id), None)
+            }
+            None => ("studio-documents", None, Some(accepted.content.clone())),
+        };
+        let model = super::entity::spec_upload::Model {
+            id: super::repo::spec_upload_id(project_id, &accepted.name),
+            tenant_id: workspace_id,
+            project_id,
+            name: accepted.name.clone(),
+            kind: accepted.kind.to_owned(),
+            revision,
+            size: i64::try_from(accepted.content.len()).unwrap_or(i64::MAX),
+            storage: storage.to_owned(),
+            file_id,
+            content: kept,
+            created_by: ctx.subject_id(),
+            created_at: OffsetDateTime::now_utc(),
+        };
+        self.data.put_spec_upload(ctx, model.clone()).await?;
+        self.sources_changed(workspace_id);
+        if let (Some(store), Some(old)) = (&self.objects, earlier.and_then(|e| e.file_id.as_ref()))
+            && let Err(error) = store.delete(old).await
+        {
+            tracing::warn!(%error, "studio-documents: a replaced upload's file could not be removed");
+        }
+        Ok(Ok(model))
+    }
+
+    /// Forget an uploaded source and remove its file. `false` when the
+    /// project has no such upload.
+    pub async fn delete_spec_upload(
+        &self,
+        ctx: &SecurityContext,
+        workspace_id: Uuid,
+        project_id: Uuid,
+        upload_id: Uuid,
+    ) -> Result<bool> {
+        let existing = self.spec_uploads(ctx, workspace_id, project_id).await?;
+        let Some(found) = existing.into_iter().find(|u| u.id == upload_id) else {
+            return Ok(false);
+        };
+        self.data
+            .delete_spec_upload(ctx, workspace_id, project_id, &found.name)
+            .await?;
+        self.sources_changed(workspace_id);
+        if let (Some(store), Some(file_id)) = (&self.objects, found.file_id.as_ref())
+            && let Err(error) = store.delete(file_id).await
+        {
+            tracing::warn!(%error, "studio-documents: a removed upload's file could not be removed");
+        }
+        Ok(true)
+    }
+
+    /// The uploaded sources as the model reads them, under `upload:<name>`;
+    /// and the ones whose bytes could not be read back, by path.
+    async fn upload_sources(
+        &self,
+        ctx: &SecurityContext,
+        workspace_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<(Vec<super::spec_model::SourceText>, Vec<String>)> {
+        let mut documents = Vec::new();
+        let mut unread = Vec::new();
+        for u in self.spec_uploads(ctx, workspace_id, project_id).await? {
+            let path = super::uploads::path_of(&u.name);
+            let text = match (&u.content, &u.file_id, &self.objects) {
+                (Some(text), _, _) => Some(text.clone()),
+                (None, Some(file_id), Some(store)) => match store.get(file_id).await {
+                    Ok(bytes) => String::from_utf8(bytes).ok(),
+                    Err(error) => {
+                        tracing::warn!(%error, %path, "studio-documents: an uploaded source could not be read back");
+                        None
+                    }
+                },
+                _ => None,
+            };
+            match text {
+                Some(text) => documents.push(super::spec_model::SourceText {
+                    path,
+                    text,
+                    doc_type: Some(format!("uploaded {}", u.kind)),
+                    node: String::new(),
+                    binding: None,
+                    at: None,
+                }),
+                None => unread.push(path),
+            }
+        }
+        Ok((documents, unread))
     }
 
     /// Record that two glossary entries are different things, on both: the
@@ -2981,7 +3228,7 @@ impl DocumentsService {
         Ok(())
     }
 
-    /// Every member decision on the project's spec-model findings.
+    /// Every member decision on the project domain model's findings.
     pub async fn spec_decisions(
         &self,
         ctx: &SecurityContext,
@@ -3267,6 +3514,24 @@ impl DocumentsService {
         reader: &dyn crate::artifact_ingest::port::RepoFileReader,
         wanted: Option<&std::collections::BTreeSet<String>>,
     ) -> std::collections::BTreeMap<String, Option<String>> {
+        self.checkout_listing_at(ctx, tenants, reader, wanted, None)
+            .await
+    }
+
+    /// [`Self::checkout_listing`], and, into `revisions`, the commit and
+    /// branch each listed path was read at: the checkout's `HEAD`, its branch
+    /// or else the branch the project's source names. A path of a checkout
+    /// that is not a git one gets none.
+    async fn checkout_listing_at(
+        &self,
+        ctx: &SecurityContext,
+        tenants: &[Uuid],
+        reader: &dyn crate::artifact_ingest::port::RepoFileReader,
+        wanted: Option<&std::collections::BTreeSet<String>>,
+        mut revisions: Option<
+            &mut std::collections::BTreeMap<String, crate::artifact_ingest::port::GitRevision>,
+        >,
+    ) -> std::collections::BTreeMap<String, Option<String>> {
         let mut by_path: std::collections::BTreeMap<String, Option<String>> =
             std::collections::BTreeMap::new();
         for tenant in tenants {
@@ -3303,9 +3568,11 @@ impl DocumentsService {
                 // No session checkout here — the usual case on a stand whose
                 // sessions keep theirs in their own volume. The sync's clone
                 // holds the same repository, as last synced.
+                let mut from_clone = false;
                 if files.is_empty()
                     && let Some((secret_ref, full_path)) = clone
                 {
+                    from_clone = true;
                     let listed = match wanted {
                         Some(w) => {
                             reader
@@ -3324,7 +3591,29 @@ impl DocumentsService {
                             Vec::new()
                         });
                 }
+                let revision = if revisions.is_some() && !files.is_empty() {
+                    let at = match clone.filter(|_| from_clone) {
+                        Some((secret_ref, full_path)) => {
+                            reader.synced_clone_revision(secret_ref, full_path).await
+                        }
+                        None => reader.checkout_revision(&tenant.to_string(), dir).await,
+                    };
+                    at.map(|mut r| {
+                        if r.git_ref.is_none() {
+                            r.git_ref.clone_from(&resolved.source.branch);
+                        }
+                        r
+                    })
+                } else {
+                    None
+                };
                 for (path, text) in files {
+                    if let (Some(revisions), Some(revision)) =
+                        (revisions.as_deref_mut(), revision.as_ref())
+                        && !by_path.contains_key(&path)
+                    {
+                        revisions.insert(path.clone(), revision.clone());
+                    }
                     by_path.entry(path).or_insert(text);
                 }
             }
@@ -3336,9 +3625,34 @@ impl DocumentsService {
     }
 }
 
-/// The spec model's sources as one read found them, with what a second read
+/// The project domain model's sources as one read found them, with what a second read
 /// of the same checkouts needs: the tenants tried, and the paths whose text
 /// the first one already took as documents.
+/// One review of a fact (or of a prefixed key) as a member gives it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SpecReviewItem {
+    pub fact_key: String,
+    pub state: String,
+    pub path: String,
+    pub revision: String,
+    pub note: Option<String>,
+    /// For `corrected`: the value to show instead of the one read.
+    pub value: Option<String>,
+}
+
+/// How long the project domain model waits for its checkouts to be listed.
+/// Well under the gateway's 30 s, which also covers the request's other
+/// reads (#1041).
+const CHECKOUT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(12);
+
+/// Why the documents are unread when their listing missed
+/// [`CHECKOUT_DEADLINE`]: said to the person, who sees the last read.
+const CHECKOUT_LATE: &str =
+    "the repository checkout took too long to list; showing what was last read, try again shortly";
+
+/// Whose sources were read: the workspace, the project, the caller.
+type SourcesKey = (Uuid, Uuid, Uuid);
+
 #[derive(Default)]
 struct ReadSources {
     sources: super::spec_model::Sources,
@@ -4023,6 +4337,7 @@ impl DocumentsService {
         }
 
         self.data.upsert_bindings(ctx, &written).await?;
+        self.sources_changed(workspace_id);
         let bindings = written
             .into_iter()
             .map(binding_from_row)
@@ -4164,6 +4479,7 @@ impl DocumentsService {
         }
         row.updated_at = OffsetDateTime::now_utc();
         self.data.upsert_binding(ctx, row.clone()).await?;
+        self.sources_changed(workspace_id);
         binding_from_row(row)
     }
 
@@ -4173,7 +4489,9 @@ impl DocumentsService {
         workspace_id: Uuid,
         id: Uuid,
     ) -> Result<bool> {
-        self.data.delete_binding(ctx, workspace_id, id).await
+        let deleted = self.data.delete_binding(ctx, workspace_id, id).await;
+        self.sources_changed(workspace_id);
+        deleted
     }
 
     /// Delete the bindings of files a repository no longer has.
@@ -4202,6 +4520,7 @@ impl DocumentsService {
             .map(|node| binding_row_id(workspace_id, project_id, node))
             .collect();
         let deleted = self.data.delete_bindings(ctx, workspace_id, &ids).await?;
+        self.sources_changed(workspace_id);
         Ok(usize::try_from(deleted).unwrap_or(usize::MAX))
     }
 }
@@ -5345,6 +5664,59 @@ impl crate::documents::port::CapabilityVocabulary for DocumentsService {
     ) -> anyhow::Result<Vec<Capability>> {
         self.list_organization_capabilities(ctx, organization_id)
             .await
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::documents::port::ProjectDocuments for DocumentsService {
+    async fn has_document(
+        &self,
+        ctx: &SecurityContext,
+        workspace_id: Uuid,
+        project_id: Uuid,
+        type_key: &str,
+    ) -> anyhow::Result<bool> {
+        let page = PageQuery {
+            offset: Some(0),
+            limit: Some(crate::pagination::MAX_LIMIT),
+        };
+        let (documents, _) = self
+            .list_documents(ctx, workspace_id, Some(project_id), page)
+            .await?;
+        Ok(documents.iter().any(|d| d.type_key == type_key))
+    }
+
+    async fn create_answered(
+        &self,
+        ctx: &SecurityContext,
+        workspace_id: Uuid,
+        project_id: Uuid,
+        type_key: &str,
+        title: &str,
+        answers: &[(String, String)],
+        created_by: &str,
+    ) -> anyhow::Result<Uuid> {
+        let answers = answers
+            .iter()
+            .map(|(question_id, text)| Answer {
+                question_id: question_id.clone(),
+                text: Some(text.clone()),
+                ..Answer::default()
+            })
+            .collect();
+        let made = self
+            .create_document(
+                ctx,
+                workspace_id,
+                Some(project_id),
+                type_key,
+                title,
+                None,
+                Some(answers),
+                created_by.to_string(),
+            )
+            .await?;
+        Ok(made.id)
     }
 }
 

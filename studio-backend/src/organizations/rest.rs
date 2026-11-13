@@ -231,7 +231,7 @@ async fn upsert_organization_logo(
             .create()
     })?;
     service
-        .set_logo(org, Some(&logo))
+        .set_logo(&ctx, org, Some(&logo))
         .await
         .map_err(|error| CanonicalError::internal(format!("{error:#}")).create())?;
     Ok(Json(logo_dto(logo)))
@@ -250,10 +250,197 @@ async fn delete_organization_logo(
             .create());
     }
     service
-        .set_logo(org, None)
+        .set_logo(&ctx, org, None)
         .await
         .map_err(|error| CanonicalError::internal(format!("{error:#}")).create())?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// One grant to put (`PUT /access-grants`).
+#[derive(Debug)]
+#[toolkit_macros::api_dto(request)]
+pub struct PutAccessGrantRequest {
+    /// `member` (a person: their person id) or `team`.
+    pub subject_type: String,
+    pub subject_id: String,
+    /// What a screen shows for the subject.
+    pub subject_name: Option<String>,
+    /// A role the organization defines (`admin`, `editor`, `viewer`, ...);
+    /// never `owner`, which follows an owner membership.
+    pub role_key: String,
+    /// `org` (the whole organization) or `project`.
+    pub scope_type: String,
+    /// The project, for a `project` grant.
+    pub scope_id: Option<String>,
+    pub scope_name: Option<String>,
+}
+
+/// One grant as now kept.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct AccessGrantDto {
+    pub id: String,
+    pub subject_type: String,
+    pub subject_id: String,
+    pub subject_name: String,
+    pub role_key: String,
+    pub scope_type: String,
+    pub scope_id: String,
+    pub scope_name: String,
+}
+
+/// Which grant to remove (`DELETE /access-grants`), and where.
+#[derive(Debug, serde::Deserialize)]
+pub struct AccessGrantQuery {
+    #[serde(default)]
+    pub organization_id: Option<String>,
+    #[serde(default)]
+    pub subject_type: Option<String>,
+    #[serde(default)]
+    pub subject_id: Option<String>,
+    #[serde(default)]
+    pub scope_type: Option<String>,
+    #[serde(default)]
+    pub scope_id: Option<String>,
+}
+
+fn grant_org(raw: Option<&str>) -> ApiResult<Uuid> {
+    raw.and_then(|r| Uuid::parse_str(r.trim()).ok())
+        .ok_or_else(|| {
+            OrganizationError::invalid_argument()
+                .with_constraint("organization_id must be the organization's uuid")
+                .create()
+        })
+}
+
+fn change_refused(error: super::access_grants::ChangeError) -> CanonicalError {
+    match error {
+        super::access_grants::ChangeError::Invalid(why) => OrganizationError::invalid_argument()
+            .with_constraint(why)
+            .create(),
+        super::access_grants::ChangeError::Internal(e) => {
+            CanonicalError::internal(format!("{e:#}")).create()
+        }
+    }
+}
+
+async fn put_access_grant(
+    Extension(ctx): Extension<SecurityContext>,
+    Extension(service): Extension<Option<Arc<OrganizationService>>>,
+    axum::extract::Query(query): axum::extract::Query<AccessGrantQuery>,
+    Json(request): Json<PutAccessGrantRequest>,
+) -> ApiResult<JsonBody<AccessGrantDto>> {
+    let service = configured(service)?;
+    let org = grant_org(query.organization_id.as_deref())?;
+    if !service.may_manage_access(&ctx, org).await {
+        return Err(OrganizationError::permission_denied()
+            .with_reason("ACCESS_ADMIN_REQUIRED")
+            .create());
+    }
+    let key = super::access_grants::key_of(
+        &request.subject_type,
+        &request.subject_id,
+        &request.scope_type,
+        request.scope_id.as_deref(),
+    )
+    .map_err(|e| {
+        OrganizationError::invalid_argument()
+            .with_constraint(format!("{e:#}"))
+            .create()
+    })?;
+    let grant = super::access_grants::Grant {
+        key,
+        role_key: request.role_key.trim().to_owned(),
+        subject_name: request.subject_name.filter(|n| !n.trim().is_empty()),
+        scope_name: request.scope_name.filter(|n| !n.trim().is_empty()),
+    };
+    let written = service
+        .change_access(&ctx, org, &|doc| {
+            super::access_grants::put(doc, org, &grant)
+        })
+        .await
+        .map_err(change_refused)?;
+    let text = |name: &str| written[name].as_str().unwrap_or_default().to_owned();
+    Ok(Json(AccessGrantDto {
+        id: text("id"),
+        subject_type: text("subjectType"),
+        subject_id: text("subjectId"),
+        subject_name: text("subjectName"),
+        role_key: text("roleKey"),
+        scope_type: text("scopeType"),
+        scope_id: text("scopeId"),
+        scope_name: text("scopeName"),
+    }))
+}
+
+async fn delete_access_grant(
+    Extension(ctx): Extension<SecurityContext>,
+    Extension(service): Extension<Option<Arc<OrganizationService>>>,
+    axum::extract::Query(query): axum::extract::Query<AccessGrantQuery>,
+) -> ApiResult<StatusCode> {
+    let service = configured(service)?;
+    let org = grant_org(query.organization_id.as_deref())?;
+    if !service.may_manage_access(&ctx, org).await {
+        return Err(OrganizationError::permission_denied()
+            .with_reason("ACCESS_ADMIN_REQUIRED")
+            .create());
+    }
+    let key = super::access_grants::key_of(
+        query.subject_type.as_deref().unwrap_or_default(),
+        query.subject_id.as_deref().unwrap_or_default(),
+        query.scope_type.as_deref().unwrap_or_default(),
+        query.scope_id.as_deref(),
+    )
+    .map_err(|e| {
+        OrganizationError::invalid_argument()
+            .with_constraint(format!("{e:#}"))
+            .create()
+    })?;
+    service
+        .change_access(&ctx, org, &|doc| super::access_grants::remove(doc, &key))
+        .await
+        .map_err(change_refused)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// A new name for an organization or a workspace.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(request)]
+pub struct RenameTenantRequest {
+    pub name: String,
+}
+
+/// The name as now kept.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct TenantNameDto {
+    pub tenant_id: String,
+    pub name: String,
+}
+
+async fn rename_tenant(
+    Extension(ctx): Extension<SecurityContext>,
+    Extension(service): Extension<Option<Arc<OrganizationService>>>,
+    axum::extract::Query(query): axum::extract::Query<LogoQuery>,
+    Json(request): Json<RenameTenantRequest>,
+) -> ApiResult<JsonBody<TenantNameDto>> {
+    let service = configured(service)?;
+    let tenant = org_id(&query)?;
+    let name = request.name.trim();
+    if name.is_empty() || name.chars().count() > 200 {
+        return Err(OrganizationError::invalid_argument()
+            .with_constraint("name is 1..=200 characters")
+            .create());
+    }
+    let name = service.rename(&ctx, tenant, name).await.map_err(|error| {
+        OrganizationError::invalid_argument()
+            .with_constraint(format!("{error:#}"))
+            .create()
+    })?;
+    Ok(Json(TenantNameDto {
+        tenant_id: tenant.to_string(),
+        name,
+    }))
 }
 
 fn configured(service: Option<Arc<OrganizationService>>) -> ApiResult<Arc<OrganizationService>> {
@@ -800,7 +987,10 @@ fn rollup_dto(r: super::rollups::Rollup) -> RollupDto {
 }
 
 async fn list_rollups(
-    Extension(ctx): Extension<SecurityContext>,
+    // `?organization_id=`: the portfolio of an organization the caller
+    // reaches but is not at home in (the Inbox on another organization's
+    // screen).
+    crate::org_scope::OrgCtx(ctx): crate::org_scope::OrgCtx,
     Extension(sources): Extension<Option<Arc<super::rollups::Sources>>>,
     axum::extract::Query(query): axum::extract::Query<RollupQuery>,
 ) -> ApiResult<JsonBody<RollupListDto>> {
@@ -884,6 +1074,12 @@ pub struct OrganizationOverviewDto {
     pub waiting_on: Option<Vec<OverviewQueueDto>>,
     /// The component registry's open decisions. Null when it could not be read.
     pub decisions: Option<OverviewDecisionsDto>,
+    /// The kits installed for the whole organization that the answer was
+    /// computed for (ADR-0070 §7): a need of a kit not among them is not
+    /// listed, and without `project-git` the pull-request parts (`delivery`'s
+    /// counts, `waiting_on`, each place's `stuck`) are null or zero. Null when
+    /// the installed kits could not be read, and nothing was left out.
+    pub kits: Option<Vec<String>>,
 }
 
 /// One thing that waits on the organization's leaders. `kind` says which
@@ -911,6 +1107,12 @@ pub struct OverviewNeedDto {
     pub people: Option<u32>,
     pub components: Option<u32>,
     pub runs: Option<u32>,
+    /// The kit the need is read for and whose screen answers it
+    /// (`project-git` for stuck pull requests, `org-costs` for spend,
+    /// `components` for the registry's decisions); null for the shell's own
+    /// (a refused connection, failed runs). A need of a kit not installed for
+    /// the organization is not listed.
+    pub kit: Option<String>,
 }
 
 /// The organization's spend. People's own keys are never in it: `own_keys`
@@ -1079,6 +1281,292 @@ async fn get_organization_overview(
             .create()
     })?;
     Ok(Json(answer))
+}
+
+// ── a project's status ───────────────────────────────────────────────────────
+
+/// Where a signal's action goes.
+#[derive(Debug, Clone)]
+#[toolkit_macros::api_dto(response)]
+pub struct ProjectSignalActionDto {
+    /// What the button says: "Open Releases".
+    pub label: String,
+    /// A project tab (`sources`, `specs`, `model`, `components`, `releases`,
+    /// `activity`), `pulls` (the project's pull requests) or `ide`.
+    pub target: String,
+}
+
+/// One reason behind the verdict.
+#[derive(Debug, Clone)]
+#[toolkit_macros::api_dto(response)]
+pub struct ProjectSignalDto {
+    /// `refused`, `product`, `build`, `deploy`, `findings`, `specs`, `stuck`,
+    /// `nobody`, `threads`, `quiet`.
+    pub key: String,
+    /// `blocked`, `risk` or `info`; `info` does not move the verdict.
+    pub level: String,
+    /// The reason in a few words.
+    pub phrase: String,
+    pub detail: Option<String>,
+    pub action: ProjectSignalActionDto,
+    /// The kit the signal is read for and whose tab its action opens
+    /// (`project-git`, `project-specs`, `project-issues`, `product-releases`,
+    /// `project-activity`); null for the shell's own (the repository
+    /// connection, the IDE). A signal of a kit not installed for the project
+    /// is not listed (ADR-0070 §7).
+    pub kit: Option<String>,
+}
+
+/// One step of the project's path.
+#[derive(Debug, Clone)]
+#[toolkit_macros::api_dto(response)]
+pub struct ProjectPathStepDto {
+    /// `repos`, `types`, `model`, `findings`, `product` or `build`.
+    pub step: String,
+    pub title: String,
+    /// `done`, `current`, `todo`, or `unknown` when its read failed.
+    pub state: String,
+    /// The state as the path strip draws it: `failed` for a failed build or
+    /// a product that does not resolve, `warn` for open high findings,
+    /// `later` for unknown, the state otherwise.
+    pub flow: String,
+    /// One line from the data, e.g. "74 of 75 documents typed."
+    pub status: String,
+    /// The project tab where it is done, and its button.
+    pub tab: String,
+    pub action: String,
+    /// The kit whose tab that is; null for Sources, the shell's own. A step
+    /// of a kit not installed for the project is not on its path.
+    pub kit: Option<String>,
+}
+
+/// A project's status: one verdict, the signals behind it, its path.
+#[derive(Debug, Clone)]
+#[toolkit_macros::api_dto(response)]
+pub struct ProjectStatusDto {
+    pub project_id: String,
+    /// `blocked`, `at_risk` or `on_track`.
+    pub verdict: String,
+    /// "Blocked", "At risk", "On track".
+    pub label: String,
+    /// The main reason: the worst signal's phrase, or on track the next step
+    /// ("next: compose the product") or "path complete".
+    pub reason: String,
+    /// How many more blocking or at-risk signals there are.
+    pub more: u32,
+    /// Worst first.
+    pub signals: Vec<ProjectSignalDto>,
+    pub path: Vec<ProjectPathStepDto>,
+    /// The step to do next; absent when the path is done or unknown.
+    pub next: Option<String>,
+    /// The sources that could not be read: their part is not known, and
+    /// never counted as nothing wrong or nothing done. A source of a kit not
+    /// installed for the project is not read and not named here.
+    pub unread: Vec<String>,
+    /// The kits installed for the project that the status was computed for;
+    /// null when they could not be read, and nothing was left out.
+    pub kits: Option<Vec<String>>,
+}
+
+/// `?project_id=`: the project whose status to read.
+#[derive(Debug, serde::Deserialize)]
+pub struct ProjectStatusQuery {
+    pub project_id: String,
+}
+
+async fn get_project_status(
+    Extension(ctx): Extension<SecurityContext>,
+    Extension(sources): Extension<Option<Arc<super::rollups::Sources>>>,
+    Extension(overview): Extension<Option<Arc<super::overview::Overview>>>,
+    headers: axum::http::HeaderMap,
+    axum::extract::Query(query): axum::extract::Query<ProjectStatusQuery>,
+) -> ApiResult<JsonBody<ProjectStatusDto>> {
+    let project_id = query.project_id;
+    use super::status;
+    let unavailable = || {
+        CanonicalError::service_unavailable()
+            .with_detail("account-management is not available, so nothing can be read")
+            .create()
+    };
+    let sources = sources.ok_or_else(unavailable)?;
+    let id = Uuid::parse_str(project_id.trim()).map_err(|_| {
+        OrganizationError::invalid_argument()
+            .with_constraint("project_id must be a uuid")
+            .create()
+    })?;
+    // The project as the caller sees it, as its rollup row: a project they
+    // do not reach, or a tenant that is not a project, is not there.
+    let not_found = || {
+        OrganizationError::not_found(format!("there is no project {id} for this caller"))
+            .with_resource(id.to_string())
+            .create()
+    };
+    let tenant = sources
+        .am
+        .get_tenant(&ctx, id)
+        .await
+        .map_err(|_| not_found())?;
+    if tenant.tenant_type.as_deref() != Some(super::sdk::PROJECT_TENANT_TYPE) {
+        return Err(not_found());
+    }
+    let org = match tenant.parent_id {
+        Some(ws) => sources
+            .am
+            .get_tenant(&ctx, ws.0)
+            .await
+            .ok()
+            .and_then(|w| w.parent_id.map(|p| p.0)),
+        None => None,
+    };
+    let rollup = sources.one_project(&ctx, id).await.ok_or_else(not_found)?;
+    let api = crate::mcp::api_as(headers.get(axum::http::header::AUTHORIZATION).cloned())
+        .ok_or_else(|| {
+            CanonicalError::service_unavailable()
+                .with_detail("studio-mcp is not running here, so the other gears cannot be read")
+                .create()
+        })?;
+    let health = async {
+        let overview = overview.as_ref()?;
+        let answer = overview
+            .answer(&ctx, org?, time::OffsetDateTime::now_utc())
+            .await
+            .ok()?;
+        let line = answer
+            .workspaces
+            .into_iter()
+            .flat_map(|w| w.projects)
+            .find(|p| p.id == id.to_string())?;
+        Some(status::Health {
+            refused: line.reasons.iter().any(|r| r.kind == "refused"),
+            quiet_days: line.reasons.iter().find(|r| r.kind == "quiet").map(|r| {
+                r.value
+                    .map_or(line.quiet_days.unwrap_or(0), |v| v.round() as u32)
+            }),
+            specs_failing: line.specs_failing,
+            stuck: line.stuck,
+        })
+    };
+    let project = id.to_string();
+    // The kits installed for the project: what each signal and step belongs
+    // to (ADR-0070 §7). Read beside the facts; a kit that does not apply
+    // leaves its facts unread-and-unsaid rather than unknown.
+    let kits = async {
+        match overview.as_ref() {
+            Some(overview) => overview.kits(&ctx, id).await,
+            None => status::Kits::All,
+        }
+    };
+    let (read, health, kits) = tokio::join!(
+        super::status_read::read(&api, &project, rollup.repos),
+        health,
+        kits
+    );
+    let mut unread = Vec::new();
+    for (name, missing, kit) in [
+        ("repositories", read.path.repositories.is_none(), None),
+        (
+            "specs",
+            read.path.specs.is_none(),
+            status::step_kit("types"),
+        ),
+        (
+            "project domain model",
+            read.path.model.is_none(),
+            status::step_kit("model"),
+        ),
+        (
+            "findings",
+            read.path.findings.is_none(),
+            status::step_kit("findings"),
+        ),
+        (
+            "product",
+            read.path.product.is_none(),
+            status::step_kit("product"),
+        ),
+        (
+            "builds",
+            read.path.build.is_none(),
+            status::step_kit("build"),
+        ),
+        (
+            "pull requests",
+            read.pulls.is_none(),
+            status::signal_kit("stuck"),
+        ),
+        (
+            "deployments",
+            read.deployments.is_none(),
+            status::signal_kit("deploy"),
+        ),
+        ("organization health", health.is_none(), None),
+    ] {
+        if missing && kits.has(kit) {
+            unread.push(name.to_string());
+        }
+    }
+    let facts = status::Facts {
+        specs: rollup.specs.as_ref().map(|s| s.specs),
+        specs_failing: rollup.specs.as_ref().map(|s| s.failing),
+        open_comments: rollup.signals.as_ref().and_then(|s| s.open_comments),
+        pulls: read.pulls,
+        deployments: read.deployments,
+        health,
+        // Comment threads waiting on the caller are read in the IDE's
+        // sessions, which the server does not walk; the rollup's unanswered
+        // threads stand in for them.
+        waiting_on_me: None,
+        path: Some(read.path),
+    };
+    let path = facts
+        .path
+        .as_ref()
+        .map(|p| status::project_path_for(p, &kits))
+        .unwrap_or_default();
+    let signals = status::project_signals_for(&facts, &kits);
+    let verdict = status::project_verdict(&signals, Some(&path));
+    let next = status::next_step(&path).map(|s| s.id.to_string());
+    let path_facts = facts.path.clone().unwrap_or_default();
+    Ok(Json(ProjectStatusDto {
+        project_id: id.to_string(),
+        verdict: verdict.state.to_string(),
+        label: verdict.label.to_string(),
+        reason: verdict.reason,
+        more: verdict.more,
+        signals: signals
+            .into_iter()
+            .map(|s| ProjectSignalDto {
+                key: s.key.to_string(),
+                level: s.level.as_str().to_string(),
+                phrase: s.phrase,
+                detail: s.detail,
+                action: ProjectSignalActionDto {
+                    label: s.action_label.to_string(),
+                    target: s.action_target.to_string(),
+                },
+                kit: s.kit.map(str::to_string),
+            })
+            .collect(),
+        path: path
+            .iter()
+            .map(|s| ProjectPathStepDto {
+                step: s.id.to_string(),
+                title: s.title.to_string(),
+                state: s.state.as_str().to_string(),
+                flow: status::flow_state(s, &path_facts).to_string(),
+                status: s.status.clone(),
+                tab: s.tab.to_string(),
+                action: s.action.to_string(),
+                kit: s.kit.map(str::to_string),
+            })
+            .collect(),
+        next,
+        unread,
+        kits: match kits {
+            status::Kits::All => None,
+            status::Kits::Only(kits) => Some(kits),
+        },
+    }))
 }
 
 /// `?range=` and the narrower scope, if any.
@@ -1255,6 +1743,83 @@ pub fn register_routes(
         .error_401(openapi)
         .error_403(openapi)
         .error_404(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    let router = OperationBuilder::put("/studio-organizations/v1/access-grants")
+        .operation_id("studio_organizations.upsert_access_grant")
+        .summary("Give a subject one role on one scope of the organization")
+        .description(
+            "Changes one grant of the organization's access config instead of the whole \
+             document, so two people editing the Team or People screen do not overwrite each \
+             other: the document is written back on the version read (account-management's \
+             optimistic lock) and a write that lost the race reads again. Replaces the role the \
+             subject held on that scope. Whoever administers access (`access.manage`, or the \
+             owner) may; the PDP decides the write again. Never the `owner` role, which \
+             follows an owner membership. Publishes `tenant.access_changed`.",
+        )
+        .tag("StudioOrganizations")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param_typed("organization_id", true, "The organization", "string")
+        .json_request::<PutAccessGrantRequest>(openapi, "The grant")
+        .handler(put_access_grant)
+        .json_response_with_schema::<AccessGrantDto>(openapi, StatusCode::OK, "The grant as kept")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_403(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    let router = OperationBuilder::delete("/studio-organizations/v1/access-grants")
+        .operation_id("studio_organizations.delete_access_grant")
+        .summary("Take one grant away")
+        .description(
+            "Removes the grant naming `subject_type`/`subject_id` on `scope_type` (and \
+             `scope_id` for a project), and nothing else. Who may is who may put one; an owner \
+             grant is refused. 204, also when there was no such grant. Publishes \
+             `tenant.access_changed`.",
+        )
+        .tag("StudioOrganizations")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param_typed("organization_id", true, "The organization", "string")
+        .query_param("subject_type", true, "`member` or `team`")
+        .query_param("subject_id", true, "The subject")
+        .query_param("scope_type", true, "`org` or `project`")
+        .query_param("scope_id", false, "The project, for a `project` grant")
+        .handler(delete_access_grant)
+        .no_content_response(StatusCode::NO_CONTENT, "Removed")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_403(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    let router = OperationBuilder::put("/studio-organizations/v1/name")
+        .operation_id("studio_organizations.update_tenant_name")
+        .summary("Rename an organization or a workspace")
+        .description(
+            "Renames the tenant through account-management as the caller (it decides who \
+             may) and publishes `tenant.renamed` on the organization's channel, so every open \
+             path bar shows the new name without reading again. A project is renamed in its \
+             project config.",
+        )
+        .tag("StudioOrganizations")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param_typed("organization_id", false, "The organization", "string")
+        .query_param_typed(
+            "tenant_id",
+            false,
+            "A workspace instead (or the organization)",
+            "string",
+        )
+        .json_request::<RenameTenantRequest>(openapi, "The new name")
+        .handler(rename_tenant)
+        .json_response_with_schema::<TenantNameDto>(openapi, StatusCode::OK, "The name as kept")
+        .error_400(openapi)
+        .error_401(openapi)
         .error_500(openapi)
         .register(router, openapi);
 
@@ -1484,6 +2049,12 @@ Labels are deliberately \
             false,
             "Narrow the answer to this workspace and its projects",
         )
+        .query_param_typed(
+            crate::org_scope::PARAM,
+            false,
+            crate::org_scope::PARAM_DOC,
+            "string",
+        )
         .handler(list_rollups)
         .json_response_with_schema::<RollupListDto>(openapi, StatusCode::OK, "The rollups")
         .error_400(openapi)
@@ -1569,6 +2140,34 @@ Labels are deliberately \
         .error_401(openapi)
         .error_404(openapi)
         .error_500(openapi)
+        .register(router, openapi);
+
+    let router = OperationBuilder::get("/studio-organizations/v1/project-status")
+        .operation_id("studio_organizations.get_project_status")
+        .summary("Where a project stands: one verdict, its reasons, and the path to a build")
+        .description(
+            "The project's Overview as one answer: a `verdict` — `blocked` (a refused \
+             repository connection, a product that does not resolve, a failed last build or \
+             deploy, an open high finding), `at_risk` (failing specs, pull requests stuck over \
+             a week or with no reviewer asked) or `on_track`, with the worst signal as its \
+             reason — the `signals` behind it worst first, each with where to act on it, and \
+             the `path` from connecting a repository to a passing build, with the step to do \
+             next. Computed from the same reads the portal made, as the caller, so it shows no \
+             more than those routes would; a source that could not be read is named in \
+             `unread` and never counted as nothing wrong or nothing done. 404 when the \
+             project is not the caller's to see.",
+        )
+        .tag("StudioOrganizations")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project's tenant id")
+        .handler(get_project_status)
+        .json_response_with_schema::<ProjectStatusDto>(openapi, StatusCode::OK, "The status")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
         .register(router, openapi);
 
     let router = router

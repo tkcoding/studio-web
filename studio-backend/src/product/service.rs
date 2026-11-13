@@ -660,6 +660,27 @@ impl ProductService {
         })
     }
 
+    /// The project's config as the caller reads it; none when it cannot be
+    /// read.
+    pub async fn project_config(&self, ctx: &SecurityContext, project: Uuid) -> Option<Value> {
+        let am = self.account_management.get()?;
+        crate::project_sources::read_config(am.as_ref(), ctx, project).await
+    }
+
+    /// Change the project's config as the caller (`project_sources::update_config`).
+    pub async fn update_project_config(
+        &self,
+        ctx: &SecurityContext,
+        project: Uuid,
+        change: impl FnMut(&mut Value) -> bool,
+    ) -> anyhow::Result<bool> {
+        let am = self
+            .account_management
+            .get()
+            .ok_or_else(|| anyhow::anyhow!("account-management is not available here"))?;
+        crate::project_sources::update_config(am.as_ref(), ctx, project, change).await
+    }
+
     /// The project's sources, as the caller reads its config; none when it
     /// cannot be read.
     pub async fn project_sources(

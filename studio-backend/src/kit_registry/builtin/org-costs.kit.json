@@ -1,0 +1,26 @@
+{
+  "manifest_version": "1",
+  "slug": "org-costs",
+  "name": "Costs",
+  "description": "What an organization's model calls and IDE sessions cost, its price list and monthly budgets.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "organization"
+  ],
+  "model": {
+    "properties": [
+      {
+        "on": "organization",
+        "property": {
+          "name": "costs",
+          "type": "budget",
+          "relation": "budget",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Costs",
+          "description": "A tab of the organization: what it shows."
+        }
+      }
+    ]
+  }
+}

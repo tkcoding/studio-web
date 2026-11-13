@@ -47,6 +47,7 @@ fn f(n: &str, t: &str) -> (String, String, String) {
 fn needs() -> Vec<TypeNeed> {
     vec![
         TypeNeed {
+            declared_by: "studio-documents".to_owned(),
             id: REQUEST.to_string(),
             held_by: Some("studio-documents".to_string()),
             fields: vec![
@@ -70,6 +71,7 @@ fn needs() -> Vec<TypeNeed> {
             ..Default::default()
         },
         TypeNeed {
+            declared_by: "studio-documents".to_owned(),
             id: APPROVAL.to_string(),
             held_by: Some("studio-documents".to_string()),
             fields: vec![
@@ -89,6 +91,7 @@ fn needs() -> Vec<TypeNeed> {
             ..Default::default()
         },
         TypeNeed {
+            declared_by: "studio-documents".to_owned(),
             id: DECISION.to_string(),
             name: "Decision".to_string(),
             description: "A decision a project recorded: what was decided, about which requirements, by whom."

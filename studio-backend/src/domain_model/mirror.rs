@@ -378,12 +378,8 @@ impl DomainMirror {
         let conn = self.db.conn()?;
         let scope = AccessScope::for_tenant(tenant);
         let cond = Self::root_condition(q);
-        let total = object::Entity::find()
-            .secure()
-            .scope_with(&scope)
-            .filter(cond.clone())
-            .count(&conn)
-            .await?;
+        let counted = cond.clone();
+        let cursor = after.is_some();
         let page = match after {
             Some(a) => cond.add(a),
             None => cond,
@@ -401,6 +397,22 @@ impl DomainMirror {
             .limit(limit)
             .all(&conn)
             .await?;
+        // A page that is not full, read from the start of the matches (no
+        // cursor) and not past their end, already says how many there are.
+        // Counting is the expensive half of a scoped read over a large type
+        // (a payload filter cannot use an index), so it runs only when the
+        // page cannot answer it.
+        let n = rows.len() as u64;
+        let total = if !cursor && n < limit && (n > 0 || offset == 0) {
+            offset + n
+        } else {
+            object::Entity::find()
+                .secure()
+                .scope_with(&scope)
+                .filter(counted)
+                .count(&conn)
+                .await?
+        };
         Ok((rows.into_iter().map(to_node).collect(), total))
     }
 

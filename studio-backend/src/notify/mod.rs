@@ -110,6 +110,18 @@ impl toolkit::contracts::RestApiCapability for StudioNotifyGear {
             .get()
             .cloned()
             .unwrap_or_else(|| NotifyService::new(ctx.client_hub()));
-        Ok(rest::register_routes(router, openapi, service))
+        // Who may send through the route: studio-user's administrative
+        // answer, resolved after every gear's `init`. Absent when that gear is
+        // inert, and then nobody may.
+        let authority = rest::Authority(
+            ctx.client_hub()
+                .get_scoped::<dyn crate::user_profile::OrgAuthority>(
+                    &toolkit::client_hub::ClientScope::gts_id(
+                        crate::user_profile::IDENTITY_INSTANCE_ID,
+                    ),
+                )
+                .ok(),
+        );
+        Ok(rest::register_routes(router, openapi, service, authority))
     }
 }

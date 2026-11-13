@@ -5,7 +5,7 @@ producer would have reported beforehand, and how many of its reports a later
 fix confirms. Measured with [`scripts/probe-calibrate.mjs`](../scripts/probe-calibrate.mjs)
 on any git repository, for any producer that can say where its finding is: the
 spec findings ([spec-findings.md](spec-findings.md), the domain-model rules in
-[spec-domain-model.md](spec-domain-model.md#calibration)), and later an audit
+[project-domain-model.md](project-domain-model.md#calibration)), and later an audit
 of code.
 
 Status: a tool, 2026-10-19. The calibrations recorded so far were judged by

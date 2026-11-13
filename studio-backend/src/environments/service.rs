@@ -1,5 +1,6 @@
 //! What the routes do: who may, against what, and in which order.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use base64::Engine;
@@ -40,6 +41,11 @@ pub use infra_service::InfraPlan;
 #[path = "service_pipeline.rs"]
 mod pipeline_service;
 pub use pipeline_service::{BuildView, SecretKeys};
+
+// A project's path to running, and the caller's own Research targets
+// (#1050, #1053).
+#[path = "service_path.rs"]
+mod path_service;
 
 /// The privilege that manages an organization's environments and decides
 /// about deploys to its protected ones (ADR-0043 §1, §3).
@@ -964,6 +970,8 @@ impl EnvironmentService {
                 .await?
             }
             EnvironmentKind::Research => {
+                // The project's own environment: the kit may be the project's.
+                self.require_research_kit(ctx, project).await?;
                 self.check_research_connection(ctx, project, input.connection_id)
                     .await?
             }
@@ -1123,6 +1131,7 @@ impl EnvironmentService {
                 self.check_connection(ctx, org, input.connection_id).await?
             }
             EnvironmentKind::Research => {
+                self.require_research_kit(ctx, org).await?;
                 self.check_research_connection(ctx, org, input.connection_id)
                     .await?
             }
@@ -2809,6 +2818,131 @@ impl EnvironmentService {
 
     /* ── Constructor Research (ADR-0049) ── */
 
+    /// Whether the Constructor Research kit applies where `tenant` is: a
+    /// project's effective kits (base, organization and its own), or an
+    /// organization's (base and its own). Asked of studio-kits
+    /// (`KitPresence`); an assembly without studio-kits has no kits to
+    /// install, so nothing is held back there.
+    async fn research_kit_applies(&self, ctx: &SecurityContext, tenant: Uuid) -> Result<bool> {
+        use crate::kit_registry::port::{CONSTRUCTOR_RESEARCH_KIT, KitPresence};
+        let Ok(kits) = self.hub.get::<dyn KitPresence>() else {
+            return Ok(true);
+        };
+        kits.applies(ctx, tenant, CONSTRUCTOR_RESEARCH_KIT)
+            .await
+            .map_err(|e| {
+                Refusal::Unavailable(format!(
+                    "whether the Constructor Research kit is installed could not be read: {e:#}"
+                ))
+            })
+    }
+
+    /// What Studio does in Constructor Research comes with the Constructor
+    /// Research kit (`docs/design/studio-kits.md` §3.13): adding or changing a
+    /// Research environment, listing a connection's Research projects and
+    /// hardware, and a build, deploy or rollback there. `tenant` is the
+    /// project the request is about (its effective kits), or the organization
+    /// for the organization's own environments. What is already there stays
+    /// readable and removable without it -- status, logs, an uninstall,
+    /// removing the environment.
+    async fn require_research_kit(&self, ctx: &SecurityContext, tenant: Uuid) -> Result<()> {
+        research_kit_gate(self.research_kit_applies(ctx, tenant).await?)
+    }
+
+    /// The kit's Inbox source `deploy-failed` (`docs/design/studio-kits.md`
+    /// §3.11): the caller's own Research deploys whose newest attempt in an
+    /// environment failed, newest first, in the projects where the kit
+    /// applies. A deploy waits on whoever asked for it.
+    pub async fn research_failed_deploys(
+        &self,
+        ctx: &SecurityContext,
+        org: Uuid,
+    ) -> Result<Vec<Deployment>> {
+        let me = self.person(ctx).await.id;
+        let all = self.deployments(ctx, org, None, None).await?;
+        let mut out = Vec::new();
+        let mut known: BTreeMap<Uuid, bool> = BTreeMap::new();
+        for d in failed_research_deploys(&all, &me) {
+            let applies = match known.get(&d.project_id) {
+                Some(applies) => *applies,
+                None => {
+                    let applies = self.research_kit_applies(ctx, d.project_id).await?;
+                    known.insert(d.project_id, applies);
+                    applies
+                }
+            };
+            if applies {
+                out.push(d.clone());
+            }
+        }
+        Ok(out)
+    }
+
+    /// The deploys of `org` waiting for a decision, oldest first, when the
+    /// caller is one who decides them (an organization administrator, or
+    /// whoever holds the environments' manage privilege); empty for anybody
+    /// else. The Releases kit's Inbox source: Approve / Decline answer it
+    /// (`POST /deployments/{deployment_id}/decisions`).
+    pub async fn deploys_awaiting_approval(
+        &self,
+        ctx: &SecurityContext,
+        org: Uuid,
+    ) -> Result<Vec<Deployment>> {
+        if !self.may_manage(ctx, org).await {
+            return Ok(Vec::new());
+        }
+        let all = self.deployments(ctx, org, None, None).await?;
+        Ok(awaiting_approval(&all).into_iter().cloned().collect())
+    }
+
+    /// The kit's Inbox source `sign-in-expires`: the caller's own Research
+    /// sign-in when it runs out within [`RESEARCH_SIGN_IN_WARN_DAYS`] or has
+    /// run out (its access key lasts the connector's key lifetime from the
+    /// sign-in, ADR-0049 §1), where the kit is in use: it applies to the
+    /// organization, or to a project the caller deployed to Research.
+    pub async fn research_sign_in_due(
+        &self,
+        ctx: &SecurityContext,
+        org: Uuid,
+    ) -> Result<Option<SignInDue>> {
+        let am = self.store.am().as_ref();
+        let from = [org, ctx.subject_tenant_id()];
+        let Some((_, c)) =
+            connectors::own_connection(am, ctx, &from, connectors::RESEARCH_PROVIDER).await
+        else {
+            return Ok(None);
+        };
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        let Some(due) = sign_in_due(
+            c.id,
+            c.created_at_epoch_secs,
+            now,
+            connectors::RESEARCH_KEY_LIFETIME_DAYS,
+            RESEARCH_SIGN_IN_WARN_DAYS,
+        ) else {
+            return Ok(None);
+        };
+        if self.research_kit_applies(ctx, org).await? {
+            return Ok(Some(due));
+        }
+        let me = self.person(ctx).await.id;
+        let mut asked: Vec<Uuid> = self
+            .deployments(ctx, org, None, None)
+            .await?
+            .into_iter()
+            .filter(|d| d.research.is_some() && d.requested_by == me)
+            .map(|d| d.project_id)
+            .collect();
+        asked.sort_unstable();
+        asked.dedup();
+        for project in asked {
+            if self.research_kit_applies(ctx, project).await? {
+                return Ok(Some(due));
+            }
+        }
+        Ok(None)
+    }
+
     /// The caller's own Research sign-in. A Research environment runs every
     /// build, deploy and read with the sign-in of the member who asks
     /// (ADR-0049 §1): Research's access keys are personal, and a project there
@@ -2876,6 +3010,7 @@ impl EnvironmentService {
         connection_id: Uuid,
     ) -> Result<Vec<crate::connectors::sdk::research::Project>> {
         self.require_manage(ctx, org).await?;
+        self.require_research_kit(ctx, org).await?;
         self.research_api(ctx, org, connection_id)
             .await?
             .projects()
@@ -2894,6 +3029,7 @@ impl EnvironmentService {
         project: &str,
     ) -> Result<Vec<crate::connectors::sdk::research::Hardware>> {
         self.require_manage(ctx, org).await?;
+        self.require_research_kit(ctx, org).await?;
         self.research_api(ctx, org, connection_id)
             .await?
             .hardware(project)
@@ -2918,6 +3054,8 @@ impl EnvironmentService {
         application: String,
         description: Option<crate::product::port::DescriptionRevision>,
     ) -> Result<BuildStarted> {
+        // A build is a project's: base, organization or the project's own kit.
+        self.require_research_kit(ctx, project).await?;
         let target = env.research.as_ref().ok_or_else(|| {
             Refusal::Precondition(
                 "ENVIRONMENT_RESEARCH_UNUSABLE",
@@ -2991,6 +3129,9 @@ impl EnvironmentService {
         env: &Environment,
         req: DeployRequest,
     ) -> Result<Deployment> {
+        if research_needs_kit(req.action) {
+            self.require_research_kit(ctx, project).await?;
+        }
         let target = env.research.clone().ok_or_else(|| {
             Refusal::Precondition(
                 "ENVIRONMENT_RESEARCH_UNUSABLE",
@@ -3601,9 +3742,198 @@ pub struct BuildLog {
     pub steps: Vec<build::StepLog>,
 }
 
+/// The refusal code for something only a kit that is not installed brings
+/// (ADR-0070 §7, decision 5).
+pub const KIT_NOT_INSTALLED: &str = "KIT_NOT_INSTALLED";
+
+/// Whether a deploy request to a Research environment needs the Constructor
+/// Research kit: everything but an uninstall, which takes away what an
+/// organization ran there before it removed the kit.
+fn research_needs_kit(action: DeploymentAction) -> bool {
+    action != DeploymentAction::Uninstall
+}
+
+/// The answer when the organization has, or has not, the Constructor Research
+/// kit: a refusal that names the kit and how to get it.
+fn research_kit_gate(applies: bool) -> Result<()> {
+    if applies {
+        return Ok(());
+    }
+    Err(Refusal::Precondition(
+        KIT_NOT_INSTALLED,
+        format!(
+            "building and running a product in Constructor Research comes with the Constructor \
+             Research kit (`{}`), which is not installed here: an administrator installs it \
+             for the organization under Organization › Kits, or for this project under \
+             Project › Kits",
+            crate::kit_registry::port::CONSTRUCTOR_RESEARCH_KIT
+        ),
+    ))
+}
+
+/// How many days before a Research sign-in runs out the Inbox says so.
+pub const RESEARCH_SIGN_IN_WARN_DAYS: i64 = 14;
+
+/// A Research sign-in that runs out soon, or has.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignInDue {
+    pub connection_id: Uuid,
+    /// When its key runs out, Unix seconds.
+    pub expires_at: i64,
+    /// Whole days left, rounded up; 0 once it ran out.
+    pub days_left: i64,
+}
+
+/// A sign-in made at `created` (Unix seconds) with a key of `lifetime_days`:
+/// due when `now` is within `warn_days` of its end, or past it.
+fn sign_in_due(
+    connection_id: Uuid,
+    created: u64,
+    now: i64,
+    lifetime_days: i64,
+    warn_days: i64,
+) -> Option<SignInDue> {
+    const DAY: i64 = 86_400;
+    let expires_at = i64::try_from(created)
+        .unwrap_or(i64::MAX)
+        .saturating_add(lifetime_days.saturating_mul(DAY));
+    let left = expires_at.saturating_sub(now);
+    if left > warn_days.saturating_mul(DAY) {
+        return None;
+    }
+    let days_left = if left <= 0 { 0 } else { (left + DAY - 1) / DAY };
+    Some(SignInDue {
+        connection_id,
+        expires_at,
+        days_left,
+    })
+}
+
+/// The Research deploys `me` asked for whose newest attempt in their
+/// environment failed, newest first. Previews are left out: Research takes
+/// none.
+/// The deploys waiting for a decision, oldest first: the longest wait leads.
+fn awaiting_approval(all: &[Deployment]) -> Vec<&Deployment> {
+    let mut out: Vec<&Deployment> = all
+        .iter()
+        .filter(|d| d.state == DeploymentState::AwaitingApproval)
+        .collect();
+    out.sort_by(|a, b| a.requested_at.cmp(&b.requested_at));
+    out
+}
+
+fn failed_research_deploys<'d>(all: &'d [Deployment], me: &str) -> Vec<&'d Deployment> {
+    let mut newest: BTreeMap<(Uuid, Uuid), &Deployment> = BTreeMap::new();
+    for d in all
+        .iter()
+        .filter(|d| d.research.is_some() && d.preview.is_none())
+    {
+        let key = (d.project_id, d.environment_id);
+        if newest
+            .get(&key)
+            .is_none_or(|n| n.requested_at < d.requested_at)
+        {
+            newest.insert(key, d);
+        }
+    }
+    let mut out: Vec<&Deployment> = newest
+        .into_values()
+        .filter(|d| d.state == DeploymentState::Failed && d.requested_by == me)
+        .collect();
+    out.sort_by(|a, b| b.requested_at.cmp(&a.requested_at));
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn research_deploy(project: u128, at: &str, state: &str, by: &str) -> Deployment {
+        serde_json::from_value(serde_json::json!({
+            "id": Uuid::new_v4(),
+            "project_id": Uuid::from_u128(project),
+            "environment_id": Uuid::from_u128(0xe),
+            "profile": "kubernetes",
+            "product": "shop",
+            "namespace": "shop-research",
+            "state": state,
+            "requested_by": by,
+            "requested_at": at,
+            "research": {
+                "research_project": "rp-1",
+                "repo": {
+                    "tenant": Uuid::from_u128(1),
+                    "connection_id": Uuid::from_u128(2),
+                    "repo": "acme/shop",
+                    "branch": "main"
+                },
+                "product_file": "product.gdl",
+                "profile": "kubernetes",
+                "commit": "abc1234"
+            }
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_failed_research_deploy_waits_on_whoever_asked_until_a_newer_one() {
+        let older_ok = research_deploy(1, "2026-11-01T00:00:00Z", "succeeded", "ann");
+        let newer_failed = research_deploy(1, "2026-11-02T00:00:00Z", "failed", "ann");
+        let other_project = research_deploy(2, "2026-11-03T00:00:00Z", "failed", "ann");
+        let someone_else = research_deploy(3, "2026-11-03T00:00:00Z", "failed", "bob");
+        let mut cluster = research_deploy(4, "2026-11-04T00:00:00Z", "failed", "ann");
+        cluster.research = None;
+        let all = vec![
+            older_ok.clone(),
+            newer_failed.clone(),
+            other_project.clone(),
+            someone_else,
+            cluster,
+        ];
+        let ids: Vec<Uuid> = failed_research_deploys(&all, "ann")
+            .into_iter()
+            .map(|d| d.id)
+            .collect();
+        assert_eq!(ids, [other_project.id, newer_failed.id]);
+        // A newer deploy that worked takes the item away.
+        let fixed = research_deploy(1, "2026-11-05T00:00:00Z", "succeeded", "bob");
+        let all = vec![older_ok, newer_failed, fixed];
+        assert!(failed_research_deploys(&all, "ann").is_empty());
+    }
+
+    #[test]
+    fn a_research_sign_in_is_due_two_weeks_before_its_key_runs_out() {
+        const DAY: i64 = 86_400;
+        let id = Uuid::from_u128(7);
+        let made = 1_000_000_u64;
+        let made_at = i64::try_from(made).unwrap();
+        let at = |days: i64| made_at + days * DAY;
+        assert_eq!(sign_in_due(id, made, at(1), 90, 14), None);
+        assert_eq!(sign_in_due(id, made, at(75) - 1, 90, 14), None);
+        let due = sign_in_due(id, made, at(76), 90, 14).unwrap();
+        assert_eq!((due.days_left, due.expires_at), (14, at(90)));
+        assert_eq!(
+            sign_in_due(id, made, at(89) + 1, 90, 14).unwrap().days_left,
+            1
+        );
+        assert_eq!(sign_in_due(id, made, at(90), 90, 14).unwrap().days_left, 0);
+        assert_eq!(sign_in_due(id, made, at(120), 90, 14).unwrap().days_left, 0);
+    }
+
+    #[test]
+    fn research_needs_its_kit_except_to_take_away_what_runs() {
+        assert!(research_kit_gate(true).is_ok());
+        let Err(Refusal::Precondition(code, why)) = research_kit_gate(false) else {
+            panic!("refused as a precondition");
+        };
+        assert_eq!(code, KIT_NOT_INSTALLED);
+        assert!(
+            why.contains("constructor-research") && why.contains("Kits"),
+            "{why}"
+        );
+        assert!(research_needs_kit(DeploymentAction::Install));
+        assert!(!research_needs_kit(DeploymentAction::Uninstall));
+    }
 
     #[test]
     fn a_description_that_cannot_be_read_is_not_a_product_never_saved() {

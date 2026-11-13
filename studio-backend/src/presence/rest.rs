@@ -162,6 +162,36 @@ pub struct SendNoteDto {
 #[derive(Clone)]
 struct Registry(Arc<PresenceRegistry>);
 
+/// Who may read the whole list: studio-user's answer to "is this person a
+/// platform administrator". `None` when studio-user is not in this deployment,
+/// and then nobody may -- the list names everybody in every organization.
+#[derive(Clone)]
+pub struct Admins(pub Option<Arc<dyn crate::user_profile::OrganizationReader>>);
+
+/// The reason a caller who is not a platform administrator is refused the
+/// list with (403), for the screen to say so.
+pub const PLATFORM_ADMIN_REQUIRED: &str = "PLATFORM_ADMIN_REQUIRED";
+
+/// The list is every person in Studio, across organizations, with where they
+/// are: a platform administrator's to read (#1044). Membership of the platform
+/// root, asked of studio-user -- the same one rule every platform route uses.
+async fn require_platform_admin(ctx: &SecurityContext, admins: &Admins) -> ApiResult<()> {
+    let admin = match admins.0.as_deref() {
+        Some(reader) => reader
+            .is_platform_admin(&ctx.subject_id().to_string())
+            .await
+            .unwrap_or(false),
+        None => false,
+    };
+    if admin {
+        Ok(())
+    } else {
+        Err(PresenceError::permission_denied()
+            .with_reason(PLATFORM_ADMIN_REQUIRED)
+            .create())
+    }
+}
+
 fn invalid(why: &str) -> CanonicalError {
     PresenceError::invalid_argument()
         .with_constraint(why.to_owned())
@@ -233,8 +263,11 @@ fn online_list(registry: &Registry) -> OnlineListDto {
 }
 
 async fn list_online(
+    Extension(ctx): Extension<SecurityContext>,
     Extension(registry): Extension<Registry>,
+    Extension(admins): Extension<Admins>,
 ) -> ApiResult<JsonBody<OnlineListDto>> {
+    require_platform_admin(&ctx, &admins).await?;
     Ok(Json(online_list(&registry)))
 }
 
@@ -286,6 +319,7 @@ pub fn register_routes(
     router: Router,
     openapi: &dyn OpenApiRegistry,
     registry: Arc<PresenceRegistry>,
+    admins: Admins,
 ) -> Router {
     let registry = Registry(registry);
 
@@ -341,7 +375,8 @@ pub fn register_routes(
              recently seen first. The window and the heartbeat interval come \
              back with the list so a client shows 'last seen' against the same \
              threshold the server judged by. State is per-process: a restart \
-             empties this until each client's next heartbeat.",
+             empties this until each client's next heartbeat. A platform \
+             administrator's: anybody else is refused 403 `PLATFORM_ADMIN_REQUIRED`.",
         )
         .tag("StudioPresence")
         .authenticated()
@@ -353,9 +388,11 @@ pub fn register_routes(
             "Everybody currently in Studio",
         )
         .error_401(openapi)
+        .error_403(openapi)
         .error_500(openapi)
         .register(router, openapi)
-        .layer(Extension(registry.clone()));
+        .layer(Extension(registry.clone()))
+        .layer(Extension(admins));
 
     OperationBuilder::post("/studio-presence/v1/messages")
         .operation_id("studio_presence.send_message")
@@ -383,4 +420,88 @@ pub fn register_routes(
         .error_500(openapi)
         .register(router, openapi)
         .layer(Extension(registry))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::response::IntoResponse;
+
+    const ADMIN: u128 = 1;
+
+    struct Reader;
+
+    #[async_trait::async_trait]
+    impl crate::user_profile::OrganizationReader for Reader {
+        async fn organizations_of(&self, _: &str) -> anyhow::Result<Vec<uuid::Uuid>> {
+            Ok(Vec::new())
+        }
+        async fn grant_keys_of(&self, subject: &str) -> anyhow::Result<Vec<String>> {
+            Ok(vec![subject.to_owned()])
+        }
+        async fn is_platform_admin(&self, subject: &str) -> anyhow::Result<bool> {
+            Ok(subject == uuid::Uuid::from_u128(ADMIN).to_string())
+        }
+        async fn memberships_of_subject(
+            &self,
+            _: &str,
+        ) -> anyhow::Result<Vec<crate::user_profile::SubjectMembership>> {
+            Ok(Vec::new())
+        }
+        fn membership_generation(&self) -> u64 {
+            0
+        }
+    }
+
+    fn caller(id: u128) -> SecurityContext {
+        SecurityContext::builder()
+            .subject_id(uuid::Uuid::from_u128(id))
+            .subject_tenant_id(uuid::Uuid::from_u128(0x0a))
+            .build()
+            .unwrap()
+    }
+
+    fn registry() -> Registry {
+        let registry = Arc::new(PresenceRegistry::default());
+        registry.beat("someone", None, "t", None, None, now_ms());
+        Registry(registry)
+    }
+
+    async fn list(id: u128, admins: Admins) -> ApiResult<JsonBody<OnlineListDto>> {
+        list_online(
+            Extension(caller(id)),
+            Extension(registry()),
+            Extension(admins),
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn a_platform_administrator_reads_who_is_online() {
+        let Json(list) = list(ADMIN, Admins(Some(Arc::new(Reader))))
+            .await
+            .expect("an administrator reads it");
+        assert_eq!(list.total, 1);
+    }
+
+    #[tokio::test]
+    async fn anybody_else_is_refused_with_the_reason() {
+        let refused = list(7, Admins(Some(Arc::new(Reader))))
+            .await
+            .expect_err("refused");
+        let response = refused.into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(
+            String::from_utf8_lossy(&body).contains(PLATFORM_ADMIN_REQUIRED),
+            "the screen reads the reason"
+        );
+    }
+
+    #[tokio::test]
+    async fn without_studio_user_nobody_reads_it() {
+        assert!(list(ADMIN, Admins(None)).await.is_err());
+    }
 }

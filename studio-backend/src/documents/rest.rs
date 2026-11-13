@@ -1541,14 +1541,14 @@ async fn list_project_documents(
     Path((workspace_id, project_id)): Path<(Uuid, Uuid)>,
     Query(page): Query<PageQuery>,
 ) -> ApiResult<JsonBody<DocumentListDto>> {
-    service
-        .authorize(&ctx, workspace_id)
-        .await
-        .map_err(no_tenant)?;
-    service
-        .authorize(&ctx, project_id)
-        .await
-        .map_err(no_tenant)?;
+    // Both guards at once: each is its own account-management round trip.
+    // Nothing is read until both have passed.
+    let (in_workspace, in_project) = tokio::join!(
+        service.authorize(&ctx, workspace_id),
+        service.authorize(&ctx, project_id),
+    );
+    in_workspace.map_err(no_tenant)?;
+    in_project.map_err(no_tenant)?;
     let (items, total) = service
         .list_documents(&ctx, workspace_id, Some(project_id), page)
         .await
@@ -1886,7 +1886,7 @@ impl Quality {
             .ok()
     }
 
-    /// The model client, for reading documents into the spec model on the
+    /// The model client, for reading documents into the project domain model on the
     /// caller's key.
     fn models(&self) -> ApiResult<Arc<dyn crate::llm_proxy::port::ModelProviders>> {
         self.hub
@@ -1894,7 +1894,7 @@ impl Quality {
             .map_err(|_| {
                 CanonicalError::service_unavailable()
                     .with_detail(
-                        "the domain model cannot be built in this deployment: \
+                        "the project domain model cannot be built in this deployment: \
                          studio-llm-proxy is not part of it",
                     )
                     .create()
@@ -2307,7 +2307,7 @@ async fn delete_binding(
 
 // ── registration ─────────────────────────────────────────────────────────────
 
-// ── the domain model read from a project's documents ─────────────────────────
+// ── the project domain model, read from a project's documents ────────────────
 
 /// One passage a finding rests on.
 #[derive(Debug)]
@@ -2392,7 +2392,7 @@ impl From<super::spec_model::finding::Finding> for SpecModelFindingDto {
     }
 }
 
-/// One field of an entity, as a person wrote it on the Domain model tab.
+/// One field of an entity, as a person wrote it on the Project domain model tab.
 #[derive(Debug)]
 #[toolkit_macros::api_dto(request)]
 pub struct SpecModelFieldInput {
@@ -2411,7 +2411,7 @@ pub struct SpecModelRelationInput {
     pub target: String,
 }
 
-/// An entity of the domain model as a person edited it: what it is, what it
+/// An entity of the project domain model as a person edited it: what it is, what it
 /// holds, how it relates. It replaces the entity's section of
 /// `docs/domain-model.md`.
 #[derive(Debug)]
@@ -2426,7 +2426,7 @@ pub struct SpecModelEntityRequest {
     pub relations: Vec<SpecModelRelationInput>,
 }
 
-/// A sentence the Domain model tab proposes for a document, after the passage
+/// A sentence the Project domain model tab proposes for a document, after the passage
 /// the model read a fact from: the relation an entity has no document stating.
 #[derive(Debug)]
 #[toolkit_macros::api_dto(request)]
@@ -2600,11 +2600,13 @@ pub struct GlossaryDecisionRequest {
 pub struct SpecModelReviewDto {
     /// The fact as the tab keys it.
     pub fact_key: String,
-    /// `accepted` or `rejected`.
+    /// `accepted`, `rejected` or `corrected`; a prefixed key's own state.
     pub state: String,
     pub path: String,
     pub revision: String,
     pub note: Option<String>,
+    /// For `corrected`: the value given in place of the one read.
+    pub value: Option<String>,
     pub decided_by: String,
     pub decided_at: String,
 }
@@ -2671,6 +2673,11 @@ pub struct SpecModelReviewInput {
     /// Why, when it needs saying: an excluded obligation's reason.
     #[serde(default)]
     pub note: Option<String>,
+    /// With `state: corrected` (a fact's key only): the value a member gives
+    /// in place of the one the model read, at most 2000 bytes. The model
+    /// answers it as the fact's `value`, the read one as `extracted_value`.
+    #[serde(default)]
+    pub value: Option<String>,
 }
 
 /// An issue to open in the project's repository from something to decide.
@@ -2804,7 +2811,7 @@ pub struct WorkLinkListDto {
 }
 
 /// One requirement a project's documents define, and what it states it
-/// rests on (docs/spec-domain-model.md, "Requirements and their basis").
+/// rests on (docs/project-domain-model.md, "Requirements and their basis").
 #[derive(Debug)]
 #[toolkit_macros::api_dto(response)]
 pub struct SpecRequirementDto {
@@ -2852,6 +2859,15 @@ pub struct SpecModelBuildRequest {
     /// that document's facts only, and the rest of the model stays as it is.
     /// Without it, every document not read at its revision is read.
     pub path: Option<String>,
+    /// Documents to read again, as `GET /project-domain-model/coverage`
+    /// lists them (at most 500), beside `path` and `glob`: each is read
+    /// whatever its state, its facts replace that document's only, and a
+    /// path that is not a document of the model refuses the whole build.
+    pub paths: Option<Vec<String>>,
+    /// Documents to read again by pattern: `*` within a directory, `**`
+    /// across directories, `?` one character (`docs/prd/**`). A pattern that
+    /// matches no document refuses the build.
+    pub glob: Option<String>,
 }
 
 /// What a build would read, and about how long it would take.
@@ -2881,10 +2897,17 @@ pub struct SpecModelBuildEstimateDto {
 #[derive(Debug, serde::Deserialize)]
 pub struct SpecBuildEstimateQuery {
     pub project_id: String,
-    /// One document to estimate reading again, as `POST /spec-model/builds`
+    /// One document to estimate reading again, as `POST /project-domain-model/builds`
     /// with a `path` would.
     #[serde(default)]
     pub path: Option<String>,
+    /// Documents to estimate reading again, comma-separated, as the build's
+    /// `paths`.
+    #[serde(default)]
+    pub paths: Option<String>,
+    /// Documents to estimate reading again by pattern, as the build's `glob`.
+    #[serde(default)]
+    pub glob: Option<String>,
 }
 
 /// A project's build, as the process serving it knows it.
@@ -2909,6 +2932,9 @@ pub struct SpecModelBuildDto {
     pub estimated_seconds: Option<u64>,
     /// The one document this build reads again, when it was asked for one.
     pub path: Option<String>,
+    /// Every document this build reads again, when it was asked for some
+    /// (`path`, `paths`, `glob`); empty when it reads what is not read yet.
+    pub paths: Vec<String>,
 }
 
 impl From<super::spec_model::build::BuildState> for SpecModelBuildDto {
@@ -2931,6 +2957,7 @@ impl From<super::spec_model::build::BuildState> for SpecModelBuildDto {
             finished_at: at(s.finished_at),
             estimated_seconds: s.estimated_seconds,
             path: s.path,
+            paths: s.paths,
         }
     }
 }
@@ -2949,12 +2976,24 @@ pub struct SpecModelDocumentDto {
     /// Facts the model gave that the text did not bear out.
     pub dropped: u32,
     pub error: Option<String>,
+    /// The repository commit the reading shown was taken at, beside the
+    /// content hash `revision`. Null for a Studio document, an uploaded
+    /// source, a document never read, and a reading kept before the commit
+    /// was recorded.
+    pub source_commit: Option<String>,
+    /// The branch checked out when it was read.
+    pub source_ref: Option<String>,
 }
 
 /// One fact, with the passage it rests on.
 #[derive(Debug)]
 #[toolkit_macros::api_dto(response)]
 pub struct SpecModelFactDto {
+    /// The key a member's accept or reject on this fact is stored under
+    /// (`POST /project-domain-model/reviews`): 16 hex digits, the same for the same
+    /// words wherever the passage moves. A hypothesis's evidence is stored
+    /// under `ev:` and this key.
+    pub fact_key: String,
     /// `entity`, `attribute`, `relation`, `requirement`, `constraint`,
     /// `lifecycle` or `decision`.
     pub kind: String,
@@ -2970,9 +3009,22 @@ pub struct SpecModelFactDto {
     /// `entity` sits; absent otherwise.
     pub layer: Option<String>,
     pub source: SpecModelSideDto,
+    /// The repository commit the passage was read at (its document's
+    /// reading); null where the document's coverage has none.
+    pub source_commit: Option<String>,
+    /// The branch it was read on.
+    pub source_ref: Option<String>,
+    /// `stated` when every word of its subject and value is in its quote,
+    /// `interpreted` when the model brought words the passage does not have
+    /// (an implicit entity, an inferred value). Derived, never asked.
+    pub basis: String,
+    /// When a member corrected the value (`POST /project-domain-model/reviews`,
+    /// state `corrected`): the value the model read. `value` is then the
+    /// member's.
+    pub extracted_value: Option<String>,
 }
 
-/// A project's domain model as read so far.
+/// The project domain model as read so far.
 #[derive(Debug)]
 #[toolkit_macros::api_dto(response)]
 pub struct SpecModelDto {
@@ -2989,6 +3041,61 @@ pub struct SpecModelDto {
     /// repository failed, or its clone volume cannot be written. A sync does
     /// not help until that is fixed.
     pub unread_because: Option<String>,
+}
+
+/// A requirement the documents leave open: what a reader of the model is
+/// missing to interpret it.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct SpecModelOpenQuestionDto {
+    /// The requirement's identifier.
+    pub id: String,
+    pub text: String,
+    /// The words that leave it open ("TBD", a question).
+    pub because: Option<String>,
+    /// Where it is defined: the label's line.
+    pub defined_in: SpecModelSideDto,
+}
+
+/// What the model has read and what it has not, and why
+/// (`GET /project-domain-model/coverage`): every document's state, the typed
+/// documents this server could not read, and the questions the documents
+/// leave open.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct SpecModelCoverageDto {
+    /// Every document of the model and where it stands.
+    pub items: Vec<SpecModelDocumentDto>,
+    pub total: u32,
+    /// Documents in each state (`extracted`, `failed`, `stale`, `pending`,
+    /// `kept`).
+    pub by_state: std::collections::BTreeMap<String, u32>,
+    /// Typed documents whose text this server has no copy of.
+    pub unread_documents: u32,
+    /// Their paths.
+    pub unread_paths: Vec<String>,
+    /// Why the copy is missing, when the server knows.
+    pub unread_because: Option<String>,
+    /// Requirements the documents leave as open questions.
+    pub open_questions: Vec<SpecModelOpenQuestionDto>,
+    /// Requirements that rest on an assumption.
+    pub assumptions: u32,
+    /// The running or last build, as the process answering knows it.
+    pub build: SpecModelBuildDto,
+}
+
+fn spec_model_document_dto(c: super::spec_model::Coverage) -> SpecModelDocumentDto {
+    let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    SpecModelDocumentDto {
+        path: c.path,
+        revision: c.revision,
+        state: c.state.to_string(),
+        facts: count(c.facts),
+        dropped: count(c.dropped),
+        error: c.error,
+        source_commit: c.at.as_ref().map(|a| a.commit.clone()),
+        source_ref: c.at.and_then(|a| a.git_ref),
+    }
 }
 
 /// The project's sources, the facts of their current revisions, and where
@@ -3020,6 +3127,8 @@ async fn spec_model_state(
             dropped: r.dropped,
             error: r.error.as_deref(),
             created_at: r.created_at.unix_timestamp(),
+            source_commit: r.source_commit.as_deref(),
+            source_ref: r.source_ref.as_deref(),
         })
         .collect();
     let (mut facts, mut coverage) = super::spec_model::current(&sources.documents, &kept);
@@ -3030,7 +3139,7 @@ async fn spec_model_state(
     Ok((sources, facts, coverage))
 }
 
-/// A project's domain model as read so far.
+/// The project domain model as read so far.
 async fn get_spec_model(
     Extension(ctx): Extension<SecurityContext>,
     Extension(service): Extension<Arc<DocumentsService>>,
@@ -3043,28 +3152,56 @@ async fn get_spec_model(
     let (sources, facts, coverage) =
         spec_model_state(&service, &ctx, workspace_id, project_id, reader.as_ref()).await?;
     let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    let corrections: std::collections::BTreeMap<String, String> = service
+        .spec_reviews(&ctx, workspace_id, project_id)
+        .await
+        .map_err(internal)?
+        .into_iter()
+        .filter(|r| r.state == "corrected")
+        .filter_map(|r| Some((r.fact_key, r.value?)))
+        .collect();
+    let facts = spec_model_fact_dtos(facts, &coverage, &corrections);
     Ok(Json(SpecModelDto {
         unread_documents: count(sources.unread.len()),
         unread_because: sources.unread_because,
         build: super::spec_model::build::state(project_id).into(),
-        documents: coverage
-            .into_iter()
-            .map(|c| SpecModelDocumentDto {
-                path: c.path,
-                revision: c.revision,
-                state: c.state.to_string(),
-                facts: count(c.facts),
-                dropped: count(c.dropped),
-                error: c.error,
-            })
-            .collect(),
-        facts: facts
-            .into_iter()
-            .map(|f| SpecModelFactDto {
+        documents: coverage.into_iter().map(spec_model_document_dto).collect(),
+        facts,
+    }))
+}
+
+/// Every fact as the model answers it, with the commit and branch its
+/// document's reading was taken at, whether its passage states it, and a
+/// member's correction of its value (by `fact_key`) in place of the one read.
+fn spec_model_fact_dtos(
+    facts: Vec<super::spec_model::extract::Fact>,
+    coverage: &[super::spec_model::Coverage],
+    corrections: &std::collections::BTreeMap<String, String>,
+) -> Vec<SpecModelFactDto> {
+    let at: std::collections::BTreeMap<&str, &super::spec_model::GitRevision> = coverage
+        .iter()
+        .filter_map(|c| c.at.as_ref().map(|a| (c.path.as_str(), a)))
+        .collect();
+    facts
+        .into_iter()
+        .map(|f| {
+            let read_at = at.get(f.path.as_str()).copied();
+            let fact_key = super::spec_model::fact_key::fact_key(&f);
+            let basis = super::spec_model::basis::basis(&f).to_owned();
+            let (value, extracted_value) = match corrections.get(&fact_key) {
+                Some(corrected) => (corrected.clone(), Some(f.value)),
+                None => (f.value, None),
+            };
+            SpecModelFactDto {
+                fact_key,
+                source_commit: read_at.map(|a| a.commit.clone()),
+                source_ref: read_at.and_then(|a| a.git_ref.clone()),
+                basis,
+                extracted_value,
                 kind: f.kind,
                 subject: f.subject,
                 aspect: f.aspect,
-                value: f.value,
+                value,
                 text: f.text,
                 status: f.status,
                 status_because: f.status_because,
@@ -3076,9 +3213,93 @@ async fn get_spec_model(
                     quote: Some(f.quote),
                     binding_id: None,
                 },
-            })
-            .collect(),
-    }))
+            }
+        })
+        .collect()
+}
+
+/// The project's running or last build, as the process answering knows it.
+async fn get_spec_model_build(
+    Extension(ctx): Extension<SecurityContext>,
+    Extension(service): Extension<Arc<DocumentsService>>,
+    Query(query): Query<SpecScopeQuery>,
+) -> ApiResult<JsonBody<SpecModelBuildDto>> {
+    let project_id = parse_project_id(&query.project_id)?;
+    // Reaching the project is the read's authorization, as for the model.
+    let _ = parent_workspace(&service, &ctx, project_id).await?;
+    Ok(Json(super::spec_model::build::state(project_id).into()))
+}
+
+/// What the model has read, what it has not and why, and the questions the
+/// documents leave open.
+async fn get_spec_model_coverage(
+    Extension(ctx): Extension<SecurityContext>,
+    Extension(service): Extension<Arc<DocumentsService>>,
+    Extension(quality): Extension<Quality>,
+    Query(query): Query<SpecScopeQuery>,
+) -> ApiResult<JsonBody<SpecModelCoverageDto>> {
+    let project_id = parse_project_id(&query.project_id)?;
+    let workspace_id = parent_workspace(&service, &ctx, project_id).await?;
+    let reader = quality.reader()?;
+    let (sources, _, coverage) =
+        spec_model_state(&service, &ctx, workspace_id, project_id, reader.as_ref()).await?;
+    Ok(Json(spec_model_coverage_dto(
+        sources,
+        coverage,
+        super::spec_model::build::state(project_id),
+    )))
+}
+
+/// The coverage answer, from the sources read, where each document stands
+/// and the build.
+fn spec_model_coverage_dto(
+    sources: super::spec_model::Sources,
+    coverage: Vec<super::spec_model::Coverage>,
+    build: super::spec_model::build::BuildState,
+) -> SpecModelCoverageDto {
+    use super::spec_model::requirements::Basis;
+    let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    let mut by_state: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
+    for c in &coverage {
+        *by_state.entry(c.state.to_string()).or_default() += 1;
+    }
+    let requirements = sources.requirements();
+    let assumptions = requirements
+        .iter()
+        .filter(|r| r.basis == Basis::Assumption)
+        .count();
+    let open_questions = requirements
+        .into_iter()
+        .filter(|r| r.basis == Basis::OpenQuestion)
+        .map(|r| {
+            let line = u32::try_from(r.line).ok();
+            SpecModelOpenQuestionDto {
+                defined_in: SpecModelSideDto {
+                    path: r.path,
+                    line_start: line,
+                    line_end: line,
+                    quote: None,
+                    binding_id: None,
+                },
+                id: r.id,
+                text: r.text,
+                because: r.because,
+            }
+        })
+        .collect();
+    let items: Vec<SpecModelDocumentDto> =
+        coverage.into_iter().map(spec_model_document_dto).collect();
+    SpecModelCoverageDto {
+        total: count(items.len()),
+        items,
+        by_state,
+        unread_documents: count(sources.unread.len()),
+        unread_paths: sources.unread,
+        unread_because: sources.unread_because,
+        open_questions,
+        assumptions: count(assumptions),
+        build: build.into(),
+    }
 }
 
 /// Read every document of the project not yet read at its revision, on the
@@ -3097,14 +3318,26 @@ async fn start_spec_model_build(
     let models = quality.models()?;
     let (sources, _, coverage) =
         spec_model_state(&service, &ctx, workspace_id, project_id, reader.as_ref()).await?;
-    let pending = spec_model_pending(&sources, &coverage, body.path.as_deref())?;
+    let paths = body.paths.clone().unwrap_or_default();
+    let selection = super::spec_model::select::Selection {
+        path: body.path.as_deref(),
+        paths: &paths,
+        glob: body.glob.as_deref(),
+    };
+    let pending = spec_model_pending(&sources, &coverage, selection)?;
     let estimate = spec_model_estimate(&ctx, &service, workspace_id, project_id, &pending).await?;
     if !build::begin(project_id, pending.len()) {
         return Ok((StatusCode::ACCEPTED, Json(build::state(project_id).into())));
     }
+    let selected: Vec<String> = if selection.is_empty() {
+        Vec::new()
+    } else {
+        pending.iter().map(|d| d.path.clone()).collect()
+    };
     build::update(project_id, |s| {
         s.estimated_seconds = Some(estimate.seconds);
         s.path.clone_from(&body.path);
+        s.paths = selected;
     });
     let findings_writer = quality.findings();
     let sources_for_record = super::spec_model::Sources {
@@ -3125,12 +3358,11 @@ async fn start_spec_model_build(
             &ctx,
             pending,
             move |doc, read| async move {
-                let revision = super::spec_model::extract::revision(&doc.text);
                 if let Err(error) = service_ref
-                    .put_spec_extraction(ctx_ref, workspace_id, project_id, &doc.path, &revision, &read)
+                    .put_spec_extraction(ctx_ref, workspace_id, project_id, &doc, &read)
                     .await
                 {
-                    tracing::warn!(%error, path = %doc.path, "spec-model: an extraction could not be kept");
+                    tracing::warn!(%error, path = %doc.path, "project domain model: an extraction could not be kept");
                 }
             },
         )
@@ -3166,25 +3398,49 @@ async fn start_spec_model_build(
 }
 
 /// The documents a build reads: every one not read at its revision, or the
-/// one named by `path` whatever its state (404 when it is not one of the
-/// model's documents).
+/// ones the selection names whatever their state. One `path` alone that is
+/// not one of the model's documents is 404, as it always was; any other
+/// selection naming something the model does not have is 400, naming it.
 fn spec_model_pending(
     sources: &super::spec_model::Sources,
     coverage: &[super::spec_model::Coverage],
-    path: Option<&str>,
+    selection: super::spec_model::select::Selection<'_>,
 ) -> ApiResult<Vec<super::spec_model::SourceText>> {
-    if let Some(path) = path {
-        let doc = sources
-            .documents
-            .iter()
-            .find(|d| d.path == path)
-            .cloned()
-            .ok_or_else(|| {
+    use super::spec_model::select;
+    if !selection.is_empty() {
+        let invalid = |field: &str, why: String| {
+            DocumentsError::invalid_argument()
+                .with_field_violation(field, why, "INVALID")
+                .create()
+        };
+        if selection.paths.len() > select::PATHS_MAX {
+            return Err(invalid(
+                "paths",
+                format!("at most {} paths in one build", select::PATHS_MAX),
+            ));
+        }
+        if selection.glob.is_some_and(|g| g.len() > select::GLOB_MAX) {
+            return Err(invalid(
+                "glob",
+                format!("at most {} characters", select::GLOB_MAX),
+            ));
+        }
+        let only_path = selection.paths.iter().all(|p| p.trim().is_empty())
+            && selection.glob.is_none_or(|g| g.trim().is_empty());
+        return select::select(&sources.documents, selection).map_err(|unknown| {
+            if only_path {
                 DocumentsError::not_found("no such document in the project's model")
                     .with_resource("document")
                     .create()
-            })?;
-        return Ok(vec![doc]);
+            } else {
+                let field = if unknown.paths.is_empty() {
+                    "glob"
+                } else {
+                    "paths"
+                };
+                invalid(field, unknown.message())
+            }
+        });
     }
     let wanted: std::collections::BTreeSet<&str> =
         super::spec_model::to_read(coverage).into_iter().collect();
@@ -3228,7 +3484,21 @@ async fn get_spec_model_build_estimate(
     let reader = quality.reader()?;
     let (sources, _, coverage) =
         spec_model_state(&service, &ctx, workspace_id, project_id, reader.as_ref()).await?;
-    let pending = spec_model_pending(&sources, &coverage, query.path.as_deref())?;
+    let paths: Vec<String> = query
+        .paths
+        .as_deref()
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(str::to_owned)
+        .collect();
+    let selection = super::spec_model::select::Selection {
+        path: query.path.as_deref(),
+        paths: &paths,
+        glob: query.glob.as_deref(),
+    };
+    let pending = spec_model_pending(&sources, &coverage, selection)?;
     let e = spec_model_estimate(&ctx, &service, workspace_id, project_id, &pending).await?;
     let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
     Ok(Json(SpecModelBuildEstimateDto {
@@ -3273,6 +3543,8 @@ async fn judged_candidates(
             dropped: r.dropped,
             error: r.error.as_deref(),
             created_at: r.created_at.unix_timestamp(),
+            source_commit: r.source_commit.as_deref(),
+            source_ref: r.source_ref.as_deref(),
         })
         .collect();
     let (facts, _) = sm::current(documents, &kept);
@@ -3320,7 +3592,7 @@ async fn judge_new_candidates(
         match build::judge_candidate(models.as_ref(), ctx, candidate, &texts).await {
             Err(build::Stop(reason)) => return Err(reason),
             Ok(Err(error)) => {
-                tracing::warn!(%error, "spec-model: a candidate could not be judged");
+                tracing::warn!(%error, "project domain model: a candidate could not be judged");
             }
             Ok(Ok(found)) => {
                 let (fingerprint, revisions) =
@@ -3336,7 +3608,7 @@ async fn judge_new_candidates(
                     )
                     .await
                 {
-                    tracing::warn!(%error, "spec-model: a judgement could not be kept");
+                    tracing::warn!(%error, "project domain model: a judgement could not be kept");
                 }
             }
         }
@@ -3384,14 +3656,21 @@ async fn record_spec_model_findings(
     sources: &super::spec_model::Sources,
 ) {
     use super::spec_model::record;
-    let (findings, decisions) =
-        match spec_model_findings(ctx, service, workspace_id, project_id, sources).await {
-            Ok(read) => read,
-            Err(error) => {
-                tracing::warn!(%error, "spec-model: the findings could not be read to record");
-                return;
-            }
-        };
+    let (findings, decisions) = match spec_model_findings(
+        ctx,
+        service,
+        workspace_id,
+        project_id,
+        sources,
+    )
+    .await
+    {
+        Ok(read) => read,
+        Err(error) => {
+            tracing::warn!(%error, "project domain model: the findings could not be read to record");
+            return;
+        }
+    };
     let dismissed: std::collections::BTreeSet<String> = decisions
         .into_iter()
         .filter(|(_, d)| d == "dismissed")
@@ -3429,7 +3708,7 @@ async fn record_spec_model_findings(
         )
         .await
     {
-        tracing::warn!(%error, "spec-model: the findings could not be recorded");
+        tracing::warn!(%error, "project domain model: the findings could not be recorded");
     }
 }
 
@@ -3737,6 +4016,589 @@ async fn list_spec_requirements(
         items,
         by_basis,
         synced,
+    }))
+}
+
+/// One thing a project has to decide before it builds from its documents:
+/// a row of the portal's Issues tab.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct SpecModelIssueRowDto {
+    /// `f:<fingerprint>` for a finding, `q:`, `a:` or `n:` and the
+    /// requirement's id for an open question, an assumption or a buildable
+    /// requirement with no basis. An issue opened for the row is recorded
+    /// under `iss:<key>` (`POST /project-domain-model/reviews`, state `opened`).
+    pub key: String,
+    /// `finding`, `question`, `assumption` or `nobasis`.
+    pub kind: String,
+    /// What the portal calls it: `Problem`, `Possible conflict`, `Open
+    /// question`, `Assumption` or `No basis`.
+    pub label: String,
+    /// `blocks` (stops a build), `look` (worth a look, stops nothing) or
+    /// `decided`.
+    pub group: String,
+    /// `bad` or `warn`.
+    pub tone: String,
+    /// A contradiction the model proposed from facts nobody confirmed: a
+    /// concern until a member says it is a real problem.
+    pub concern: bool,
+    pub title: String,
+    /// What is wrong and what to do about it.
+    pub hint: String,
+    /// The passages it rests on; the first is where it is.
+    pub sides: Vec<SpecModelSideDto>,
+    /// For a finding: its fingerprint (what `confirm` and `dismiss` take).
+    pub fingerprint: Option<String>,
+    /// For a finding: its rule.
+    pub rule: Option<String>,
+    /// For a finding: `confirmed` or `dismissed`.
+    pub decision: Option<String>,
+    /// For a finding whose fix the documents show: the edit `propose_fix`
+    /// opens as a pull request.
+    pub edit: Option<SpecModelEditDto>,
+    /// For a finding with no edit: the choices a person has to make.
+    pub decide: Vec<String>,
+    /// For a requirement: its identifier (what `trace` follows).
+    pub requirement_id: Option<String>,
+    /// The issue opened for it, when one was.
+    pub issue_url: Option<String>,
+    /// What can be done about it: `propose_fix`
+    /// (`POST /project-domain-model/findings/{fingerprint}/proposals`), `confirm` and
+    /// `dismiss` (`POST /project-domain-model/findings/{fingerprint}/decision`), `trace`
+    /// (`GET /project-domain-model/trace`) and `create_issue`
+    /// (`POST /project-domain-model/issues`, then record `iss:<key>`).
+    pub actions: Vec<String>,
+    /// Decided already; decided rows come last.
+    pub done: bool,
+}
+
+/// A project's queue of things to decide, most blocking first.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct SpecModelIssueRowListDto {
+    pub items: Vec<SpecModelIssueRowDto>,
+    pub total: u32,
+    /// Rows in each group (`blocks`, `look`, `decided`), before `group`
+    /// filters and paging.
+    pub by_group: std::collections::BTreeMap<String, u32>,
+}
+
+/// Whether a project's documents are ready to build from.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct SpecModelReadinessDto {
+    /// Requirements the documents define.
+    pub total: u32,
+    /// Of them, those that cite a source.
+    pub cited: u32,
+    /// Those that give a reason and cite nothing.
+    pub reasoned: u32,
+    /// Rows of the queue that wait for somebody.
+    pub open: u32,
+    /// Of them, those that stop a build.
+    pub blocking: u32,
+    /// Nothing stops a build.
+    pub ready: bool,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SpecModelIssuesQuery {
+    pub project_id: String,
+    /// `blocks`, `look` or `decided`: only that group.
+    #[serde(default)]
+    pub group: Option<String>,
+    #[serde(flatten)]
+    pub page: PageQuery,
+}
+
+/// The project's queue, its requirements' count by basis and their total,
+/// and the issue opened for each row key.
+async fn spec_model_queue(
+    ctx: &SecurityContext,
+    service: &Arc<DocumentsService>,
+    quality: &Quality,
+    project_id: Uuid,
+) -> ApiResult<(
+    Vec<super::spec_model::resolve::Item>,
+    std::collections::BTreeMap<String, usize>,
+    usize,
+    std::collections::BTreeMap<String, String>,
+)> {
+    use super::spec_model::resolve;
+    let workspace_id = parent_workspace(service, ctx, project_id).await?;
+    let reader = quality.reader()?;
+    let sources = service
+        .spec_model_sources(ctx, workspace_id, project_id, reader.as_ref())
+        .await
+        .map_err(internal)?;
+    let ((findings, decisions), reviews) = tokio::try_join!(
+        spec_model_findings(ctx, service, workspace_id, project_id, &sources),
+        service.spec_reviews(ctx, workspace_id, project_id),
+    )
+    .map_err(internal)?;
+    let requirements = sources.requirements();
+    let mut by_basis = std::collections::BTreeMap::new();
+    for r in &requirements {
+        *by_basis.entry(r.basis.as_str().to_string()).or_default() += 1;
+    }
+    let decided = findings
+        .into_iter()
+        .map(|f| resolve::Decided {
+            decision: decisions.get(&f.fingerprint).cloned(),
+            finding: f,
+        })
+        .collect();
+    let queue = resolve::queue(decided, &requirements);
+    let issues = reviews
+        .into_iter()
+        .filter(|r| r.state == "opened")
+        .filter_map(|r| {
+            let key = r.fact_key.strip_prefix("iss:")?.to_string();
+            Some((key, r.note.unwrap_or_default()))
+        })
+        .collect();
+    Ok((queue, by_basis, requirements.len(), issues))
+}
+
+fn spec_model_side_dto(s: super::spec_model::finding::Side) -> SpecModelSideDto {
+    SpecModelSideDto {
+        path: s.path,
+        line_start: s.line_start.and_then(|n| u32::try_from(n).ok()),
+        line_end: s.line_end.and_then(|n| u32::try_from(n).ok()),
+        quote: s.quote,
+        binding_id: None,
+    }
+}
+
+fn spec_model_issue_row(
+    item: super::spec_model::resolve::Item,
+    issue_url: Option<String>,
+) -> SpecModelIssueRowDto {
+    let actions = item
+        .actions(issue_url.is_some())
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    let label = item.label().to_string();
+    let group = item.group().to_string();
+    let (fingerprint, rule, decision, edit, decide) = match item.finding {
+        Some(d) => (
+            Some(d.finding.fingerprint),
+            Some(d.finding.rule),
+            d.decision,
+            d.finding.edit.map(|e| SpecModelEditDto {
+                path: e.path,
+                replace: e.replace,
+                with: e.with,
+            }),
+            d.finding.decide,
+        ),
+        None => (None, None, None, None, Vec::new()),
+    };
+    SpecModelIssueRowDto {
+        key: item.key,
+        kind: item.r#type.as_str().to_string(),
+        label,
+        group,
+        tone: item.tone.to_string(),
+        concern: item.concern,
+        title: item.title,
+        hint: item.hint,
+        sides: item.sides.into_iter().map(spec_model_side_dto).collect(),
+        fingerprint,
+        rule,
+        decision,
+        edit,
+        decide,
+        requirement_id: item.requirement.map(|r| r.id),
+        issue_url,
+        actions,
+        done: item.done,
+    }
+}
+
+/// What a project has to decide before it builds from its documents.
+async fn list_spec_model_issues(
+    Extension(ctx): Extension<SecurityContext>,
+    Extension(service): Extension<Arc<DocumentsService>>,
+    Extension(quality): Extension<Quality>,
+    Query(query): Query<SpecModelIssuesQuery>,
+) -> ApiResult<JsonBody<SpecModelIssueRowListDto>> {
+    let project_id = parse_project_id(&query.project_id)?;
+    let group = query
+        .group
+        .as_deref()
+        .map(str::trim)
+        .filter(|g| !g.is_empty());
+    if let Some(g) = group
+        && !matches!(g, "blocks" | "look" | "decided")
+    {
+        return Err(DocumentsError::invalid_argument()
+            .with_field_violation(
+                "group",
+                "must be blocks, look or decided".to_owned(),
+                "INVALID",
+            )
+            .create());
+    }
+    let (queue, _, _, mut issues) = spec_model_queue(&ctx, &service, &quality, project_id).await?;
+    let mut by_group: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
+    for i in &queue {
+        *by_group.entry(i.group().to_string()).or_default() += 1;
+    }
+    let rows: Vec<SpecModelIssueRowDto> = queue
+        .into_iter()
+        .filter(|i| group.is_none_or(|g| i.group() == g))
+        .map(|i| {
+            let url = issues.remove(&i.key);
+            spec_model_issue_row(i, url)
+        })
+        .collect();
+    let (items, total) = page_of(rows, query.page);
+    Ok(Json(SpecModelIssueRowListDto {
+        items,
+        total,
+        by_group,
+    }))
+}
+
+/// Whether anything stops a build from a project's documents.
+async fn get_spec_model_readiness(
+    Extension(ctx): Extension<SecurityContext>,
+    Extension(service): Extension<Arc<DocumentsService>>,
+    Extension(quality): Extension<Quality>,
+    Query(query): Query<SpecScopeQuery>,
+) -> ApiResult<JsonBody<SpecModelReadinessDto>> {
+    let project_id = parse_project_id(&query.project_id)?;
+    let (queue, by_basis, total, _) =
+        spec_model_queue(&ctx, &service, &quality, project_id).await?;
+    let r = super::spec_model::resolve::readiness(&queue, &by_basis, total);
+    let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    Ok(Json(SpecModelReadinessDto {
+        total: count(r.total),
+        cited: count(r.cited),
+        reasoned: count(r.reasoned),
+        open: count(r.open),
+        blocking: count(r.blocking),
+        ready: r.ready,
+    }))
+}
+
+/// One field of an entity's section, as a documentation row proposes it.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct DocQualityFieldDto {
+    pub name: String,
+    pub meaning: String,
+}
+
+/// One relation of an entity's section, as a documentation row proposes it.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct DocQualityRelationDto {
+    pub verb: String,
+    pub target: String,
+}
+
+/// An entity's section of `docs/domain-model.md` as a row would save it:
+/// the body `POST /project-domain-model/entities` takes.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct DocQualityEntityEditDto {
+    pub name: String,
+    pub definition: Option<String>,
+    pub fields: Vec<DocQualityFieldDto>,
+    pub relations: Vec<DocQualityRelationDto>,
+}
+
+/// One side of a "two names" row: a glossary entry.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct DocQualityTermDto {
+    pub key: String,
+    pub name: String,
+    pub facts: u32,
+}
+
+/// Two glossary entries that are probably one thing.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct DocQualityPairDto {
+    /// The busier entry: the name kept.
+    pub a: DocQualityTermDto,
+    /// The entry to read as `a` (`POST /project-domain-model/glossary/decisions` with
+    /// `key` = `b.key`, `alias_of` = `a.key`).
+    pub b: DocQualityTermDto,
+    pub why: String,
+    /// `ship`, `s` or `ing` when one is the other with that ending.
+    pub suffix: Option<String>,
+    /// `organization`, `workspace`, `project` or `platform` when one is the
+    /// other with its level in front.
+    pub level: Option<String>,
+}
+
+/// A sentence for the document that describes a thing, after the passage at
+/// `line`: the body `POST /project-domain-model/sentences/proposals` takes, and the
+/// relation it states (`name` `verb` `target`), its verb editable.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct DocQualitySentenceDto {
+    pub path: String,
+    pub revision: String,
+    pub line: u32,
+    pub sentence: String,
+    pub why: String,
+    pub name: String,
+    pub verb: String,
+    pub target: String,
+}
+
+/// One way to make a project's documentation better, ready to save.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct DocQualityRowDto {
+    /// `oa:`, `nd:`, `os:`, `nr:` or `tn:` and what it is about. An issue
+    /// opened for the row is recorded under `iss:<key>`.
+    pub key: String,
+    /// `onlyadr`, `nodefinition`, `onesided`, `norelation` or `twonames`.
+    pub kind: String,
+    /// What the portal calls it: `Only in an ADR or a feature`, `No
+    /// definition`, `One-sided relation`, `No relation`, `Two names for one
+    /// thing`.
+    pub label: String,
+    pub title: String,
+    /// What is thin, and what saving does.
+    pub hint: String,
+    /// The passages it rests on, at most three.
+    pub sides: Vec<SpecModelSideDto>,
+    /// The entity's section as it would be saved (`onlyadr`,
+    /// `nodefinition`, `onesided`).
+    pub edit: Option<DocQualityEntityEditDto>,
+    /// The key of the entity `edit` saves: once saved, the row goes when a
+    /// build reads `docs/domain-model.md` again.
+    pub entity: Option<String>,
+    /// For `twonames`.
+    pub pair: Option<DocQualityPairDto>,
+    /// For `norelation`.
+    pub sentence: Option<DocQualitySentenceDto>,
+    /// The issue opened for it, when one was.
+    pub issue_url: Option<String>,
+    /// `save_entity` (`POST /project-domain-model/entities` with `edit`),
+    /// `same_thing` (`POST /project-domain-model/glossary/decisions`), `propose_sentence`
+    /// (`POST /project-domain-model/sentences/proposals` with `sentence`) and
+    /// `create_issue` on a row with no issue yet.
+    pub actions: Vec<String>,
+}
+
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct DocQualityRowListDto {
+    pub items: Vec<DocQualityRowDto>,
+    pub total: u32,
+    /// Rows of each kind, before `kind` filters and paging.
+    pub by_kind: std::collections::BTreeMap<String, u32>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct DocQualityQuery {
+    pub project_id: String,
+    /// Only rows of this kind.
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(flatten)]
+    pub page: PageQuery,
+}
+
+fn doc_quality_row(
+    item: super::spec_model::doc_quality::Item,
+    issue_url: Option<String>,
+) -> DocQualityRowDto {
+    use super::spec_model::doc_quality::{Alike, Kind};
+    let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    let entity = item.entity();
+    let mut actions: Vec<String> = Vec::new();
+    match item.kind {
+        Kind::TwoNames => actions.push("same_thing".into()),
+        Kind::NoRelation => actions.push("propose_sentence".into()),
+        _ => actions.push("save_entity".into()),
+    }
+    if issue_url.is_none() {
+        actions.push("create_issue".into());
+    }
+    let term = |t: super::spec_model::doc_quality::Term| DocQualityTermDto {
+        key: t.key,
+        name: t.name,
+        facts: count(t.facts),
+    };
+    DocQualityRowDto {
+        key: item.key,
+        kind: item.kind.as_str().to_string(),
+        label: item.kind.label().to_string(),
+        title: item.title,
+        hint: item.hint,
+        sides: item
+            .sides
+            .into_iter()
+            .map(|s| SpecModelSideDto {
+                path: s.path,
+                line_start: s.line_start.and_then(|n| u32::try_from(n).ok()),
+                line_end: s.line_end.and_then(|n| u32::try_from(n).ok()),
+                quote: s.quote,
+                binding_id: None,
+            })
+            .collect(),
+        edit: item.edit.map(|e| DocQualityEntityEditDto {
+            name: e.name,
+            definition: e.definition,
+            fields: e
+                .fields
+                .into_iter()
+                .map(|f| DocQualityFieldDto {
+                    name: f.name,
+                    meaning: f.meaning,
+                })
+                .collect(),
+            relations: e
+                .relations
+                .into_iter()
+                .map(|r| DocQualityRelationDto {
+                    verb: r.verb,
+                    target: r.target,
+                })
+                .collect(),
+        }),
+        entity,
+        pair: item.pair.map(|p| {
+            let (suffix, level) = match p.how {
+                Alike::Suffix(s) => (Some(s.to_string()), None),
+                Alike::Level(l) => (None, Some(l)),
+            };
+            DocQualityPairDto {
+                a: term(p.a),
+                b: term(p.b),
+                why: p.why,
+                suffix,
+                level,
+            }
+        }),
+        sentence: item.sentence.map(|s| DocQualitySentenceDto {
+            path: s.path,
+            revision: s.revision,
+            line: count(s.line),
+            sentence: s.sentence,
+            why: s.why,
+            name: s.name,
+            verb: s.verb,
+            target: s.target,
+        }),
+        issue_url,
+        actions,
+    }
+}
+
+/// What would make a project's documentation better: the Issues table's
+/// "improves the docs" rows, over the facts members did not reject.
+async fn list_doc_quality(
+    Extension(ctx): Extension<SecurityContext>,
+    Extension(service): Extension<Arc<DocumentsService>>,
+    Extension(quality): Extension<Quality>,
+    Query(query): Query<DocQualityQuery>,
+) -> ApiResult<JsonBody<DocQualityRowListDto>> {
+    use super::spec_model::doc_quality;
+    let project_id = parse_project_id(&query.project_id)?;
+    let kind = query
+        .kind
+        .as_deref()
+        .map(str::trim)
+        .filter(|k| !k.is_empty());
+    if let Some(k) = kind
+        && !matches!(
+            k,
+            "onlyadr" | "nodefinition" | "onesided" | "norelation" | "twonames"
+        )
+    {
+        return Err(DocumentsError::invalid_argument()
+            .with_field_violation(
+                "kind",
+                "must be onlyadr, nodefinition, onesided, norelation or twonames".to_owned(),
+                "INVALID",
+            )
+            .create());
+    }
+    let workspace_id = parent_workspace(&service, &ctx, project_id).await?;
+    let reader = quality.reader()?;
+    let (_, facts, coverage) =
+        spec_model_state(&service, &ctx, workspace_id, project_id, reader.as_ref()).await?;
+    let (choices, terms, reviews) = tokio::try_join!(
+        service.glossary_choices(&ctx, workspace_id, project_id),
+        service.spec_terms(&ctx, workspace_id, project_id),
+        service.spec_reviews(&ctx, workspace_id, project_id),
+    )
+    .map_err(internal)?;
+    let apart: std::collections::HashMap<String, Vec<String>> = terms
+        .into_iter()
+        .map(|t| (t.term_key, super::service::distinct_keys(&t.distinct_from)))
+        .collect();
+    // The glossary is every fact's, as `GET /glossary` answers it.
+    let glossary: Vec<doc_quality::Term> = super::spec_model::glossary::entries(&facts, &choices)
+        .into_iter()
+        .map(|e| doc_quality::Term {
+            distinct_from: apart.get(&e.key).cloned().unwrap_or_default(),
+            aliases: e.aliases.into_iter().map(|a| a.key).collect(),
+            key: e.key,
+            name: e.name,
+            facts: e.facts,
+        })
+        .collect();
+    // The entities are what members did not reject.
+    let rejected: std::collections::BTreeSet<String> = reviews
+        .iter()
+        .filter(|r| r.state == "rejected")
+        .map(|r| r.fact_key.clone())
+        .collect();
+    let kept: Vec<super::spec_model::extract::Fact> = facts
+        .into_iter()
+        .filter(|f| {
+            rejected.is_empty() || !rejected.contains(&super::spec_model::fact_key::fact_key(f))
+        })
+        .collect();
+    // A sentence is proposed only where the lines the model read are the
+    // repository's: a document read at its current revision.
+    let revisions: std::collections::BTreeMap<String, String> = coverage
+        .into_iter()
+        .filter(|c| c.state == "extracted")
+        .map(|c| (c.path, c.revision))
+        .collect();
+    let mut issues: std::collections::BTreeMap<String, String> = reviews
+        .into_iter()
+        .filter(|r| r.state == "opened")
+        .filter_map(|r| {
+            let key = r.fact_key.strip_prefix("iss:")?.to_string();
+            Some((key, r.note.unwrap_or_default()))
+        })
+        .collect();
+    let items = doc_quality::doc_quality(
+        &doc_quality::entities_of(&kept, &glossary),
+        &glossary,
+        &revisions,
+    );
+    let mut by_kind: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
+    for i in &items {
+        *by_kind.entry(i.kind.as_str().to_string()).or_default() += 1;
+    }
+    let rows: Vec<DocQualityRowDto> = items
+        .into_iter()
+        .filter(|i| kind.is_none_or(|k| i.kind.as_str() == k))
+        .map(|i| {
+            let url = issues.remove(&i.key);
+            doc_quality_row(i, url)
+        })
+        .collect();
+    let (items, total) = page_of(rows, query.page);
+    Ok(Json(DocQualityRowListDto {
+        items,
+        total,
+        by_kind,
     }))
 }
 
@@ -5507,6 +6369,7 @@ fn spec_review_dto(r: super::entity::spec_review::Model) -> SpecModelReviewDto {
         path: r.path,
         revision: r.revision,
         note: r.note,
+        value: r.value,
         decided_by: r.decided_by.to_string(),
         decided_at: rfc3339(r.decided_at),
     }
@@ -5600,7 +6463,7 @@ fn review_state_fits(key: &str, state: &str) -> bool {
     } else if key.starts_with("iss:") {
         state == "opened"
     } else {
-        matches!(state, "accepted" | "rejected")
+        matches!(state, "accepted" | "rejected" | "corrected")
     }
 }
 
@@ -5661,7 +6524,7 @@ async fn create_spec_model_file_proposal(
             &crate::product::port::PullRequestText {
                 message: format!("docs: {title}"),
                 title: format!("Docs: {title}"),
-                body: format!("{title}\n\nWritten to `{path}` from the Domain model tab, as a proposal to review."),
+                body: format!("{title}\n\nWritten to `{path}` from the Project domain model tab, as a proposal to review."),
             },
             true,
         )
@@ -5942,7 +6805,7 @@ async fn review_spec_model_facts(
         if !review_state_fits(key, &i.state) {
             return Err(invalid(
                 "state",
-                "must be accepted, rejected or proposed; for a hypothesis's evidence (ev:) supports, \
+                "must be accepted, rejected, corrected or proposed; for a hypothesis's evidence (ev:) supports, \
                  contradicts or insufficient; for its check (hyp:) check; for an obligation (ob:) \
                  excluded; for a match across projects (rel:) reuse, coordinate, separate or \
                  unrelated; for a prioritised item (pri:) scored; for a confirmed order (prc:) \
@@ -5961,7 +6824,32 @@ async fn review_spec_model_facts(
         if i.path.len() > 1024 || i.revision.len() > 128 {
             return Err(invalid("path", "must be a document path and its revision"));
         }
-        items.push((key.to_owned(), i.state, i.path, i.revision, i.note));
+        let value = match (i.state.as_str(), i.value) {
+            ("corrected", Some(v)) if !v.trim().is_empty() && v.len() <= 2000 => {
+                Some(v.trim().to_owned())
+            }
+            ("corrected", _) => {
+                return Err(invalid(
+                    "value",
+                    "a correction gives the fact's new value, at most 2000 bytes",
+                ));
+            }
+            (_, Some(_)) => {
+                return Err(invalid(
+                    "value",
+                    "only a correction (corrected) takes a value",
+                ));
+            }
+            (_, None) => None,
+        };
+        items.push(super::service::SpecReviewItem {
+            fact_key: key.to_owned(),
+            state: i.state,
+            path: i.path,
+            revision: i.revision,
+            note: i.note,
+            value,
+        });
     }
     let saved: Vec<SpecModelReviewDto> = service
         .put_spec_reviews(&ctx, workspace_id, project_id, items)
@@ -5974,6 +6862,127 @@ async fn review_spec_model_facts(
         total: u32::try_from(saved.len()).unwrap_or(u32::MAX),
         items: saved,
     }))
+}
+
+/// A CSV, JSON or plain-text file to read into the project domain model,
+/// without committing it to the repository.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(request)]
+pub struct SpecModelUploadRequest {
+    pub project_id: String,
+    /// The file's name: `.csv`, `.tsv`, `.json`, `.txt` or `.text`, at most
+    /// 120 characters. The same name again replaces the earlier upload.
+    pub name: String,
+    /// The file's text, at most 512 KiB. A JSON file is laid out one value
+    /// per line before it is kept, so its passages can be quoted by line.
+    pub content: String,
+}
+
+/// An uploaded source of the project domain model.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct SpecModelUploadDto {
+    pub id: String,
+    pub name: String,
+    /// The path the model reads it under (`upload:<name>`): what a build's
+    /// `paths` and the coverage name.
+    pub path: String,
+    /// `csv`, `json` or `text`.
+    pub kind: String,
+    /// The hash of its content: its revision, as for any document.
+    pub revision: String,
+    pub size: u64,
+    /// `file-storage`, or `studio-documents` where the deployment has no
+    /// file storage and the bytes are kept with the record.
+    pub storage: String,
+    pub created_by: String,
+    pub created_at: String,
+}
+
+/// A project's uploaded sources, by name.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct SpecModelUploadListDto {
+    pub items: Vec<SpecModelUploadDto>,
+    pub total: u32,
+}
+
+fn spec_upload_dto(u: super::entity::spec_upload::Model) -> SpecModelUploadDto {
+    SpecModelUploadDto {
+        id: u.id.to_string(),
+        path: super::uploads::path_of(&u.name),
+        name: u.name,
+        kind: u.kind,
+        revision: u.revision,
+        size: u64::try_from(u.size).unwrap_or(0),
+        storage: u.storage,
+        created_by: u.created_by.to_string(),
+        created_at: rfc3339(u.created_at),
+    }
+}
+
+/// Every source uploaded to the project's model.
+async fn list_spec_model_uploads(
+    Extension(ctx): Extension<SecurityContext>,
+    Extension(service): Extension<Arc<DocumentsService>>,
+    Query(query): Query<SpecScopeQuery>,
+) -> ApiResult<JsonBody<SpecModelUploadListDto>> {
+    let project_id = parse_project_id(&query.project_id)?;
+    let workspace_id = parent_workspace(&service, &ctx, project_id).await?;
+    let items: Vec<SpecModelUploadDto> = service
+        .spec_uploads(&ctx, workspace_id, project_id)
+        .await
+        .map_err(internal)?
+        .into_iter()
+        .map(spec_upload_dto)
+        .collect();
+    Ok(Json(SpecModelUploadListDto {
+        total: u32::try_from(items.len()).unwrap_or(u32::MAX),
+        items,
+    }))
+}
+
+/// Keep an uploaded source for the model to read on its next build.
+async fn upload_spec_model_source(
+    Extension(ctx): Extension<SecurityContext>,
+    Extension(service): Extension<Arc<DocumentsService>>,
+    Json(body): Json<SpecModelUploadRequest>,
+) -> ApiResult<(StatusCode, JsonBody<SpecModelUploadDto>)> {
+    let project_id = parse_project_id(&body.project_id)?;
+    let workspace_id = parent_workspace(&service, &ctx, project_id).await?;
+    match service
+        .put_spec_upload(&ctx, workspace_id, project_id, &body.name, &body.content)
+        .await
+        .map_err(internal)?
+    {
+        Ok(saved) => Ok((StatusCode::CREATED, Json(spec_upload_dto(saved)))),
+        Err(why) => Err(DocumentsError::invalid_argument()
+            .with_field_violation("content", why, "INVALID")
+            .create()),
+    }
+}
+
+/// Forget an uploaded source: its facts leave the model with it.
+async fn delete_spec_model_upload(
+    Extension(ctx): Extension<SecurityContext>,
+    Extension(service): Extension<Arc<DocumentsService>>,
+    Path(upload_id): Path<String>,
+    Query(query): Query<SpecScopeQuery>,
+) -> ApiResult<StatusCode> {
+    let project_id = parse_project_id(&query.project_id)?;
+    let workspace_id = parent_workspace(&service, &ctx, project_id).await?;
+    let id = parse_uuid_field("upload_id", &upload_id)?;
+    if service
+        .delete_spec_upload(&ctx, workspace_id, project_id, id)
+        .await
+        .map_err(internal)?
+    {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(DocumentsError::not_found("no such upload in the project")
+            .with_resource("upload")
+            .create())
+    }
 }
 
 /// Record that two glossary entries are different things, so the pair is not
@@ -6169,7 +7178,7 @@ fn content_tag(text: &str) -> String {
     hex::encode(sha2::Sha256::digest(text.as_bytes()))[..6].to_owned()
 }
 
-/// Save one entity of the domain model as a person edited it: its section of
+/// Save one entity of the project domain model as a person edited it: its section of
 /// `docs/domain-model.md` in the project's repository, the way the repository
 /// takes changes. The model reads it like any other document once its type is
 /// settled, on the next build.
@@ -6258,9 +7267,9 @@ async fn upsert_spec_model_entity(
             &[crate::product::port::DeclarationFile { path: path.to_owned(), content }],
             &crate::product::port::PullRequestText {
                 message: format!("docs(domain-model): {name}"),
-                title: format!("Domain model: {name}"),
+                title: format!("Project domain model: {name}"),
                 body: format!(
-                    "What `{name}` is, what it holds and how it relates, as edited on the Domain model tab. \
+                    "What `{name}` is, what it holds and how it relates, as edited on the Project domain model tab. \
                      Studio keeps `{path}` one section per entity; the model reads it on its next build."
                 ),
             },
@@ -6480,7 +7489,7 @@ async fn create_spec_model_finding_proposal(
                 message: format!("docs: {title}"),
                 title: format!("Fix: {title}"),
                 body: format!(
-                    "{}\n\nIn `{}`:\n\n```diff\n- {}\n+ {}\n```\n\nProposed from the Domain model tab.",
+                    "{}\n\nIn `{}`:\n\n```diff\n- {}\n+ {}\n```\n\nProposed from the Project domain model tab.",
                     finding.message, edit.path, edit.replace, edit.with
                 ),
             },
@@ -6501,7 +7510,7 @@ async fn create_spec_model_finding_proposal(
 
 /// Propose a sentence for one of the project's documents as a pull request:
 /// a paragraph of its own after the passage the model read, on the revision
-/// it read. What the Domain model tab offers for an entity no document
+/// it read. What the Project domain model tab offers for an entity no document
 /// relates to anything.
 async fn create_spec_model_sentence_proposal(
     Extension(ctx): Extension<SecurityContext>,
@@ -6574,7 +7583,7 @@ async fn create_spec_model_sentence_proposal(
                 message: format!("docs: {title}"),
                 title: format!("Docs: {title}"),
                 body: format!(
-                    "{title}\n\nAdded to `{}` after line {line}:\n\n> {sentence}\n\nProposed from the Domain model tab.",
+                    "{title}\n\nAdded to `{}` after line {line}:\n\n> {sentence}\n\nProposed from the Project domain model tab.",
                     req.path
                 ),
             },
@@ -7620,7 +8629,13 @@ async fn list_spec_rows(
     let project_id = parse_project_id(&query.project_id)?;
     let workspace_id = parent_workspace(&service, &ctx, project_id).await?;
 
-    let (bindings, authored) = read_both(&ctx, &service, workspace_id, project_id).await?;
+    // The project's documents and its members' decisions are independent
+    // reads: asked together, the screen waits for the slower, not the sum.
+    let (both, decisions) = tokio::join!(
+        read_both(&ctx, &service, workspace_id, project_id),
+        service.spec_decisions(&ctx, workspace_id, project_id),
+    );
+    let (bindings, authored) = both?;
 
     // The never-classified files, their provenance and the recorded verdicts.
     // Absent when no ingest gear is here, which costs one queue and the review
@@ -7628,9 +8643,7 @@ async fn list_spec_rows(
     let scope = project_id.to_string();
     let mut known = super::spec_rows::Known::default();
     // A finding a member dismissed (✗) is not counted against its document.
-    let dismissed: std::collections::BTreeSet<String> = service
-        .spec_decisions(&ctx, workspace_id, project_id)
-        .await
+    let dismissed: std::collections::BTreeSet<String> = decisions
         .map_err(internal)?
         .into_iter()
         .filter(|d| d.decision == "dismissed")
@@ -7795,14 +8808,13 @@ async fn read_both(
     // The whole set, not a page: `PageQuery::limit()` clamps to 200, so a
     // paged read here showed a project with more files than that as mostly
     // "not scanned" -- its bindings existed, the page just did not reach them.
-    let bindings = service
-        .all_bindings(ctx, workspace_id, Some(project_id))
-        .await
-        .map_err(internal)?;
-    let documents = service
-        .all_documents(ctx, workspace_id, Some(project_id))
-        .await
-        .map_err(internal)?;
+    // Both reads are independent, so they are asked together.
+    let (bindings, documents) = tokio::join!(
+        service.all_bindings(ctx, workspace_id, Some(project_id)),
+        service.all_documents(ctx, workspace_id, Some(project_id)),
+    );
+    let bindings = bindings.map_err(internal)?;
+    let documents = documents.map_err(internal)?;
 
     let bindings = bindings
         .into_iter()
@@ -8190,16 +9202,17 @@ pub fn register_routes(
         .error_500(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model")
-        .operation_id("studio_documents.get_spec_model")
-        .summary("A project's domain model, as read from its documents so far")
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model")
+        .operation_id("studio_documents.get_project_domain_model")
+        .summary("The project domain model: what a project's documents say, read so far")
         .description(
             "The facts every document gave at its current revision — entities, attributes, \
              relations, requirements, constraints, lifecycles and decisions — each with the \
              passage it rests on and whether that passage is in force \
-             (docs/spec-domain-model.md). `documents` says where each document stands: \
+             (docs/project-domain-model.md). `documents` says where each document stands: \
              extracted, failed part-way, stale (only an older revision was read) or pending. \
-             `build` is the project's build as the process answering knows it.",
+             `build` is the project's build as the process answering knows it. This is what \
+             the project's documents say, not the Studio domain model (`/studio-domain-model`).",
         )
         .tag("StudioDocuments")
         .authenticated()
@@ -8214,19 +9227,68 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::post("/studio-documents/v1/spec-model/builds")
-        .operation_id("studio_documents.start_spec_model_build")
-        .summary("Read a project's documents into its domain model, on your model key")
+    router = OperationBuilder::get("/studio-documents/v1/spec-model")
+        .operation_id("studio_documents.get_spec_model")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model`")
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose model to read")
+        .handler(get_spec_model)
+        .json_response_with_schema::<SpecModelDto>(openapi, StatusCode::OK, "The model")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::post("/studio-documents/v1/project-domain-model/builds")
+        .operation_id("studio_documents.start_project_domain_model_build")
+        .summary("Read a project's documents into its project domain model, on your model key")
         .description(
             "Every document not yet read at its current revision is read by a model on the \
              caller's own key (ADR-0039: Studio holds none), in the background; follow it on \
-             `GET /spec-model`. Not a studio-tasks run, because the queue worker cannot act as \
+             `GET /project-domain-model`. Not a studio-tasks run, because the queue worker cannot act as \
              the caller. A build already running for the project is answered with its state. \
              A document already read at its revision is never read again, so a build stopped \
              part-way resumes where it stopped. Up to four documents are read at once. With \
              `path`, only that document is read again, whatever its state: its facts replace \
              its own and the rest of the model stays (404 when it is not one of the model's \
-             documents).",
+             documents). `paths` (a list) and `glob` (`*`, `**`, `?`) select more the same \
+             way, together with `path` or alone; a path that is not a document of the model, \
+             or a glob that matches none, is 400 and names them, and nothing is read.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .json_request::<SpecModelBuildRequest>(
+            openapi,
+            "The project, and the documents to read again",
+        )
+        .handler(start_spec_model_build)
+        .json_response_with_schema::<SpecModelBuildDto>(openapi, StatusCode::ACCEPTED, "The build")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::post("/studio-documents/v1/spec-model/builds")
+        .operation_id("studio_documents.start_spec_model_build")
+        .summary("Deprecated alias of `POST /studio-documents/v1/project-domain-model/builds`")
+        .description(
+            "Deprecated: the same operation as \
+             `POST /studio-documents/v1/project-domain-model/builds`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
         )
         .tag("StudioDocuments")
         .authenticated()
@@ -8244,21 +9306,71 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/build-estimate")
-        .operation_id("studio_documents.get_spec_model_build_estimate")
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/build")
+        .operation_id("studio_documents.get_project_domain_model_build")
+        .summary("A project's running or last build of its model")
+        .description(
+            "Where the build `POST /project-domain-model/builds` started stands, as the replica \
+             answering knows it: `running`, the documents it reads and how many are `done`, \
+             the one being read (`current`), the judge's progress, why it stopped (`error`), \
+             and when it started and finished. A build the replica never ran answers \
+             `running: false` and nothing else.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project")
+        .handler(get_spec_model_build)
+        .json_response_with_schema::<SpecModelBuildDto>(openapi, StatusCode::OK, "The build")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/coverage")
+        .operation_id("studio_documents.get_project_domain_model_coverage")
+        .summary("What a project's model has read, what it has not and why")
+        .description(
+            "Every document of the model with its state (`extracted`, `failed` with the error, \
+             `stale`, `pending`, `kept`), its facts and the facts dropped because the text did \
+             not bear them out; the typed documents this server has no copy of, their paths \
+             and why (`unread_because`); the requirements the documents leave as open \
+             questions and how many rest on an assumption: what is missing to interpret the \
+             model.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project")
+        .handler(get_spec_model_coverage)
+        .json_response_with_schema::<SpecModelCoverageDto>(openapi, StatusCode::OK, "The coverage")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/build-estimate")
+        .operation_id("studio_documents.get_project_domain_model_build_estimate")
         .summary("What a build of a project's model would read, and about how long it would take")
         .description(
-            "The documents `POST /spec-model/builds` would read now (changed or never read, or \
-             the one `path` names), their size in characters and approximate input tokens \
-             (characters over four), and the seconds reading them should take: at the pace of \
-             the project's earlier builds when there were any (`measured`), else a default. \
-             The judge's stage after the reading is not counted. No model is called.",
+            "The documents `POST /project-domain-model/builds` would read now (changed or never read, or \
+             the ones `path`, `paths` and `glob` select), their size in characters and \
+             approximate input tokens (characters over four), and the seconds reading them \
+             should take: at the pace of the project's earlier builds when there were any \
+             (`measured`), else a default. The judge's stage after the reading is not counted. \
+             No model is called. A selection naming what the model does not have is refused, \
+             as the build refuses it.",
         )
         .tag("StudioDocuments")
         .authenticated()
         .require_license_features::<License>([])
         .query_param("project_id", true, "The project whose build to estimate")
         .query_param("path", false, "One document to estimate reading again")
+        .query_param("paths", false, "Documents to estimate reading again, comma-separated")
+        .query_param("glob", false, "Documents to estimate reading again, by pattern (`docs/prd/**`)")
         .handler(get_spec_model_build_estimate)
         .json_response_with_schema::<SpecModelBuildEstimateDto>(
             openapi,
@@ -8272,11 +9384,50 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/decisions")
-        .operation_id("studio_documents.list_spec_model_decisions")
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/build-estimate")
+        .operation_id("studio_documents.get_spec_model_build_estimate")
+        .summary(
+            "Deprecated alias of `GET /studio-documents/v1/project-domain-model/build-estimate`",
+        )
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/build-estimate`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose build to estimate")
+        .query_param("path", false, "One document to estimate reading again")
+        .query_param(
+            "paths",
+            false,
+            "Documents to estimate reading again, comma-separated",
+        )
+        .query_param(
+            "glob",
+            false,
+            "Documents to estimate reading again, by pattern (`docs/prd/**`)",
+        )
+        .handler(get_spec_model_build_estimate)
+        .json_response_with_schema::<SpecModelBuildEstimateDto>(
+            openapi,
+            StatusCode::OK,
+            "The estimate",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/decisions")
+        .operation_id("studio_documents.list_project_domain_model_decisions")
         .summary("Every ✓ and ✗ members gave on a project's findings")
         .description(
-            "The decisions recorded with `POST /spec-model/findings/{fingerprint}/decision`, for \
+            "The decisions recorded with `POST /project-domain-model/findings/{fingerprint}/decision`, for \
              the model's findings and the Spec Quality detectors' alike, since both are keyed by \
              their fingerprint. A `dismissed` finding is not counted on the Specs list. The list \
              is read whole.",
@@ -8297,15 +9448,64 @@ pub fn register_routes(
         .error_500(openapi)
         .register(router, openapi);
 
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/decisions")
+        .operation_id("studio_documents.list_spec_model_decisions")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model/decisions`")
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/decisions`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose decisions to read")
+        .handler(list_spec_model_decisions)
+        .json_response_with_schema::<SpecModelDecisionListDto>(
+            openapi,
+            StatusCode::OK,
+            "The decisions",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::post(
+        "/studio-documents/v1/project-domain-model/findings/{fingerprint}/decision",
+    )
+    .operation_id("studio_documents.decide_project_domain_model_finding")
+    .summary("Mark a finding a real problem, or not one")
+    .description(
+        "`confirmed` says the finding is a real problem, `dismissed` that it is not. The \
+             latest decision on a finding wins, and it holds while the finding keeps its \
+             fingerprint: a change to either passage is a new finding, decided afresh.",
+    )
+    .tag("StudioDocuments")
+    .authenticated()
+    .require_license_features::<License>([])
+    .path_param("fingerprint", "The finding's fingerprint")
+    .json_request::<SpecModelDecisionRequest>(openapi, "The project and the decision")
+    .handler(decide_spec_model_finding)
+    .json_response_with_schema::<SpecModelDecisionDto>(openapi, StatusCode::CREATED, "The decision")
+    .error_400(openapi)
+    .error_401(openapi)
+    .error_404(openapi)
+    .error_500(openapi)
+    .register(router, openapi);
+
     router =
         OperationBuilder::post("/studio-documents/v1/spec-model/findings/{fingerprint}/decision")
             .operation_id("studio_documents.decide_spec_model_finding")
-            .summary("Mark a finding a real problem, or not one")
+            .summary("Deprecated alias of `POST /studio-documents/v1/project-domain-model/findings/{fingerprint}/decision`")
             .description(
-                "`confirmed` says the finding is a real problem, `dismissed` that it is not. The \
-             latest decision on a finding wins, and it holds while the finding keeps its \
-             fingerprint: a change to either passage is a new finding, decided afresh.",
-            )
+            "Deprecated: the same operation as \
+             `POST /studio-documents/v1/project-domain-model/findings/{fingerprint}/decision`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
             .tag("StudioDocuments")
             .authenticated()
             .require_license_features::<License>([])
@@ -8323,9 +9523,9 @@ pub fn register_routes(
             .error_500(openapi)
             .register(router, openapi);
 
-    router = OperationBuilder::post("/studio-documents/v1/spec-model/entities")
-        .operation_id("studio_documents.upsert_spec_model_entity")
-        .summary("Save an entity of the domain model to the project's documentation")
+    router = OperationBuilder::post("/studio-documents/v1/project-domain-model/entities")
+        .operation_id("studio_documents.upsert_project_domain_model_entity")
+        .summary("Save an entity of the project domain model to the project's documentation")
         .description(
             "What the entity is, what it holds and how it relates, as a person edited it. It \
              replaces the entity's section of `docs/domain-model.md` in the project's repository, \
@@ -8346,16 +9546,66 @@ pub fn register_routes(
         .error_500(openapi)
         .register(router, openapi);
 
-    router =
-        OperationBuilder::post("/studio-documents/v1/spec-model/findings/{fingerprint}/proposals")
-            .operation_id("studio_documents.create_spec_model_finding_proposal")
-            .summary("Propose a finding's fix as a pull request on its document")
-            .description(
-                "The finding's smallest edit applied to the passage it names, matched across line \
+    router = OperationBuilder::post("/studio-documents/v1/spec-model/entities")
+        .operation_id("studio_documents.upsert_spec_model_entity")
+        .summary("Deprecated alias of `POST /studio-documents/v1/project-domain-model/entities`")
+        .description(
+            "Deprecated: the same operation as \
+             `POST /studio-documents/v1/project-domain-model/entities`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose model it is")
+        .json_request::<SpecModelEntityRequest>(openapi, "The entity as edited")
+        .handler(upsert_spec_model_entity)
+        .json_response_with_schema::<SpecModelWriteDto>(openapi, StatusCode::OK, "Where it landed")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::post(
+        "/studio-documents/v1/project-domain-model/findings/{fingerprint}/proposals",
+    )
+    .operation_id("studio_documents.create_project_domain_model_finding_proposal")
+    .summary("Propose a finding's fix as a pull request on its document")
+    .description(
+        "The finding's smallest edit applied to the passage it names, matched across line \
          breaks the way it was checked, on a `fix/…` branch with a pull request: a proposal, \
          never a commit onto the document's branch. 404 when the finding is gone; 400 when it \
          names no edit or its passage is no longer in the document.",
-            )
+    )
+    .tag("StudioDocuments")
+    .authenticated()
+    .require_license_features::<License>([])
+    .path_param("fingerprint", "The finding's fingerprint")
+    .query_param("project_id", true, "The project the finding is in")
+    .handler(create_spec_model_finding_proposal)
+    .json_response_with_schema::<SpecModelWriteDto>(
+        openapi,
+        StatusCode::CREATED,
+        "The pull request",
+    )
+    .error_400(openapi)
+    .error_401(openapi)
+    .error_404(openapi)
+    .error_500(openapi)
+    .register(router, openapi);
+
+    router =
+        OperationBuilder::post("/studio-documents/v1/spec-model/findings/{fingerprint}/proposals")
+            .operation_id("studio_documents.create_spec_model_finding_proposal")
+            .summary("Deprecated alias of `POST /studio-documents/v1/project-domain-model/findings/{fingerprint}/proposals`")
+            .description(
+            "Deprecated: the same operation as \
+             `POST /studio-documents/v1/project-domain-model/findings/{fingerprint}/proposals`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
             .tag("StudioDocuments")
             .authenticated()
             .require_license_features::<License>([])
@@ -8373,8 +9623,8 @@ pub fn register_routes(
             .error_500(openapi)
             .register(router, openapi);
 
-    router = OperationBuilder::post("/studio-documents/v1/spec-model/sentences/proposals")
-        .operation_id("studio_documents.create_spec_model_sentence_proposal")
+    router = OperationBuilder::post("/studio-documents/v1/project-domain-model/sentences/proposals")
+        .operation_id("studio_documents.create_project_domain_model_sentence_proposal")
         .summary("Propose a sentence for one of the project's documents as a pull request")
         .description(
             "A paragraph of its own after the block the given line sits in, on a `docs/…` branch \
@@ -8396,14 +9646,36 @@ pub fn register_routes(
         .error_500(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/glossary")
-        .operation_id("studio_documents.get_spec_model_glossary")
+    router = OperationBuilder::post("/studio-documents/v1/spec-model/sentences/proposals")
+        .operation_id("studio_documents.create_spec_model_sentence_proposal")
+        .summary("Deprecated alias of `POST /studio-documents/v1/project-domain-model/sentences/proposals`")
+        .description(
+            "Deprecated: the same operation as \
+             `POST /studio-documents/v1/project-domain-model/sentences/proposals`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project the document is in")
+        .json_request::<SpecModelSentenceRequest>(openapi, "The sentence and where it goes")
+        .handler(create_spec_model_sentence_proposal)
+        .json_response_with_schema::<SpecModelWriteDto>(openapi, StatusCode::CREATED, "The pull request")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/glossary")
+        .operation_id("studio_documents.get_project_domain_model_glossary")
         .summary("The project's glossary: what its documents name, and by which names")
         .description(
             "One entry per thing the documents name, proposed without a model from the facts' \
              subjects: spellings that differ only in case, articles and plurals are one entry. \
              Members decide the name an entry goes by and which entry is another name of which \
-             (`POST /spec-model/glossary/decisions`); facts about an alias count as facts about \
+             (`POST /project-domain-model/glossary/decisions`); facts about an alias count as facts about \
              its entry when the rules look for disagreements. An alias whose entry the documents \
              no longer name, or that is an alias itself, holds nothing \
              (docs/project-and-product.md, \"The project's words\").",
@@ -8421,8 +9693,30 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::post("/studio-documents/v1/spec-model/issues")
-        .operation_id("studio_documents.create_spec_model_issue")
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/glossary")
+        .operation_id("studio_documents.get_spec_model_glossary")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model/glossary`")
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/glossary`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose glossary to read")
+        .handler(get_glossary)
+        .json_response_with_schema::<GlossaryListDto>(openapi, StatusCode::OK, "The glossary")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::post("/studio-documents/v1/project-domain-model/issues")
+        .operation_id("studio_documents.create_project_domain_model_issue")
         .summary("Open an issue in the project's repository for something to decide")
         .description(
             "A problem in the documents or a gap in the model, opened as an issue in the project's \
@@ -8441,8 +9735,29 @@ pub fn register_routes(
         .error_500(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/check-methods")
-        .operation_id("studio_documents.list_spec_model_check_methods")
+    router = OperationBuilder::post("/studio-documents/v1/spec-model/issues")
+        .operation_id("studio_documents.create_spec_model_issue")
+        .summary("Deprecated alias of `POST /studio-documents/v1/project-domain-model/issues`")
+        .description(
+            "Deprecated: the same operation as \
+             `POST /studio-documents/v1/project-domain-model/issues`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .json_request::<SpecModelIssueRequest>(openapi, "The project, the issue and who it is for")
+        .handler(create_spec_model_issue)
+        .json_response_with_schema::<SpecModelIssueDto>(openapi, StatusCode::CREATED, "The issue")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/check-methods")
+        .operation_id("studio_documents.list_project_domain_model_check_methods")
         .summary("The hypothesis check methods the project's kits add")
         .description(
             "Each named kit's `.cf-studio/config/kits/<kit>/check-methods.json` in the project's \
@@ -8474,8 +9789,41 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/glossary/document")
-        .operation_id("studio_documents.get_spec_model_glossary_document")
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/check-methods")
+        .operation_id("studio_documents.list_spec_model_check_methods")
+        .summary(
+            "Deprecated alias of `GET /studio-documents/v1/project-domain-model/check-methods`",
+        )
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/check-methods`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose kits to read")
+        .query_param(
+            "kits",
+            false,
+            "The kits to read: comma-separated slugs, at most 20",
+        )
+        .handler(list_kit_check_methods)
+        .json_response_with_schema::<KitCheckMethodListDto>(
+            openapi,
+            StatusCode::OK,
+            "The methods the kits add",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/glossary/document")
+        .operation_id("studio_documents.get_project_domain_model_glossary_document")
         .summary("The glossary the project's documents keep, read as written")
         .description(
             "`docs/glossary.md` when the repository has it, else the glossary section with a term \
@@ -8499,8 +9847,36 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::post("/studio-documents/v1/spec-model/glossary/document/proposals")
-        .operation_id("studio_documents.create_spec_model_glossary_document_proposal")
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/glossary/document")
+        .operation_id("studio_documents.get_spec_model_glossary_document")
+        .summary(
+            "Deprecated alias of `GET /studio-documents/v1/project-domain-model/glossary/document`",
+        )
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/glossary/document`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose glossary to find")
+        .handler(get_glossary_document)
+        .json_response_with_schema::<GlossaryDocDto>(
+            openapi,
+            StatusCode::OK,
+            "Where the glossary is",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::post("/studio-documents/v1/project-domain-model/glossary/document/proposals")
+        .operation_id("studio_documents.create_project_domain_model_glossary_document_proposal")
         .summary("Propose the project's glossary as docs/glossary.md")
         .description(
             "The rows written as `docs/glossary.md`, one table row per term with an anchor other \
@@ -8520,8 +9896,30 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::post("/studio-documents/v1/spec-model/files/proposals")
-        .operation_id("studio_documents.create_spec_model_file_proposal")
+    router = OperationBuilder::post("/studio-documents/v1/spec-model/glossary/document/proposals")
+        .operation_id("studio_documents.create_spec_model_glossary_document_proposal")
+        .summary("Deprecated alias of `POST /studio-documents/v1/project-domain-model/glossary/document/proposals`")
+        .description(
+            "Deprecated: the same operation as \
+             `POST /studio-documents/v1/project-domain-model/glossary/document/proposals`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .json_request::<GlossaryDocRequest>(openapi, "The project and the glossary's rows")
+        .handler(create_glossary_document_proposal)
+        .json_response_with_schema::<SpecModelWriteDto>(openapi, StatusCode::CREATED, "The pull request")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::post("/studio-documents/v1/project-domain-model/files/proposals")
+        .operation_id("studio_documents.create_project_domain_model_file_proposal")
         .summary("Propose a whole document for the project's repository as a pull request")
         .description(
             "What a member accepted in Studio — the need, a prioritisation — written to a Markdown \
@@ -8540,8 +9938,35 @@ pub fn register_routes(
         .error_500(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/reviews")
-        .operation_id("studio_documents.list_spec_model_reviews")
+    router = OperationBuilder::post("/studio-documents/v1/spec-model/files/proposals")
+        .operation_id("studio_documents.create_spec_model_file_proposal")
+        .summary(
+            "Deprecated alias of `POST /studio-documents/v1/project-domain-model/files/proposals`",
+        )
+        .description(
+            "Deprecated: the same operation as \
+             `POST /studio-documents/v1/project-domain-model/files/proposals`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .json_request::<SpecModelFileProposalRequest>(openapi, "The document and where it goes")
+        .handler(create_spec_model_file_proposal)
+        .json_response_with_schema::<SpecModelWriteDto>(
+            openapi,
+            StatusCode::CREATED,
+            "The pull request",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/reviews")
+        .operation_id("studio_documents.list_project_domain_model_reviews")
         .summary("Every accept or reject members gave on the facts the model read")
         .description(
             "What the model proposes is the project's reading only once a member accepts it; a \
@@ -8559,11 +9984,33 @@ pub fn register_routes(
         .error_500(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::post("/studio-documents/v1/spec-model/reviews")
-        .operation_id("studio_documents.decide_spec_model_fact_reviews")
-        .summary("Accept, reject or put back a selection of facts in one action")
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/reviews")
+        .operation_id("studio_documents.list_spec_model_reviews")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model/reviews`")
         .description(
-            "Each item is a fact's key with `accepted`, `rejected`, or `proposed` to withdraw an \
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/reviews`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project")
+        .handler(list_spec_model_reviews)
+        .json_response_with_schema::<SpecModelReviewListDto>(openapi, StatusCode::OK, "The reviews")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::post("/studio-documents/v1/project-domain-model/reviews")
+        .operation_id("studio_documents.decide_project_domain_model_fact_reviews")
+        .summary("Accept, reject, correct or put back a selection of facts in one action")
+        .description(
+            "Each item is a fact's key with `accepted`, `rejected`, `corrected` (with the \
+             `value` to show in place of the one read), or `proposed` to withdraw an \
              earlier review, and where it was read. Prefixed keys carry the project's other \
              decisions under the same rule: a hypothesis's evidence (`ev:`) and its check \
              (`hyp:`, a note of up to 8000 bytes), an excluded obligation (`ob:`), a match \
@@ -8587,8 +10034,97 @@ pub fn register_routes(
         .error_500(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::post("/studio-documents/v1/spec-model/glossary/distinct")
-        .operation_id("studio_documents.decide_spec_model_glossary_distinct")
+    router = OperationBuilder::post("/studio-documents/v1/spec-model/reviews")
+        .operation_id("studio_documents.decide_spec_model_fact_reviews")
+        .summary("Deprecated alias of `POST /studio-documents/v1/project-domain-model/reviews`")
+        .description(
+            "Deprecated: the same operation as \
+             `POST /studio-documents/v1/project-domain-model/reviews`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .json_request::<SpecModelReviewRequest>(openapi, "The project and the facts")
+        .handler(review_spec_model_facts)
+        .json_response_with_schema::<SpecModelReviewListDto>(
+            openapi,
+            StatusCode::OK,
+            "What was recorded",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/uploads")
+        .operation_id("studio_documents.list_project_domain_model_uploads")
+        .summary("The sources uploaded to a project's model")
+        .description(
+            "CSV, JSON and plain-text files members uploaded for the project domain model to \
+             read, kept out of the repository. Each is read under `upload:<name>` beside the \
+             repository's documents, takes part in builds and selection like them, and its \
+             revision is the hash of its content.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project")
+        .handler(list_spec_model_uploads)
+        .json_response_with_schema::<SpecModelUploadListDto>(openapi, StatusCode::OK, "The uploads")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::post("/studio-documents/v1/project-domain-model/uploads")
+        .operation_id("studio_documents.create_project_domain_model_source")
+        .summary("Upload a CSV, JSON or plain-text source for a project's model to read")
+        .description(
+            "Kept without committing it to the repository: the bytes in the file-storage gear \
+             where the deployment has it, with the record otherwise. The same name again \
+             replaces the earlier upload; a project keeps at most 50. Read on the next build, \
+             or select it with `paths: [\"upload:<name>\"]`. 400 names what is wrong: a type \
+             other than .csv, .tsv, .json, .txt or .text, JSON that does not parse, an empty \
+             file, more than 512 KiB.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .json_request::<SpecModelUploadRequest>(openapi, "The project, the name and the text")
+        .handler(upload_spec_model_source)
+        .json_response_with_schema::<SpecModelUploadDto>(openapi, StatusCode::CREATED, "The upload")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router =
+        OperationBuilder::delete("/studio-documents/v1/project-domain-model/uploads/{upload_id}")
+            .operation_id("studio_documents.delete_project_domain_model_upload")
+            .summary("Remove an uploaded source from a project's model")
+            .description(
+                "Forgets the upload and removes its file; its facts leave the model with it.",
+            )
+            .tag("StudioDocuments")
+            .authenticated()
+            .require_license_features::<License>([])
+            .path_param("upload_id", "The upload's `id`")
+            .query_param("project_id", true, "The project")
+            .handler(delete_spec_model_upload)
+            .no_content_response(StatusCode::NO_CONTENT, "Removed")
+            .error_400(openapi)
+            .error_401(openapi)
+            .error_404(openapi)
+            .error_500(openapi)
+            .register(router, openapi);
+
+    router = OperationBuilder::post("/studio-documents/v1/project-domain-model/glossary/distinct")
+        .operation_id("studio_documents.decide_project_domain_model_glossary_distinct")
         .summary("Say two glossary entries are different things")
         .description(
             "Kept on both entries as `distinct_from`, so the glossary does not offer them as one \
@@ -8606,8 +10142,29 @@ pub fn register_routes(
         .error_500(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::post("/studio-documents/v1/spec-model/glossary/decisions")
-        .operation_id("studio_documents.decide_spec_model_glossary_entry")
+    router = OperationBuilder::post("/studio-documents/v1/spec-model/glossary/distinct")
+        .operation_id("studio_documents.decide_spec_model_glossary_distinct")
+        .summary("Deprecated alias of `POST /studio-documents/v1/project-domain-model/glossary/distinct`")
+        .description(
+            "Deprecated: the same operation as \
+             `POST /studio-documents/v1/project-domain-model/glossary/distinct`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .json_request::<GlossaryDistinctRequest>(openapi, "The project and the two entries")
+        .handler(decide_glossary_distinct)
+        .no_content_response(StatusCode::NO_CONTENT, "Recorded")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::post("/studio-documents/v1/project-domain-model/glossary/decisions")
+        .operation_id("studio_documents.decide_project_domain_model_glossary_entry")
         .summary("Name a glossary entry, or make it another name of one")
         .description(
             "Replaces the entry's last decision whole. `name` is the name the project uses for \
@@ -8630,8 +10187,33 @@ pub fn register_routes(
         .error_500(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::post("/studio-documents/v1/spec-model/glossary/proposals")
-        .operation_id("studio_documents.create_spec_model_glossary_proposal")
+    router = OperationBuilder::post("/studio-documents/v1/spec-model/glossary/decisions")
+        .operation_id("studio_documents.decide_spec_model_glossary_entry")
+        .summary("Deprecated alias of `POST /studio-documents/v1/project-domain-model/glossary/decisions`")
+        .description(
+            "Deprecated: the same operation as \
+             `POST /studio-documents/v1/project-domain-model/glossary/decisions`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .json_request::<GlossaryDecisionRequest>(openapi, "The project, the entry and the decision")
+        .handler(decide_glossary_entry)
+        .json_response_with_schema::<GlossaryDecisionDto>(
+            openapi,
+            StatusCode::CREATED,
+            "The decision",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::post("/studio-documents/v1/project-domain-model/glossary/proposals")
+        .operation_id("studio_documents.create_project_domain_model_glossary_proposal")
         .summary("Propose a glossary rename in the documents as one pull request")
         .description(
             "Every whole-word use of `from` (any case) in the prose of the project's documents \
@@ -8639,6 +10221,33 @@ pub fn register_routes(
              front matter are left as they are. One pull request on a `glossary/…` branch over \
              every file that uses it: a proposal, never a commit onto the documents' branch. 400 \
              when no document uses the name.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose documents to change")
+        .json_request::<GlossaryRenameRequest>(openapi, "The old name and the project's name")
+        .handler(create_glossary_rename_proposal)
+        .json_response_with_schema::<GlossaryRenameProposalDto>(
+            openapi,
+            StatusCode::CREATED,
+            "The pull request",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::post("/studio-documents/v1/spec-model/glossary/proposals")
+        .operation_id("studio_documents.create_spec_model_glossary_proposal")
+        .summary("Deprecated alias of `POST /studio-documents/v1/project-domain-model/glossary/proposals`")
+        .description(
+            "Deprecated: the same operation as \
+             `POST /studio-documents/v1/project-domain-model/glossary/proposals`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
         )
         .tag("StudioDocuments")
         .authenticated()
@@ -9150,15 +10759,15 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/questions")
-        .operation_id("studio_documents.list_domain_questions")
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/questions")
+        .operation_id("studio_documents.list_project_domain_model_questions")
         .summary("What a document leaves out of the project's domain, and words it uses otherwise")
         .description(
             "For one document of the project: the entities the project's other documents relate \
              to an entity this one names, which this one never mentions (the ledger a billing \
              PRD forgot), strongest first, at most 15. Computed from the facts already \
              extracted: before the model is built (`built: false`) there are none \
-             (docs/spec-domain-model.md, \"Questions while writing\").",
+             (docs/project-domain-model.md, \"Questions while writing\").",
         )
         .tag("StudioDocuments")
         .authenticated()
@@ -9178,8 +10787,35 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/term-drift")
-        .operation_id("studio_documents.list_term_drift")
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/questions")
+        .operation_id("studio_documents.list_domain_questions")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model/questions`")
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/questions`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project")
+        .query_param("path", true, "The document, by its path in the checkout")
+        .handler(list_domain_questions)
+        .json_response_with_schema::<DomainQuestionListDto>(
+            openapi,
+            StatusCode::OK,
+            "The questions",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/term-drift")
+        .operation_id("studio_documents.list_project_domain_model_term_drift")
         .summary("The words a document uses for things the project named otherwise")
         .description(
             "Every glossary alias members merged into an entry that one document still uses, \
@@ -9200,8 +10836,31 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/experts")
-        .operation_id("studio_documents.list_domain_experts")
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/term-drift")
+        .operation_id("studio_documents.list_term_drift")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model/term-drift`")
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/term-drift`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project")
+        .query_param("path", true, "The document, by its path in the checkout")
+        .handler(list_term_drift)
+        .json_response_with_schema::<TermDriftListDto>(openapi, StatusCode::OK, "The words")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/experts")
+        .operation_id("studio_documents.list_project_domain_model_experts")
         .summary("Whom to ask about an entity: who changed the documents that describe it")
         .description(
             "Finds the three documents of the project with the most facts about the entity and \
@@ -9223,15 +10882,38 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/trace")
-        .operation_id("studio_documents.list_requirement_trace")
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/experts")
+        .operation_id("studio_documents.list_domain_experts")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model/experts`")
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/experts`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project")
+        .query_param("subject", true, "The entity, as the glossary names it")
+        .handler(list_domain_experts)
+        .json_response_with_schema::<DomainExpertListDto>(openapi, StatusCode::OK, "The people")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/trace")
+        .operation_id("studio_documents.list_project_domain_model_trace")
         .summary("Where each requirement is named: other documents, code, tests")
         .description(
             "Every requirement the project's documents define, with the documents that refer \
              to it and the code and test files of its checkouts that name its identifier as a \
              whole token (a test is told from code by its path). Mechanical, computed on every \
              call: what is not named is not traced. `implemented` and `tested` count the \
-             requirements some code or some test names (docs/spec-domain-model.md, \"From \
+             requirements some code or some test names (docs/project-domain-model.md, \"From \
              requirement to code and test\").",
         )
         .tag("StudioDocuments")
@@ -9251,8 +10933,34 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/related")
-        .operation_id("studio_documents.list_related_requirements")
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/trace")
+        .operation_id("studio_documents.list_requirement_trace")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model/trace`")
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/trace`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param(
+            "project_id",
+            true,
+            "The project whose requirements to trace",
+        )
+        .handler(list_requirement_trace)
+        .json_response_with_schema::<RequirementTraceListDto>(openapi, StatusCode::OK, "The traces")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/related")
+        .operation_id("studio_documents.list_project_domain_model_related")
         .summary(
             "Requirements of other projects that say the same as this project's, or the opposite",
         )
@@ -9261,7 +10969,7 @@ pub fn register_routes(
              organization's other projects the caller can read (at most 40 a call): pairs that \
              share most of their meaningful words, as `same` or `overlap`, and `opposite` where \
              one negates what the other requires. Candidates for a person to read, never a \
-             verdict: nothing is stored or raised (docs/spec-domain-model.md, \"Across \
+             verdict: nothing is stored or raised (docs/project-domain-model.md, \"Across \
              projects\").",
         )
         .tag("StudioDocuments")
@@ -9285,8 +10993,38 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/requirements")
-        .operation_id("studio_documents.list_spec_model_requirements")
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/related")
+        .operation_id("studio_documents.list_related_requirements")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model/related`")
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/related`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param(
+            "project_id",
+            true,
+            "The project whose requirements to compare",
+        )
+        .handler(list_related_requirements)
+        .json_response_with_schema::<RelatedRequirementListDto>(
+            openapi,
+            StatusCode::OK,
+            "The pairs",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/requirements")
+        .operation_id("studio_documents.list_project_domain_model_requirements")
         .summary("The requirements a project's documents define, and what each rests on")
         .description(
             "Every identifier a project's documents define with a label (`**ID**: `x``), with \
@@ -9296,7 +11034,7 @@ pub fn register_routes(
              `open_question` (the words that make it so are in `because`), or `stated` (nothing \
              about where it comes from). Read as written, computed on every call and never \
              stored; no finding is raised. `work` counts the synced issues, pull requests and \
-             commits that name the identifier (docs/spec-domain-model.md).",
+             commits that name the identifier (docs/project-domain-model.md).",
         )
         .tag("StudioDocuments")
         .authenticated()
@@ -9315,8 +11053,206 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/work")
-        .operation_id("studio_documents.list_spec_model_work")
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/requirements")
+        .operation_id("studio_documents.list_spec_model_requirements")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model/requirements`")
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/requirements`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose requirements to read")
+        .handler(list_spec_requirements)
+        .json_response_with_schema::<SpecRequirementListDto>(
+            openapi,
+            StatusCode::OK,
+            "The requirements",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/issues")
+        .operation_id("studio_documents.list_project_domain_model_issues")
+        .summary("What a project has to decide before it builds from its documents")
+        .description(
+            "The Issues tab's queue, most blocking first: the documents' problems (the findings \
+             of `GET /project-domain-model/findings`, undecided first, high severity first), then \
+             requirements left as open questions, requirements resting on an assumption, and \
+             buildable requirements (`fr`, `nfr`, `feature`, `usecase`, `constraint`) that \
+             state no basis; decided findings last. Each row says its `group` — `blocks` (a \
+             problem a rule established, a concern a member confirmed, an unanswered question), \
+             `look` (an assumption, a missing basis, an unconfirmed concern) or `decided` — the \
+             issue opened for it, and the `actions` it offers, each naming the operation that \
+             does it. `by_group` counts every row before `group` and paging. Computed on every \
+             call from the documents as last synced and the decisions recorded; nothing is \
+             stored. `POST /project-domain-model/issues` opens a host issue for a row.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose documents to read")
+        .query_param(
+            "group",
+            false,
+            "`blocks`, `look` or `decided`: only that group",
+        )
+        .query_param_typed(
+            "offset",
+            false,
+            "Zero-based index of the first row",
+            "integer",
+        )
+        .query_param_typed("limit", false, "Page size, 1..=200 (default 50)", "integer")
+        .handler(list_spec_model_issues)
+        .json_response_with_schema::<SpecModelIssueRowListDto>(openapi, StatusCode::OK, "The rows")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/issues")
+        .operation_id("studio_documents.list_spec_model_issues")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model/issues`")
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/issues`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose documents to read")
+        .query_param(
+            "group",
+            false,
+            "`blocks`, `look` or `decided`: only that group",
+        )
+        .query_param_typed(
+            "offset",
+            false,
+            "Zero-based index of the first row",
+            "integer",
+        )
+        .query_param_typed("limit", false, "Page size, 1..=200 (default 50)", "integer")
+        .handler(list_spec_model_issues)
+        .json_response_with_schema::<SpecModelIssueRowListDto>(openapi, StatusCode::OK, "The rows")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/readiness")
+        .operation_id("studio_documents.get_project_domain_model_readiness")
+        .summary("Whether anything stops a build from a project's documents")
+        .description(
+            "From the same queue as `GET /project-domain-model/issues`: `blocking` counts the rows that \
+             stop a build and `ready` is true when there are none; `open` counts every row \
+             still waiting for somebody. `total`, `cited` and `reasoned` count the requirements \
+             the documents define and those that cite a source or give a reason. An assumption \
+             waiting for its check, a requirement that names no source and a concern nobody \
+             looked at do not stop a build.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose documents to read")
+        .handler(get_spec_model_readiness)
+        .json_response_with_schema::<SpecModelReadinessDto>(
+            openapi,
+            StatusCode::OK,
+            "Where it stands",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/doc-quality")
+        .operation_id("studio_documents.list_project_domain_model_doc_quality")
+        .summary("What would make a project's documentation better, each change ready to save")
+        .description(
+            "The Issues tab's \"improves the docs\" rows, read off the project domain model \
+             (the facts members did not reject, folded into entities under the glossary), \
+             worst gap first: a thing of the domain only an ADR or a feature describes \
+             (`onlyadr`), one described three times or more and never said what it is \
+             (`nodefinition`), a relation only one side writes down (`onesided`), a thing \
+             whose name says what it is about while nothing relates the two (`norelation`, \
+             proposed only in a document read at its current revision), and two glossary \
+             entries that are probably one thing (`twonames`). Each row carries the change \
+             ready to make: `edit` for `POST /project-domain-model/entities`, `sentence` for \
+             `POST /project-domain-model/sentences/proposals`, `pair` for \
+             `POST /project-domain-model/glossary/decisions`, with `actions` naming which. \
+             None of them stops a build; `GET /project-domain-model/readiness` does not \
+             count them. Computed on every call; nothing is stored.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose documents to read")
+        .query_param(
+            "kind",
+            false,
+            "`onlyadr`, `nodefinition`, `onesided`, `norelation` or `twonames`: only that kind",
+        )
+        .query_param_typed(
+            "offset",
+            false,
+            "Zero-based index of the first row",
+            "integer",
+        )
+        .query_param_typed("limit", false, "Page size, 1..=200 (default 50)", "integer")
+        .handler(list_doc_quality)
+        .json_response_with_schema::<DocQualityRowListDto>(openapi, StatusCode::OK, "The rows")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/readiness")
+        .operation_id("studio_documents.get_spec_model_readiness")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model/readiness`")
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/readiness`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose documents to read")
+        .handler(get_spec_model_readiness)
+        .json_response_with_schema::<SpecModelReadinessDto>(
+            openapi,
+            StatusCode::OK,
+            "Where it stands",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/work")
+        .operation_id("studio_documents.list_project_domain_model_work")
         .summary("Which issues, pull requests and commits name what the documents define")
         .description(
             "Every identifier a project's documents define with a label (`**ID**: `x``: a \
@@ -9338,16 +11274,59 @@ pub fn register_routes(
         .error_503(openapi)
         .register(router, openapi);
 
-    router = OperationBuilder::get("/studio-documents/v1/spec-model/findings")
-        .operation_id("studio_documents.list_spec_model_findings")
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/work")
+        .operation_id("studio_documents.list_spec_model_work")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model/work`")
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/work`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose work to link")
+        .handler(list_work_links)
+        .json_response_with_schema::<WorkLinkListDto>(openapi, StatusCode::OK, "The links")
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/project-domain-model/findings")
+        .operation_id("studio_documents.list_project_domain_model_findings")
         .summary("Where a project's documents disagree, or refer to what is not there")
         .description(
-            "Read from the documents as they are written (docs/spec-domain-model.md). Today the \
-             rules that need no model: a reference to an identifier, ADR, file or section the \
-             project does not have (`reference.dangling`), and an ADR number two of the \
-             project's ADR sets share, cited without a link from outside both \
-             (`reference.ambiguous`). Every finding quotes each side, and its `fingerprint` \
-             survives the lines moving. The list is read whole.",
+            "Read from the documents as they are written (docs/project-domain-model.md). Today the rules that need no model: a reference to an identifier, ADR, file or section the project does not have (`reference.dangling`), and an ADR number two of the project's ADR sets share, cited without a link from outside both (`reference.ambiguous`). Every finding quotes each side, and its `fingerprint` survives the lines moving. The list is read whole.",
+        )
+        .tag("StudioDocuments")
+        .authenticated()
+        .require_license_features::<License>([])
+        .query_param("project_id", true, "The project whose documents to check")
+        .handler(list_spec_model_findings)
+        .json_response_with_schema::<SpecModelFindingListDto>(
+            openapi,
+            StatusCode::OK,
+            "The findings",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
+        .error_500(openapi)
+        .error_503(openapi)
+        .register(router, openapi);
+
+    router = OperationBuilder::get("/studio-documents/v1/spec-model/findings")
+        .operation_id("studio_documents.list_spec_model_findings")
+        .summary("Deprecated alias of `GET /studio-documents/v1/project-domain-model/findings`")
+        .description(
+            "Deprecated: the same operation as \
+             `GET /studio-documents/v1/project-domain-model/findings`, under the path it \
+             had before the project domain model was named. Kept for callers written before \
+             it; removed after 2027-03-31.",
         )
         .tag("StudioDocuments")
         .authenticated()
@@ -10388,6 +12367,268 @@ mod tests {
         assert!(!review_state_fits("0123456789abcdef", "scored"));
         assert_eq!(review_note_max("hyp:0123456789abcdef"), 8000);
         assert_eq!(review_note_max("pri:cpt-a"), 2000);
+    }
+
+    #[test]
+    fn coverage_names_what_was_not_read_and_what_the_documents_leave_open() {
+        use super::super::spec_model::{Coverage, SourceText, Sources, build::BuildState};
+        let doc = |path: &str, text: &str| SourceText {
+            path: path.into(),
+            text: text.into(),
+            doc_type: Some("prd".into()),
+            node: String::new(),
+            binding: None,
+            at: None,
+        };
+        let sources = Sources {
+            documents: vec![doc(
+                "docs/prd.md",
+                "# PRD\n\n**ID**: `cpt-a-fr-export`\n\nThe export format is TBD.\n\n\
+                 **ID**: `cpt-a-fr-search`\n\nWe assume people search by name.\n",
+            )],
+            unread: vec!["docs/gone.md".into()],
+            unread_because: Some("the last clone failed".into()),
+            ..Sources::default()
+        };
+        let state = |path: &str, state: &'static str, error: Option<&str>| Coverage {
+            path: path.into(),
+            revision: "r".into(),
+            state,
+            facts: 2,
+            dropped: 1,
+            error: error.map(str::to_string),
+            at: None,
+        };
+        let coverage = vec![
+            state("docs/prd.md", "failed", Some("lines 1-9: 503")),
+            state("docs/old.md", "kept", None),
+        ];
+        let build = BuildState {
+            running: true,
+            documents: 3,
+            done: 1,
+            ..BuildState::default()
+        };
+        let dto = spec_model_coverage_dto(sources, coverage, build);
+        assert_eq!(dto.total, 2);
+        assert_eq!(dto.by_state.get("failed"), Some(&1));
+        assert_eq!(dto.items[0].error.as_deref(), Some("lines 1-9: 503"));
+        assert_eq!(dto.unread_documents, 1);
+        assert_eq!(dto.unread_paths, ["docs/gone.md"]);
+        assert_eq!(dto.unread_because.as_deref(), Some("the last clone failed"));
+        assert_eq!(dto.open_questions.len(), 1);
+        assert_eq!(dto.open_questions[0].id, "cpt-a-fr-export");
+        assert_eq!(dto.assumptions, 1);
+        assert!(dto.build.running);
+        assert_eq!((dto.build.documents, dto.build.done), (3, 1));
+    }
+
+    #[test]
+    fn every_fact_carries_the_commit_its_document_was_read_at() {
+        use super::super::spec_model::{Coverage, GitRevision, extract::Fact};
+        let fact = |path: &str| Fact {
+            kind: "entity".into(),
+            subject: "Invoice".into(),
+            aspect: String::new(),
+            value: String::new(),
+            text: "An invoice.".into(),
+            status: "active".into(),
+            status_because: String::new(),
+            path: path.into(),
+            line_start: 1,
+            line_end: 1,
+            quote: "An invoice".into(),
+            layer: None,
+        };
+        let coverage = vec![Coverage {
+            path: "docs/a.md".into(),
+            revision: "r".into(),
+            state: "extracted",
+            facts: 1,
+            dropped: 0,
+            error: None,
+            at: Some(GitRevision {
+                commit: "abc123".into(),
+                git_ref: Some("main".into()),
+            }),
+        }];
+        let dtos = spec_model_fact_dtos(
+            vec![fact("docs/a.md"), fact("studio:1")],
+            &coverage,
+            &std::collections::BTreeMap::new(),
+        );
+        assert_eq!(dtos[0].source_commit.as_deref(), Some("abc123"));
+        assert_eq!(dtos[0].source_ref.as_deref(), Some("main"));
+        assert_eq!(dtos[1].source_commit, None, "not a repository file");
+        let doc = spec_model_document_dto(coverage[0].clone());
+        assert_eq!(doc.source_commit.as_deref(), Some("abc123"));
+        assert_eq!(dtos[0].basis, "stated", "its words are in the quote");
+        assert_eq!(dtos[0].extracted_value, None);
+
+        // A member's correction is shown instead of the value read.
+        let mut read = fact("docs/a.md");
+        read.kind = "attribute".into();
+        read.aspect = "retention".into();
+        read.value = "30 days".into();
+        read.quote = "An invoice is kept 30 days".into();
+        let key = super::super::spec_model::fact_key::fact_key(&read);
+        let corrections = std::collections::BTreeMap::from([(key, "90 days".to_owned())]);
+        let dtos = spec_model_fact_dtos(vec![read], &coverage, &corrections);
+        assert_eq!(dtos[0].value, "90 days");
+        assert_eq!(dtos[0].extracted_value.as_deref(), Some("30 days"));
+        assert_eq!(dtos[0].basis, "stated", "the basis is the reading's");
+        assert!(review_state_fits(&dtos[0].fact_key, "corrected"));
+        assert!(!review_state_fits("ev:abc", "corrected"));
+    }
+
+    #[test]
+    fn an_upload_answers_the_path_a_build_selects_it_by() {
+        let id = super::super::repo::spec_upload_id(Uuid::from_u128(1), "survey.csv");
+        let dto = spec_upload_dto(super::super::entity::spec_upload::Model {
+            id,
+            tenant_id: Uuid::from_u128(2),
+            project_id: Uuid::from_u128(1),
+            name: "survey.csv".into(),
+            kind: "csv".into(),
+            revision: "abc".into(),
+            size: 12,
+            storage: "studio-documents".into(),
+            file_id: None,
+            content: Some("a,b\n1,2\n".into()),
+            created_by: Uuid::from_u128(3),
+            created_at: time::OffsetDateTime::UNIX_EPOCH,
+        });
+        assert_eq!(dto.path, "upload:survey.csv");
+        assert_eq!(dto.id, id.to_string());
+        assert_eq!(dto.size, 12);
+        assert_eq!(
+            id,
+            super::super::repo::spec_upload_id(Uuid::from_u128(1), "survey.csv"),
+            "the same name is the same upload"
+        );
+    }
+
+    #[test]
+    fn a_selected_build_reads_what_it_names_whatever_its_state() {
+        use super::super::spec_model::{Coverage, SourceText, Sources, select::Selection};
+        let doc = |path: &str| SourceText {
+            path: path.into(),
+            text: "x".into(),
+            doc_type: None,
+            node: String::new(),
+            binding: None,
+            at: None,
+        };
+        let sources = Sources {
+            documents: vec![doc("docs/a.md"), doc("docs/b.md"), doc("notes/c.md")],
+            ..Sources::default()
+        };
+        let coverage: Vec<Coverage> = ["docs/a.md", "docs/b.md", "notes/c.md"]
+            .into_iter()
+            .map(|p| Coverage {
+                path: p.into(),
+                revision: "r".into(),
+                state: if p == "notes/c.md" {
+                    "pending"
+                } else {
+                    "extracted"
+                },
+                facts: 0,
+                dropped: 0,
+                error: None,
+                at: None,
+            })
+            .collect();
+        let all = spec_model_pending(&sources, &coverage, Selection::default())
+            .map(|d| d.len())
+            .ok();
+        assert_eq!(all, Some(1), "only what is not read");
+        let named = ["notes/c.md".to_owned()];
+        let picked = spec_model_pending(
+            &sources,
+            &coverage,
+            Selection {
+                paths: &named,
+                glob: Some("docs/*"),
+                ..Selection::default()
+            },
+        )
+        .map(|d| d.len())
+        .ok();
+        assert_eq!(picked, Some(3), "extracted ones too, when named");
+        let unknown = ["docs/zzz.md".to_owned()];
+        assert!(
+            spec_model_pending(
+                &sources,
+                &coverage,
+                Selection {
+                    paths: &unknown,
+                    ..Selection::default()
+                }
+            )
+            .is_err()
+        );
+        assert!(
+            spec_model_pending(
+                &sources,
+                &coverage,
+                Selection {
+                    path: Some("docs/zzz.md"),
+                    ..Selection::default()
+                }
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn a_fact_key_the_server_returns_is_one_the_reviews_take() {
+        let key = super::super::spec_model::fact_key::key_of(
+            "attribute",
+            "Invoice",
+            "number",
+            "An invoice has a **number**.",
+            "",
+        );
+        assert_eq!(key, "28d393bc09e65fe9");
+        assert!(review_state_fits(&key, "accepted"));
+        assert!(review_state_fits(&key, "rejected"));
+        assert!(review_state_fits(&format!("ev:{key}"), "supports"));
+    }
+
+    #[test]
+    fn an_issue_row_carries_its_finding_its_actions_and_the_issue_opened() {
+        use super::super::spec_model::{finding, resolve};
+        let f = finding::Finding {
+            fingerprint: "fp".into(),
+            rule: "reference.dangling".into(),
+            severity: "high".into(),
+            message: "ADR-0040 is cited, but the project has no ADR numbered 40.".into(),
+            sides: vec![finding::Side::at("docs/a.md", 4, "See ADR-0040.")],
+            decide: Vec::new(),
+            edit: None,
+            target: None,
+        };
+        let item = resolve::queue(
+            vec![resolve::Decided {
+                finding: f,
+                decision: None,
+            }],
+            &[],
+        )
+        .remove(0);
+        let row = spec_model_issue_row(item, Some("https://github.com/o/r/issues/7".into()));
+        assert_eq!(row.key, "f:fp");
+        assert_eq!(row.kind, "finding");
+        assert_eq!(row.label, "Problem");
+        assert_eq!(row.group, "blocks");
+        assert_eq!(row.fingerprint.as_deref(), Some("fp"));
+        assert_eq!(row.sides[0].line_start, Some(4));
+        assert_eq!(row.actions, ["confirm", "dismiss"]);
+        assert_eq!(
+            row.title,
+            "ADR-0040 is cited, but there is no ADR numbered 40"
+        );
     }
 
     #[test]

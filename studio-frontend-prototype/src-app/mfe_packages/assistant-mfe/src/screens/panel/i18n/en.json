@@ -1,0 +1,16 @@
+{
+  "title": "Studio AI",
+  "open": "Open Studio AI",
+  "collapse": "Collapse Studio AI",
+  "new": "New conversation",
+  "context": "Context · {place} · read-only",
+  "portal": "Studio portal",
+  "loading": "Asking which model you have…",
+  "unavailable": "Studio AI is unavailable right now.",
+  "no_key": "Studio AI answers on your own model key: add one to your profile, or connect one under Connections.",
+  "first_question": "What should I look at first?",
+  "placeholder": "Ask Studio…",
+  "send": "Send",
+  "stop": "Stop",
+  "try_again": "Try again"
+}

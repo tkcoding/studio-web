@@ -542,6 +542,128 @@ migrated; a fresh graph registers the fixed traits from the start.
 §5 record the platform gaps behind the open types and the missing conditional
 update.
 
+**Kits' overlays** (ADR-0067 §6, [studio-kits §3.10](studio-kits.md)). The
+port offers `sync_kit_model(slug, version, overlay?)`, which makes an
+organization's model carry exactly one kit version's overlay (`kit_overlay.rs`):
+types, fields, relations, tabs and lifecycles, each marked `origin = "kit"`
+with the kit and its version; a kit type that still has objects is kept on
+uninstall, dormant, marked `meta.left_by = {kit, version, at}` (ADR-0070 §4). One model version (`op = "kit"`) per
+change, its patch covers the effective document and source metadata, so both
+revert together like any edit.
+`kit_models` answers which kits a model carries. Overlays are **copied** into
+each organization's stored model rather than layered over a shared one,
+because every write path here works on that one stored document. A known gap
+followed from it, and predated kits: once an organization's model was stored,
+Studio's later core changes reached it only additively. The core layer (below)
+closes that gap for Studio's own types; kit types still compose as copies with
+their property layers.
+
+### Gear declarations during the ADR-0070 migration
+
+`ensure_type` records each linked gear's `TypeNeed` in the model node's
+`gear_declarations`, keyed by declaring gear and entity id. `declared_by` names
+that gear even when it leaves the type open; `held_by` remains a separate
+restriction on who writes the records and their protected fields.
+
+Declarations are additive and canonical by field/relation name: the catalogue's
+initial node-only declaration cannot erase its later relations. Repetition writes
+no model version. Another gear cannot take over an existing holder. Imports and
+organization reverts retain trusted gear declarations instead of accepting the
+uploaded document's copy of them.
+
+This is ADR-0070 phase 2, not the full layer migration. Existing flat-model
+readers still receive the additive projection, but a newly required definition
+has `origin: gear`, not `origin: studio`. Re-declaring after a kit uninstall
+preserves a retained dormant mark, or recreates only a gear definition; it does
+not install the kit. Shared-core composition and the visibility/write rules for
+dormant types remain phases 3 and 4.
+
+### Organization overrides of kit properties
+
+The property portion of ADR-0070 phase 3 stores `kit_property_layers` in the
+model head: the pinned overlay, its pristine contributed properties/lifecycles,
+and organization overrides keyed by entity id and contribution name. Removals
+are explicit tombstones; partial edits override only the changed keys. An
+upgrade can therefore add a new field or change its untouched description
+without erasing an organization's label or restoring a deleted field, relation,
+tab or lifecycle. Overrides survive a version that omits the contribution,
+uninstall/reinstall, and a process restart. Dormant inhabited types retain these
+edits too; a gear's protected fields remain protected.
+
+Reconciliation of the same version is idempotent. It also adopts a flat kit's
+property source when that exact pinned version is known, preserving its
+effective properties. A different unknown historical version is refused with
+the old version and an instruction to reconcile its pinned manifest first;
+it cannot be safely inferred from the new overlay. Imports keep trusted source
+metadata while contributing organization edits. History replays and reverts
+both the projection and its sources.
+
+### Installed, dormant and absent types (ADR-0070 §4)
+
+A type whose kit was uninstalled while it had objects, or while a gear held it,
+stays with `meta.left_by = {kit, version, at}`; a kit field left on a core type
+carries `left_by` too. What follows from the mark:
+
+- `GET /types` leaves dormant types, fields, relations and lifecycles out
+  (`Ontology::without_dormant`), so tabs, generic screens, filters and the
+  generated clients do not see them. `?include=dormant` returns them, marked,
+  to an administrator of the model; Admin › Studio domain model asks for it.
+- A person's create, change, delete or relation from an object of a dormant
+  type is refused: `failed_precondition`, violation `DOMAIN_TYPE_DORMANT`
+  naming the kit. The gear that holds the type writes through its trusted path
+  and is not refused (decision 7).
+- `POST /query` of a dormant type answers a member `not_found` with
+  `DOMAIN_TYPE_NOT_INSTALLED:<kit>`; an administrator reads its objects.
+- Reinstalling the kit removes the mark: the same objects, under the same ids,
+  are writable again. A type with no objects and no gear goes when its kit goes
+  (absent): unknown to every route.
+
+Still open: an administrator's "remove what *kit* left" (one model change that
+marks the objects deleted), and MCP tools of an uninstalled kit answering
+`KIT_NOT_INSTALLED` (#1039).
+
+### The running core as a layer
+
+`core_layer` in the model head pins the core source an organization was last
+composed from: each Studio type's own attributes (`entity`) and each of its
+fields (`property:<name>`), without the marks other layers write (`origin`,
+`kit`, `held_by`, `left_by`, `searchable`, lifecycles, declarations). What the
+organization changed is its effective model minus that source, re-derived as
+named overrides (the same `Delta`s as the kit property layers) at each sync.
+When the running Studio's core differs from the pinned source, every key the
+organization did not change takes the new value, a partial edit keeps only the
+keys it changed, a removal stays removed, and a key the core no longer declares
+is left as it is (now the organization's, reported as released). A field a kit
+brought, a field or type a gear holds and a type a kit declared by its id are
+skipped in both directions: their own layers compose them.
+
+The sync runs at start (`StudioTypes` sweep) and when an organization's model is
+prepared; on the same core it is one comparison and writes nothing. A new
+organization starts on the layer (`Ontology::load`).
+
+**Migration.** A stored model without the layer is migrated on that first sync:
+the legacy additive repair runs once (what it read at every start), the
+differences from the running core become its overrides, and the composition
+must equal that model type for type before it is kept. The version that records
+it (`op = "core-layer-migration"`) has no inverse, so a revert past it is
+refused. A legacy model cannot tell an organization's edit from an older core's
+value, so every difference is kept as the organization's and listed in
+`core_layer.legacy`. Before migrating, the stored head's `entity_ids` must all
+have been read (one re-read on a mismatch); otherwise, or when the equality
+check fails, the organization stays on its stored model with the legacy repair,
+and the reason is logged.
+
+Imports keep the trusted core layer; what an upload changes in a Studio type
+becomes the organization's override at the next core change (ADR-0070 §7,
+decision 9).
+
+**Still open in #1032:** kit types are still composed as copies (their
+property/lifecycle layers are pinned, their entity attributes are not), the
+gear and kit layers are not yet read through the same composition, model heads
+are not yet invalidated by install/uninstall/deploy beyond the version check,
+and the migration's difference is logged, not shown to administrators.
+
+
 ## 5. Traceability
 
 - **PRD**: [Constructor Studio](../prd/constructor-studio.md)

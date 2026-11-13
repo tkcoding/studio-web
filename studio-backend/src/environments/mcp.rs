@@ -595,6 +595,69 @@ pub fn tools() -> Vec<Tool> {
             experimental: false,
             run: Run::Get("/studio-environments/v1/deployments/{deployment_id}/logs"),
         },
+        Tool {
+            name: "project_path",
+            description: "Where a project stands from its product to running (#1050): the \
+                steps product, build, image, environment and running, each with its state \
+                (`done`, `active`, `failed`, `blocked`, `next`, `later`), why, a checklist of \
+                what is missing before a deploy (a bound profile, configuration secrets, the \
+                caller's Research sign-in), the one action that moves it on, and for a failed \
+                build or deploy its cause with the actions that fix it. Read from Studio's \
+                records; the cluster is not asked.",
+            input_schema: || {
+                object(
+                    json!({
+                        "project_id": { "type": "string", "description": "The project." }
+                    }),
+                    &["project_id"],
+                )
+            },
+            effect: Effect::Read,
+            experimental: false,
+            run: Run::Get("/studio-environments/v1/project-path"),
+        },
+        // The Constructor Research kit's own (docs/design/studio-kits.md
+        // §3.13): what a Research environment is made on. Its build, deploy
+        // and rollback are `build_start` and `deploy_request` on a Research
+        // environment; without the kit they answer `KIT_NOT_INSTALLED`.
+        Tool {
+            name: "research_projects",
+            description: "The Constructor Research projects a `research` connection's user owns \
+                or collaborates on: what a Research environment is made on (the Constructor \
+                Research kit, ADR-0049). An organization without the kit is refused \
+                `KIT_NOT_INSTALLED`; organization administrators only.",
+            input_schema: || {
+                object(
+                    json!({
+                        "connection_id": { "type": "string", "description": "The `research` connection (Sign in with Constructor)." },
+                        "organization_id": { "type": "string" }
+                    }),
+                    &["connection_id"],
+                )
+            },
+            effect: Effect::Read,
+            experimental: false,
+            run: Run::Get("/studio-environments/v1/research/projects"),
+        },
+        Tool {
+            name: "research_hardware",
+            description: "The hardware configurations a Research project's services may run on, \
+                trial ones marked: what a Research environment's `research_hardware` is picked \
+                from (the Constructor Research kit).",
+            input_schema: || {
+                object(
+                    json!({
+                        "project": { "type": "string", "description": "The Research project's id, from `research_projects`." },
+                        "connection_id": { "type": "string", "description": "The `research` connection." },
+                        "organization_id": { "type": "string" }
+                    }),
+                    &["project", "connection_id"],
+                )
+            },
+            effect: Effect::Read,
+            experimental: false,
+            run: Run::Get("/studio-environments/v1/research/projects/{project}/hardware"),
+        },
     ]
 }
 
@@ -941,6 +1004,34 @@ mod tests {
             r.body,
             json!({"environment_id": "e", "source": "docker.io/library/postgres:16"})
         );
+    }
+
+    #[test]
+    fn research_projects_and_their_hardware_reach_their_routes() {
+        let all = tools();
+        let r = request_of(
+            &all,
+            "research_projects",
+            json!({"connection_id": "c", "organization_id": "o"}),
+        );
+        assert_eq!(
+            (r.method, r.path.as_str()),
+            (Method::Get, "/studio-environments/v1/research/projects")
+        );
+        assert_eq!(
+            r.query,
+            q(&[("connection_id", "c"), ("organization_id", "o")])
+        );
+        let r = request_of(
+            &all,
+            "research_hardware",
+            json!({"project": "p-1", "connection_id": "c"}),
+        );
+        assert_eq!(
+            r.path,
+            "/studio-environments/v1/research/projects/p-1/hardware"
+        );
+        assert_eq!(r.query, q(&[("connection_id", "c")]));
     }
 
     #[test]

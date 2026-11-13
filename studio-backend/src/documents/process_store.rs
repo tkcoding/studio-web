@@ -51,6 +51,7 @@ const CAPABILITY_TYPE: &str = "capability";
 fn stage_need() -> TypeNeed {
     let f = |n: &str, t: &str, d: &str| (n.to_string(), t.to_string(), d.to_string());
     TypeNeed {
+        declared_by: "studio-documents".to_owned(),
         id: STAGE_TYPE.to_string(),
         name: "Lifecycle Stage".to_string(),
         extends: Some("record".to_string()),
@@ -86,6 +87,7 @@ fn stage_need() -> TypeNeed {
 fn capability_need() -> TypeNeed {
     let f = |n: &str, t: &str, d: &str| (n.to_string(), t.to_string(), d.to_string());
     TypeNeed {
+        declared_by: "studio-documents".to_owned(),
         id: CAPABILITY_TYPE.to_string(),
         name: "Capability".to_string(),
         description:

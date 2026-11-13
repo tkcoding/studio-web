@@ -1,0 +1,297 @@
+/*
+ * Admin over ui-kit semantic tokens (see theme.css in @gears-frontx/ui-kit).
+ * No Tailwind: inside the shadow root the re-anchored kit tokens shadow the
+ * shell's HSL triplets.
+ */
+
+.screen {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 100%;
+  padding: var(--space-6);
+  color: var(--foreground);
+}
+
+/* The kit's theme.css paints `[data-theme]`; the shell's screen keeps its own. */
+.screen[data-theme] {
+  background: transparent;
+}
+
+.skeleton {
+  height: 12rem;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-heading-1-size);
+  line-height: var(--text-heading-1-line-height);
+  font-weight: var(--text-heading-1-weight);
+}
+
+.subtitle {
+  margin: 0 0 var(--space-2);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.headerAction {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 60rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.about p {
+  margin: 0;
+}
+
+.error {
+  margin: 0;
+  color: var(--destructive);
+  font-size: 0.875rem;
+}
+
+.notice {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 6px);
+  font-size: 0.875rem;
+}
+
+.danger {
+  border-color: var(--destructive);
+}
+
+.muted,
+.sub {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.mono {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.75rem;
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.search {
+  max-width: 20rem;
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: 0.8125rem;
+}
+
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rows > li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.rows > li:last-child {
+  border-bottom: 0;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 9999px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+  object-fit: cover;
+}
+
+.name {
+  font-weight: 500;
+}
+
+.selected {
+  box-shadow: inset 3px 0 0 var(--primary);
+  padding-left: var(--space-2);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--muted);
+  border-radius: var(--radius-md, 6px);
+}
+
+.panel h4 {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--space-2);
+  align-items: end;
+}
+
+.logo {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-md, 6px);
+  object-fit: contain;
+  background: var(--muted);
+}
+
+.tree,
+.tree ul {
+  list-style: none;
+  margin: 0;
+  padding-left: var(--space-5, 1.25rem);
+}
+
+.tree {
+  padding-left: 0;
+}
+
+.tree li {
+  padding: 2px 0;
+}
+
+.dim {
+  opacity: 0.55;
+}
+
+.models {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: var(--space-3);
+}
+
+.model {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+}
+
+.modelOn {
+  border-color: var(--primary);
+}
+
+.roleHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.roleGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--space-3);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.groupLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+}
+
+.lenses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

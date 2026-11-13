@@ -1,4 +1,4 @@
-import type { ProjectSource } from '@constructor-studio/mfe-shared';
+import { matchesSearch, type ProjectSource } from '@constructor-studio/mfe-shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiRegistry, useApiQuery, useQueryCache } from '@gears-frontx/react';
 import { ArtifactIngestApiService, type NodesParams } from '../api/ArtifactIngestApiService';
@@ -132,8 +132,7 @@ export function useArtifacts(
   const studio = useProjectDocuments(workspaceId, projectId);
   const documents = useMemo(() => {
     if (query.repo || query.kind) return [];
-    const needle = search.toLowerCase();
-    return studio.own.filter((document) => document.title.toLowerCase().includes(needle));
+    return studio.own.filter((document) => matchesSearch(search, document.title));
   }, [studio.own, query.repo, query.kind, search]);
   const split = useMemo(
     () => artifactPage(documents, query.offset, pageSize),

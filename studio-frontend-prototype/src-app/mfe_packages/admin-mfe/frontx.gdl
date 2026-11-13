@@ -1,0 +1,80 @@
+# This micro-frontend's passport: everything a tool that assembles a product
+# from FrontX packages (Gearbox, Constructor Studio) needs to know about it, in
+# one file. It restates what package.json and mfe.json say, and those tools
+# check that they agree, so keep them in step when either changes.
+#
+# Admin: the shell's administration (ADR-0068 §1: people, rights, settings),
+# not a kit. Its screens are the Admin level's sections.
+gdl_version = "1.5"
+
+mfe(
+    name = "@constructor-studio/admin-mfe",
+    version = "0.2.0-alpha.0",
+
+    # The backend gears its sections call, by gear id.
+    requires = [
+        "account-management",
+        "studio-user",
+        "studio-identity",
+        "resource-group",
+        "studio-organizations",
+        "credstore",
+        "studio-connector",
+        "studio-environments",
+        "studio-components-catalog",
+        "types-registry",
+        "studio-domain-model",
+    ],
+
+    # What it brings, as mfe.json says: the labels of its screens, then the
+    # route of each extension (presentation.route), in mfe.json's order. The
+    # next is Organization › Connections: the Integrations screen again, on the
+    # organization level, as the prototype had it. Then the generic screens of
+    # the organization, the workspace and the project (ADR-0066): Attributes,
+    # and the hidden one that answers the tabs the Studio domain model adds.
+    screens = [
+        "Organizations",
+        "People",
+        "Access",
+        "Integrations",
+        "Secrets",
+        "Studio domain model",
+        "Objects",
+        "Views",
+        "All identities",
+        "Project tenants",
+        "Connections",
+        "Attributes",
+        "Domain model tab",
+        "Attributes",
+        "Domain model tab",
+        "Attributes",
+        "Domain model tab",
+    ],
+    mounts = [
+        "/admin/organizations",
+        "/admin/people",
+        "/admin/access",
+        "/admin/integrations",
+        "/admin/secrets",
+        "/admin/domain-model",
+        "/admin/objects",
+        "/admin/views",
+        "/admin/identities",
+        "/admin/tenants",
+        "/connections",
+        "/model-organization/attributes",
+        "/model-organization/types",
+        "/model-workspace/attributes",
+        "/model-workspace/types",
+        "/model-project/attributes",
+        "/model-project/types",
+    ],
+
+    frontx = "0.2.0-alpha.15",
+
+    # No `roles`: who may is the backend's answer, shown when it refuses.
+    roles = [],
+
+    preview = ["/admin/people", "/admin/access"],
+)

@@ -2,6 +2,7 @@ import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NodesParams } from '../api/ArtifactIngestApiService';
 import { ARTIFACT_NODE_TYPES } from '../api/artifactTypes';
+import type { DocumentDto } from '../api/documentTypes';
 
 /**
  * The header's repository total is its own read: the table's page carries the
@@ -14,13 +15,15 @@ interface Answer {
   isError: boolean;
 }
 
-const { answer, invalidate, imported } = vi.hoisted(() => ({
+const { answer, invalidate, imported, own } = vi.hoisted(() => ({
   answer: vi.fn<(params: NodesParams) => Answer>(),
   invalidate: vi.fn(),
   imported: vi.fn(),
+  own: vi.fn<() => DocumentDto[]>(),
 }));
 
-vi.mock('@gears-frontx/react', () => ({
+vi.mock('@gears-frontx/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@gears-frontx/react')>()),
   apiRegistry: { getService: () => ({ nodes: (params: NodesParams) => ({ params }) }) },
   useApiQuery: (descriptor: { params: NodesParams }) => answer(descriptor.params),
   useQueryCache: () => ({ invalidate }),
@@ -31,7 +34,7 @@ vi.mock('./useProjectConfig', () => ({
 }));
 vi.mock('./useArtifactImport', () => ({ useProjectImport: () => imported() }));
 vi.mock('./useProjectDocuments', () => ({
-  useProjectDocuments: () => ({ documents: [], own: [], loading: false, failed: false }),
+  useProjectDocuments: () => ({ documents: [], own: own(), loading: false, failed: false }),
 }));
 
 import { useArtifacts } from './useArtifacts';
@@ -43,6 +46,7 @@ const isRepositoryTotal = (params: NodesParams) =>
 beforeEach(() => {
   invalidate.mockClear();
   imported.mockReturnValue({ phase: 'idle', repos: [] });
+  own.mockReturnValue([]);
   answer.mockReset();
   // The page answers for its filters; every limit=1 read with a repo answers 96.
   answer.mockImplementation((params) => {
@@ -111,6 +115,26 @@ describe('a page on the way', () => {
 
     rerender({ projectId: 'p2', search: 'other' });
     expect(result.current).toMatchObject({ total: 0, refreshing: false, loading: true });
+  });
+});
+
+describe('the Studio documents', () => {
+  const studioDocument = (id: string, title: string): DocumentDto => ({
+    id,
+    type_key: 'adr',
+    title,
+    inherited: false,
+    created_at: '2026-11-01T00:00:00Z',
+    updated_at: '2026-11-01T00:00:00Z',
+  });
+
+  it('are searched by title, whatever the case and the spaces around the text', () => {
+    own.mockReturnValue([studioDocument('d-1', 'Billing spec'), studioDocument('d-2', 'Onboarding')]);
+    const { result } = renderHook(() =>
+      useArtifacts('p1', 'w1', { repo: null, kind: null, search: '  BILL ', offset: 0 })
+    );
+    const documents = result.current.rows.filter((row) => row.kind === 'document');
+    expect(documents.map((row) => row.name)).toEqual(['Billing spec']);
   });
 });
 

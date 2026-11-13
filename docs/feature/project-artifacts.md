@@ -521,10 +521,9 @@ The table is built on the kit's `Table` primitives rather than on its
 `DataTable`, and that is what makes the rest of this DoD reachable. `DataTable`
 passes nothing but a `key` to its `TableHead`, so no column can carry a width —
 and without a width a long repository name pushes the whole table into a
-horizontal scroll instead of truncating. The projects list next door settles the
-same question the same way: `table-layout: fixed`, the width on each column's
-own class, `nowrap` on the narrow columns, and truncation on the content
-element rather than on the cell.
+horizontal scroll instead of truncating. The table settles it with
+`table-layout: fixed`, the width on each column's own class, `nowrap` on the
+narrow columns, and truncation on the content element rather than on the cell.
 
 Owning the markup also buys the footer the design asks for: numbered pages and
 the row-range line beside them, both beyond `DataTable`'s prev/next. The table
@@ -970,8 +969,7 @@ list sends one: its id, no repository, its title where a file has its path
 (#693). The IDE's `studio.openInEditor` takes a
 checkout-relative path, which only a file node carries, and an issue or a pull
 request has no meaning inside it — its home is the forge. So a file's name is a
-button, the way a project's name is in the projects list, and its row menu says
-_Open in editor_; every other kind keeps its name as text and its row menu says
+button and its row menu says _Open in editor_; every other kind keeps its name as text and its row menu says
 _Open_, which follows the node's url. The one rule is `opensInEditor`, read by
 both cells, so the name and the menu cannot disagree.
 

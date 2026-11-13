@@ -1,0 +1,1 @@
+{"title": "連接來源", "field_provider": "提供方", "field_provider_placeholder": "選擇提供方", "field_label": "名稱", "field_label_hint": "此連接將在列表中顯示的名稱", "field_base_url": "安裝網址", "field_token": "憑證", "cancel": "取消", "create": "建立", "error_no_org": "未指定組織，因此無法關聯此連接。", "error_generic": "無法建立連接。", "error_providers": "無法載入提供方清單。", "loading_providers": "正在載入提供方..."}

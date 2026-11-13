@@ -1,0 +1,24 @@
+{
+  "$id": "gts://gts.frontx.mfes.comm.action.v1~constructor_studio.shell.screen.open.v1~",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Shell-owned action an MFE executes against the screen domain to open another screen of the shell — a kit's Overview row to Connections, the Tests kit's spec card to Specs (ADR-0069). The MFE names the screen by its manifest route (presentation.route), which is public in every mfe.json; the shell finds the extension and moves the address as a tab click does. See screenOpenAction.ts.",
+  "allOf": [
+    {
+      "$ref": "gts://gts.frontx.mfes.comm.action.v1~"
+    }
+  ],
+  "properties": {
+    "payload": {
+      "type": "object",
+      "properties": {
+        "route": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/",
+          "$comment": "The target screen's presentation.route, e.g. /projects/specs or /connections."
+        }
+      },
+      "required": ["route"]
+    }
+  }
+}

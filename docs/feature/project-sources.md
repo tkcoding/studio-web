@@ -52,7 +52,7 @@ owner: studio-team
   - [A refused cancel or retry is a notification](#a-refused-cancel-or-retry-is-a-notification)
   - [Open specs shows Specs searched by the source's path](#open-specs-shows-specs-searched-by-the-sources-path)
   - [The repository's page opens from its clone URL](#the-repositorys-page-opens-from-its-clone-url)
-  - [Disconnect is shown, disabled, until the backend can take a source out](#disconnect-is-shown-disabled-until-the-backend-can-take-a-source-out)
+  - [Disconnect detaches the source through one backend run](#disconnect-detaches-the-source-through-one-backend-run)
 - [6. Acceptance Criteria](#6-acceptance-criteria)
 
 <!-- /toc -->
@@ -72,8 +72,8 @@ repositories join the project's config and its import (#687). It then builds the
 rows the section's table shows (#685): each source joined to its repository in
 the graph, its week of pull requests and commits, its specs and its sync. Each
 row has a menu (#686): sync the source or cancel its sync, open its specs, open
-it at its provider. Disconnect is in the menu, disabled until the backend can
-take a source out of a project (#852). The table shows the rows (#688). Upload
+it at its provider. Disconnect takes a source out of the project through one
+backend run, after a confirmation (#852, #1042). The table shows the rows (#688). Upload
 documents (#693) adds Markdown and text files to the project as Studio
 documents; the section lists them as one more row, Uploaded files, after the
 sources.
@@ -167,12 +167,14 @@ what the gears cannot do yet:
   cancel turns Cancelling… back into Syncing…, and a refused retry changes
   nothing. A refused sync request and a failed sync are on the row already: its
   second line reads Last attempt failed, with the reason.
-- **Disconnect is shown and disabled.** Taking a source out of a project is one
+- **Disconnect is one backend run.** Taking a source out of a project is one
   operation for the backend: the config written and everything synced from the
-  repository pruned, durably. Done from the browser as a config write and then
-  `POST /studio-artifact-ingest/v1/reconcile`, a reconcile that fails, or a tab
-  closed in between, leaves the repository's files, pull requests and specs in
-  Artifacts and Specs, with no row left in Sources to try again from.
+  repository pruned, durably (`POST /studio-artifact-ingest/v1/sources/detach`,
+  an `artifact.source_detach` run, #1042). Done from the browser as a config
+  write and then `POST /studio-artifact-ingest/v1/reconcile`, a reconcile that
+  failed, or a tab closed in between, left the repository's files, pull
+  requests and specs in Artifacts and Specs, with no row left in Sources to try
+  again from.
 - **`Open in {provider}` is built from the clone URL.** For GitHub and
   Bitbucket the connection's `base_url` is the provider's API root, not the
   site a person opens. A source whose clone URL is not an `http` or `https`
@@ -453,7 +455,7 @@ so it is found the next time the project screen reads the project.
    6. [x] - `p1` - **ELSE**: Sync now, requesting a new sync - `inst-7`
 2. [x] - `p1` - Take Open specs from this source, on every source's row - `inst-8`
 3. [x] - `p1` - **IF** the row's provider is known and its clone URL is an `http` or `https` address, take `Open in {provider}`, at that address without its user, its password and a trailing `.git` - `inst-9`
-4. [x] - `p1` - Take Disconnect, after a separator, disabled with "Disconnect unavailable" - `inst-10`
+4. [x] - `p1` - Take Disconnect, after a separator (#1042: enabled for a repository) - `inst-10`
 5. [x] - `p1` - **RETURN** the items - `inst-11`
 
 The order is the design's. A cancel needs no connection, so an in-flight sync
@@ -1041,21 +1043,24 @@ host in another form, and no address is guessed from it. The prototype's
 **Touches**:
 - Entities: `model/sourceRows` (the clone URL), `model/projectSources` (`repositoryWebUrl`, beside `repositoryKey`), `model/sourceRowMenu`, `SourceRowMenu`
 
-### Disconnect is shown, disabled, until the backend can take a source out
+### Disconnect detaches the source through one backend run
 
 - [x] `p1` - **ID**: `cpt-studiofrontend-dod-project-sources-menu-disconnect`
 
-The system **MUST** show Disconnect last, after a separator, disabled, with the
-title "Disconnect unavailable", and **MUST NOT** take a source out of the config
-or call `POST /studio-artifact-ingest/v1/reconcile` from the menu.
+The system **MUST** show Disconnect last, after a separator. For a repository
+it **MUST** ask first, naming what goes, and then ask the backend to detach the
+source as one run (`POST /studio-artifact-ingest/v1/sources/detach`, #1042),
+reading Detaching… while it goes; it **MUST NOT** write the config or call
+`POST /studio-artifact-ingest/v1/reconcile` from the browser. The Uploaded files
+row's Disconnect stays disabled, with the title "Disconnect unavailable".
 
 Taking a source out removes everything synced from the repository: files, pull
 requests, type decisions, findings. From the browser it is two calls, and a
 reconcile that fails, or a tab closed between them, leaves those in a project
 that no longer names the repository, where no row offers to try again. It
 belongs to the backend, as one operation: the config written and the prune
-queued durably. The item keeps its place meanwhile, and is not drawn as
-destructive, as in the design. Disconnect follows in #852.
+done in one durable run, which a retry continues where it stopped. The item
+keeps its place, and is not drawn as destructive, as in the design.
 
 **Implements**:
 - `cpt-studiofrontend-algo-project-sources-row-menu`
@@ -1107,7 +1112,7 @@ The rows (#685):
 
 The row menu (#686):
 
-- [ ] A synced GitHub source's menu, named `Actions for {name}`, lists Sync now, Open specs from this source, Open in GitHub and, after a separator, Disconnect, disabled with the title "Disconnect unavailable".
+- [ ] A synced GitHub source's menu, named `Actions for {name}`, lists Sync now, Open specs from this source, Open in GitHub and, after a separator, Disconnect; Disconnect asks first, naming what goes, and then reads Detaching… until the row leaves.
 - [ ] Sync now requests that source's sync and no other: its row's second line reads Syncing…, and the lines of the import's other repositories stay as they were.
 - [ ] While the sync is in flight the item reads Cancel sync; using it asks nothing, and the row reads Cancelling…, with Cancel sync disabled, until the cancel lands.
 - [ ] After a failed or cancelled sync, Sync now retries the same run; after a lost one, or a request the gear refused, it requests a new sync.

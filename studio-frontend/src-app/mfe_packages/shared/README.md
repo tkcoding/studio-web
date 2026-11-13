@@ -6,7 +6,8 @@ What more than one MFE of this repository needs, in one place: the host plumbing
 the parser for the gears' RFC 7807 refusals, `SectionHeader`, the kit's page
 header as a screen draws it, `ListGrid`, the kit's DataGrid as a list under that
 header, with its empty and failed states, `useListRows` for a DataGrid over
-rows read outside it, and `useThemedRoot` for popups that portal out of the
+rows read outside it, `matchesSearch`, the one rule a list's search matches
+its rows by, and `useThemedRoot` for popups that portal out of the
 shadow root.
 
 **This is source, not a built package.** `exports` points at `src/index.ts` and

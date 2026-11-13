@@ -1,0 +1,26 @@
+{
+  "manifest_version": "1",
+  "slug": "project-artifacts",
+  "name": "Artifacts",
+  "description": "The project's Artifacts tab: what its builds and documents produce.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "project"
+  ],
+  "model": {
+    "properties": [
+      {
+        "on": "project",
+        "property": {
+          "name": "artifacts",
+          "type": "repository-file",
+          "relation": "repository-file",
+          "extends": "edge",
+          "relationType": "shows",
+          "relationLabel": "Artifacts",
+          "description": "A tab of the project: what it shows."
+        }
+      }
+    ]
+  }
+}

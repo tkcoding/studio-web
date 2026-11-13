@@ -1,0 +1,17 @@
+# This micro-frontend's passport (see tests-mfe/frontx.gdl for what each field is).
+#
+# Studio AI: the built-in kit `assistant` (ADR-0068 §7), a base kit by default.
+# Its one screen is not a tab: the shell docks it in its sidebar slot while the
+# kit is installed where the person is.
+gdl_version = "1.5"
+
+mfe(
+    name = "@constructor-studio/assistant-mfe",
+    version = "0.2.0-alpha.0",
+    requires = [],
+    screens = ["Studio AI"],
+    mounts = [],
+    frontx = "0.2.0-alpha.15",
+    roles = [],
+    preview = [],
+)

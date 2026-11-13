@@ -1,8 +1,8 @@
 //! The domain-model ontology: the entities, their fields and their relations.
 //!
-//! The document is embedded from `ontology.core.json` — the full Studio product
-//! core domain model + system bases (11 buckets, 140 entities) held in
-//! `studio-internal/domain-model-ui`. Its shape is the domain-entity schema the
+//! The bootstrap document is embedded from `ontology.studio.json`, Studio
+//! types and their bases. `ontology.core.json` is the larger historical product
+//! model used by import tests. Its shape is the domain-entity schema the
 //! model UI already renders from, so reading it back out of the graph is what
 //! lets the frontend be regenerated from the stored model.
 //!
@@ -25,6 +25,10 @@ const STUDIO_MODEL_JSON: &str = include_str!("ontology.studio.json");
 /// what an organization uploads, used by the tests as such an upload.
 #[cfg(test)]
 pub(crate) const PRODUCT_MODEL_JSON: &str = include_str!("ontology.core.json");
+
+/// Who left what the core dropped with no kit to take it (`dropped_from_core`):
+/// Studio itself, as `meta.left_by.kit`. Never a kit's slug.
+pub(crate) const LEFT_BY_STUDIO: &str = "studio";
 
 fn studio_model() -> Value {
     serde_json::from_str(STUDIO_MODEL_JSON).expect("Studio's own model is valid JSON")
@@ -96,13 +100,63 @@ pub struct Ontology {
     doc: Value,
 }
 
+#[path = "gear_declarations.rs"]
+mod gear_declarations;
+
+#[path = "kit_property_layers.rs"]
+mod kit_property_layers;
+
+#[path = "core_layer.rs"]
+mod core_layer;
+pub use core_layer::CoreLayerChange;
+
+impl Ontology {
+    /// The running core this build carries, as [`Self::sync_core_layer`]
+    /// takes it.
+    pub(in crate::domain_model) fn running_core() -> Vec<Value> {
+        studio_types()
+    }
+
+    /// What has moved out of the running core into a kit (ADR-0070 phase
+    /// 5): a type by its id, or a field as `type.field`, to the kit's slug.
+    pub(in crate::domain_model) fn running_moves() -> std::collections::BTreeMap<String, String> {
+        let seed = studio_model();
+        let mut moves: std::collections::BTreeMap<String, String> = seed
+            .get("moved_to_kits")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_owned())))
+            .collect();
+        // What the core dropped with no kit to take it (`gears`, the numbered
+        // packaging relations): Studio itself left it. An organization that
+        // holds objects of it keeps them, read-only, until an admin removes
+        // what was left.
+        for key in seed
+            .get("dropped_from_core")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+        {
+            moves.insert(key.to_owned(), LEFT_BY_STUDIO.to_owned());
+        }
+        moves
+    }
+}
+
 impl Ontology {
     /// Load the embedded ontology. Panics only on a malformed embedded file,
     /// which is a build-time error, not a runtime one.
     pub fn load() -> Self {
-        Self {
+        let mut o = Self {
             doc: studio_model(),
-        }
+        };
+        // A new organization starts on the running core with nothing of its
+        // own: there is no legacy model to migrate.
+        o.sync_core_layer(&studio_types(), &Self::running_moves())
+            .expect("Studio's own model composes onto itself");
+        o
     }
 
     /// Add the seed's bucket `id` when this model has none by that id, with
@@ -174,12 +228,35 @@ impl Ontology {
     /// Studio's own model orders it, and give a Studio type the model holds
     /// without a base the one Studio's has. Answers the ids touched.
     pub fn add_studio_types(&mut self) -> Vec<String> {
+        self.add_core_types(&studio_types())
+    }
+
+    /// [`Self::add_studio_types`] from a given core: the running one, or a
+    /// test's version of it.
+    fn add_core_types(&mut self, seed: &[Value]) -> Vec<String> {
         let mut added = Vec::new();
-        for entity in studio_types() {
+        for entity in seed.iter().cloned() {
             let Some(id) = entity.get("id").and_then(Value::as_str).map(str::to_owned) else {
                 continue;
             };
             if self.has_entity(&id) {
+                // The original repository-file was the only file type. Keep
+                // its graph identity and custom fields while joining it to
+                // the storage-independent base. An organization-defined base
+                // is intentional and is never replaced by this migration.
+                if id == "repository-file"
+                    && let Ok(mine) = self.entity_mut(&id)
+                    && mine.get("extends").and_then(Value::as_str) == Some("managed-object")
+                    && mine.get("name").and_then(Value::as_str) == Some("Repository File")
+                    && mine
+                        .get("meta")
+                        .and_then(|m| m.get("origin"))
+                        .and_then(Value::as_str)
+                        .is_none_or(|origin| origin == "studio")
+                {
+                    mine["extends"] = json!("file");
+                    added.push(id.clone());
+                }
                 // A type Studio added before it named its base gets the base
                 // now, and with it the fields every object carries
                 // (`tenant_id`, scope, ...). One the model defined itself with
@@ -680,6 +757,49 @@ impl Ontology {
     /// The `object_type` node for one entity — what the model-graph sync
     /// stores for it. Used to write a single changed type back to the graph
     /// without re-syncing the whole model.
+    /// The kit that left this type dormant (`meta.left_by.kit`, ADR-0070 §4):
+    /// the kit is gone and the type stays for its objects or its gear.
+    pub fn left_by(&self, entity_id: &str) -> Option<&str> {
+        self.entity(entity_id)?
+            .pointer("/meta/left_by/kit")?
+            .as_str()
+            .filter(|k| !k.is_empty())
+    }
+
+    /// The document without what kits left dormant: the types, and the
+    /// fields, relations and lifecycles marked `left_by`. What a member and
+    /// every screen outside Admin › Domain model reads (ADR-0070 §4).
+    pub fn without_dormant(doc: &Value) -> Value {
+        let mut doc = doc.clone();
+        let dormant = |v: &Value| v.get("left_by").is_some_and(|l| !l.is_null());
+        if let Some(entities) = doc.get_mut("entities").and_then(Value::as_array_mut) {
+            entities.retain(|e| !e.get("meta").is_some_and(dormant));
+            for e in entities.iter_mut() {
+                if let Some(ps) = e.get_mut("properties").and_then(Value::as_array_mut) {
+                    ps.retain(|p| !dormant(p));
+                }
+                if let Some(ls) = e
+                    .pointer_mut("/meta/lifecycles")
+                    .and_then(Value::as_array_mut)
+                {
+                    ls.retain(|l| !dormant(l));
+                }
+            }
+            let kept: std::collections::HashSet<String> = entities
+                .iter()
+                .filter_map(|e| e.get("id").and_then(Value::as_str).map(str::to_owned))
+                .collect();
+            if let Some(buckets) = doc.get_mut("buckets").and_then(Value::as_array_mut) {
+                for b in buckets {
+                    if let Some(order) = b.get_mut("entity_order").and_then(Value::as_array_mut) {
+                        order.retain(|id| id.as_str().is_some_and(|id| kept.contains(id)));
+                    }
+                }
+            }
+        }
+        doc
+    }
+
     /// The gear that keeps this type's objects (`meta.held_by`), when one does.
     pub fn held_by(&self, entity_id: &str) -> Option<&str> {
         self.entity(entity_id)?
@@ -736,6 +856,12 @@ impl Ontology {
     /// what people defined; it never takes a gear's records out from under it.
     /// Answers what it put back.
     pub fn keep_held_from(&mut self, current: &Ontology) -> Vec<String> {
+        // An import or organization revert cannot replace trusted gear needs.
+        if let Some(declarations) = current.doc.get("gear_declarations") {
+            self.doc["gear_declarations"] = declarations.clone();
+        } else if let Some(doc) = self.doc.as_object_mut() {
+            doc.remove("gear_declarations");
+        }
         let mut kept = Vec::new();
         for held in current
             .entities()
@@ -1361,6 +1487,12 @@ impl Ontology {
         Ok(index)
     }
 
+    /// The entities array, to change in place (a kit's overlay,
+    /// [`super::kit_overlay`]). `None` on a malformed document.
+    pub(crate) fn entities_mut(&mut self) -> Option<&mut Vec<Value>> {
+        self.doc.get_mut("entities").and_then(Value::as_array_mut)
+    }
+
     fn entity_mut(&mut self, entity_id: &str) -> Result<&mut Value, OntologyError> {
         self.doc
             .get_mut("entities")
@@ -1633,6 +1765,113 @@ impl std::error::Error for OntologyError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn core_relations_to_kit_types_are_exactly_the_documented_migration_queue() {
+        let model = Ontology::load();
+        let actual: std::collections::BTreeSet<String> = model
+            .declared_relations()
+            .into_iter()
+            .filter(|r| {
+                model
+                    .entity(&r.source)
+                    .is_some_and(|e| e["meta"]["kit"].is_null() && e["meta"]["retired"] != true)
+            })
+            .filter_map(|r| {
+                let target = r.target_entity.as_ref()?;
+                let e = model.entity(target)?;
+                (e["meta"]["kit"].is_string() || e["meta"]["retired"] == true)
+                    .then(|| format!("{}.{} -> {target}", r.source, r.name))
+            })
+            .collect();
+        // ADR-0070 / domain-model-split §5: each incoming relation followed
+        // its target's owner into that kit, and the numbered package
+        // relations were dropped (#1035-#1038). The queue is empty: a new
+        // one means a core type started depending on a kit type.
+        let expected = std::collections::BTreeSet::<String>::new();
+        assert_eq!(
+            actual, expected,
+            "new core-to-kit dependencies must be assigned to their kit"
+        );
+    }
+
+    #[test]
+    fn every_seed_type_declares_its_owner_and_a_core_base_never_depends_on_a_kit() {
+        let model = Ontology::load();
+        let mut core = 0;
+        let mut kit = 0;
+        let mut retired = 0;
+        for e in model.entities() {
+            let meta = &e["meta"];
+            assert!(meta.get("kit").is_some(), "owner missing: {}", e["id"]);
+            if meta["retired"] == true {
+                retired += 1;
+            } else if meta["kit"].is_string() {
+                kit += 1;
+            } else {
+                core += 1;
+                for base in model.ancestors(e["id"].as_str().unwrap()) {
+                    assert!(
+                        model.entity(&base).unwrap()["meta"]["kit"].is_null(),
+                        "core {} extends kit type {base}",
+                        e["id"]
+                    );
+                }
+            }
+        }
+        assert_eq!((core, kit, retired), (44, 0, 0));
+    }
+
+    #[test]
+    fn files_are_a_storage_independent_base_and_old_repository_files_keep_their_identity() {
+        let seed = Ontology::load();
+        assert!(
+            seed.ancestors("repository-file")
+                .contains(&"file".to_owned())
+        );
+        let fields = seed.effective_properties("repository-file");
+        assert!(
+            fields
+                .iter()
+                .any(|p| p.name == "media_type" && p.declared_by == "file")
+        );
+        let before_id =
+            seed.object_type_node("repository-file").unwrap().payload["node_type_id"].clone();
+        let mut old = seed.document().clone();
+        old["entities"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|e| e["id"] != "file");
+        let repo = old["entities"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|e| e["id"] == "repository-file")
+            .unwrap();
+        repo["extends"] = json!("managed-object");
+        repo["properties"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"name":"cost_center", "type":"string"}));
+        let mut migrated = Ontology::from_value(old).unwrap();
+        let changed = migrated.add_studio_types();
+        assert!(changed.contains(&"file".to_owned()));
+        assert!(changed.contains(&"repository-file".to_owned()));
+        assert_eq!(
+            migrated
+                .object_type_node("repository-file")
+                .unwrap()
+                .payload["node_type_id"],
+            before_id
+        );
+        assert!(
+            migrated
+                .effective_properties("repository-file")
+                .iter()
+                .any(|p| p.name == "cost_center")
+        );
+        assert!(migrated.add_studio_types().is_empty());
+    }
 
     #[test]
     fn studio_s_own_types_join_a_model_that_lacks_them_once() {

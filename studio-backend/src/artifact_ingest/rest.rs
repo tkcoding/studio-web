@@ -178,6 +178,28 @@ pub struct ReconcileRequest {
     pub keep: Vec<AttachedRepo>,
 }
 
+/// The source of a project to detach.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(request)]
+pub struct DetachSourceRequest {
+    /// The source's clone URL, as the project's config lists it. Matched by
+    /// the repository it names: scheme, credentials, a trailing slash, `.git`
+    /// and case do not count.
+    pub clone_url: String,
+}
+
+/// A detach accepted: the run that does it.
+#[derive(Debug)]
+#[toolkit_macros::api_dto(response)]
+pub struct SourceDetachQueued {
+    /// The `artifact.source_detach` run: poll `GET /studio-tasks/v1/runs/{run_id}`.
+    /// Its `result` says whether the source was taken out of the config and
+    /// what was forgotten (`unlisted`, `pruned`, `kept_attached`).
+    pub run_id: String,
+    /// `queued` when it was accepted.
+    pub status: String,
+}
+
 /// What a reconcile forgot.
 #[derive(Debug)]
 #[toolkit_macros::api_dto(response)]
@@ -877,6 +899,109 @@ async fn reconcile(
     }))
 }
 
+/// Detach a source from a project: its config entry and everything synced
+/// from it, as one `artifact.source_detach` run (#1042).
+///
+/// Decided here, as the caller (`cpt-studio-principle-tasks-authorize-at-enqueue`):
+/// the project must be one they reach and its config, read as them, must list
+/// the source. The run then does the two writes. It shares the partition of a
+/// sync of the same repository in the project, so a sync still running is
+/// let finish before what it wrote is forgotten.
+async fn detach_source(
+    Extension(ctx): Extension<SecurityContext>,
+    Extension(ingest): Extension<Ingest>,
+    headers: HeaderMap,
+    Query(query): Query<BuildQuery>,
+    Json(req): Json<DetachSourceRequest>,
+) -> ApiResult<(StatusCode, JsonBody<SourceDetachQueued>)> {
+    use super::detach_task::{DetachPayload, TASK_TYPE as DETACH_TASK_TYPE};
+
+    let idempotency_key = crate::idempotency::key(&headers)?;
+    let project_id = query.project()?;
+    ingest.get()?;
+    let queue = ingest.queue()?;
+    if crate::tasks::sdk::handler(DETACH_TASK_TYPE).is_none() {
+        return Err(CanonicalError::service_unavailable()
+            .with_detail(
+                "detaching a source is not available in this deployment \
+                 (account-management is not wired into artifact ingest)",
+            )
+            .create());
+    }
+    let clone_url = req.clone_url.trim();
+    if clone_url.is_empty() {
+        return Err(StudioArtifactIngestError::invalid_argument()
+            .with_field_violation("clone_url", "must name the source".to_owned(), "REQUIRED")
+            .create());
+    }
+    let (am, _) = reachable_project(&ingest, &ctx, project_id).await?;
+    let sources = crate::project_sources::read_checked(am.as_ref(), &ctx, project_id)
+        .await
+        .map_err(|why| CanonicalError::internal(why).create())?
+        .unwrap_or_default();
+    let Some(source) = crate::project_sources::source_for_url(&sources, clone_url) else {
+        return Err(StudioArtifactIngestError::not_found(format!(
+            "the project has no source {clone_url}"
+        ))
+        .with_resource(clone_url.to_owned())
+        .create());
+    };
+
+    // The sync's partition, when the connection can be read: a detach queued
+    // behind a sync of the repository prunes what that sync wrote.
+    let connection = match source.connection_id {
+        Some(id) => crate::connectors::sdk::connection_by_id(am.as_ref(), &ctx, project_id, id)
+            .await
+            .map(|(_, c)| c),
+        None => None,
+    };
+    let partition_key = match connection {
+        Some(c) => IngestPayload {
+            provider: c.provider,
+            base_url: None,
+            secret_ref: c.secret_ref,
+            repo_full_path: source.full_path.clone(),
+            since: None,
+            workspace_id: None,
+            project_id: Some(project_id.to_string()),
+            repo_dir: None,
+        }
+        .partition_key(),
+        None => format!("source_detach:{project_id}:{}", source.full_path),
+    };
+    let payload = serde_json::to_value(DetachPayload {
+        project_id,
+        clone_url: source.clone_url.clone(),
+        full_path: source.full_path.clone(),
+        asked_by: ctx.subject_id().to_string(),
+    })
+    .map_err(|e| CanonicalError::internal(format!("{e:#}")).create())?;
+
+    let run_id = queue
+        .enqueue(
+            &ctx,
+            crate::tasks::sdk::NewRun {
+                // The tenant a sync of the repository writes its nodes in.
+                tenant: ctx.subject_tenant_id(),
+                task_type: DETACH_TASK_TYPE,
+                payload,
+                partition_key: Some(&partition_key),
+                idempotency_key: idempotency_key.as_deref(),
+                coalesce_queued: true,
+                notify_workspace_id: Some(project_id),
+            },
+        )
+        .await
+        .map_err(|e| CanonicalError::internal(format!("{e:#}")).create())?;
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(SourceDetachQueued {
+            run_id: run_id.to_string(),
+            status: "queued".to_string(),
+        }),
+    ))
+}
+
 async fn list_nodes(
     Extension(ctx): Extension<SecurityContext>,
     Extension(ingest): Extension<Ingest>,
@@ -1313,13 +1438,19 @@ async fn activity_feed(
     }
     let service = ingest.get()?;
 
-    let findings = scoped_entries(service, &ctx, "spec_finding", project_id).await?;
-    let comments = scoped_entries(service, &ctx, "comment", project_id).await?;
-
-    // The names the bindings gave these files. Best-effort on purpose: losing
-    // them leaves rows reading by path, which is worse than a name and very
-    // much better than no feed.
-    let names = ingest.binding_names(&ctx, project_id).await;
+    // Three independent reads, at once: one after another they were three
+    // round trips through the model and the documents gear on every open of
+    // the feed.
+    //
+    // The names the bindings gave these files are best-effort on purpose:
+    // losing them leaves rows reading by path, which is worse than a name and
+    // very much better than no feed.
+    let (findings, comments, names) = tokio::join!(
+        scoped_entries(service, &ctx, "spec_finding", project_id),
+        scoped_entries(service, &ctx, "comment", project_id),
+        ingest.binding_names(&ctx, project_id),
+    );
+    let (findings, comments) = (findings?, comments?);
     let name_of = |id: &str| names.get(id).cloned();
 
     let items: Vec<ActivityEventDto> =
@@ -2150,6 +2281,40 @@ pub fn register_routes(
         )
         .error_400(openapi)
         .error_401(openapi)
+        .error_500(openapi)
+        .register(router, openapi);
+
+    let router = OperationBuilder::post("/studio-artifact-ingest/v1/sources/detach")
+        .operation_id("studio_artifact_ingest.detach_source")
+        .summary("Detach a source from a project, durably")
+        .description(
+            "Takes the repository `clone_url` names out of the project's config \
+             (`sources[]`, the rest of the config untouched) and forgets everything \
+             synced from it into the project — issues, pull requests, files, \
+             comments, commits and the document bindings of its files — as one \
+             `artifact.source_detach` run on studio-tasks, resumable step by step. \
+             Answers 202 with the run; poll `GET /studio-tasks/v1/runs/{run_id}`. \
+             404 when the project is not the caller's to reach or its config lists \
+             no such source. A sync of the same repository still running finishes \
+             first. Send an `Idempotency-Key` header to make a retry of this request \
+             safe. Nothing is pruned when the config still names the same repository \
+             through another source.",
+        )
+        .tag("StudioArtifactIngest")
+        .authenticated()
+        .require_license_features::<License>([])
+        .param(crate::idempotency::param())
+        .query_param("project_id", true, "The project to detach the source from")
+        .json_request::<DetachSourceRequest>(openapi, "The source to detach")
+        .handler(detach_source)
+        .json_response_with_schema::<SourceDetachQueued>(
+            openapi,
+            StatusCode::ACCEPTED,
+            "Detach queued",
+        )
+        .error_400(openapi)
+        .error_401(openapi)
+        .error_404(openapi)
         .error_500(openapi)
         .register(router, openapi);
 

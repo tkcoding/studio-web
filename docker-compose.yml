@@ -205,6 +205,12 @@ services:
       # and keep it: a different key makes the stored values unreadable.
       #   openssl rand -base64 32
       STUDIO_CREDSTORE_KEY: ${STUDIO_CREDSTORE_KEY:-}
+      # Admin › All identities (studio-identity-directory) lists Keycloak users
+      # through the realm's `studio-admin` service client. Its local secret is
+      # the dev one in docker/keycloak/realm-studio.json; without these two the
+      # screen says "identity directory is not configured".
+      STUDIO_IDP_ADMIN_BASE_URL: ${STUDIO_IDP_ADMIN_BASE_URL:-http://keycloak:8080}
+      STUDIO_IDP_ADMIN_SECRET: ${STUDIO_IDP_ADMIN_SECRET:-studio-admin-dev-secret}
       # Knowledge-graph embeddings (graph-storage gear). ONE provider per
       # deployment — switching it over a populated graph blocks vector search
       # until the graph is re-embedded, and the backend says so at boot.
@@ -259,6 +265,15 @@ services:
       # The kit catalogue (kit_registry/README.md), a JSON array of kits; unset
       # is Constructor's own kits.
       # STUDIO_KIT_CATALOGUE: '[{"slug":"sdlc","name":"SDLC","repository_url":"https://github.com/constructorfabric/studio-kit-sdlc","default_version":"main"}]'
+      # Constructor Research (ADR-0049): the `research-emulator` service below
+      # unless .env names a real stand. research.localhost is the emulator for
+      # both the browser (published port) and this container (network alias),
+      # as one hostname is on a real stand.
+      STUDIO_RESEARCH_ISSUER: ${STUDIO_RESEARCH_ISSUER:-http://research.localhost:8095/idp}
+      STUDIO_RESEARCH_API_URL: ${STUDIO_RESEARCH_API_URL:-http://research.localhost:8095/api/platform-account/v1}
+      STUDIO_RESEARCH_CLIENT_ID: ${STUDIO_RESEARCH_CLIENT_ID:-constructor-studio}
+      STUDIO_RESEARCH_CLIENT_SECRET: ${STUDIO_RESEARCH_CLIENT_SECRET:-research-emulator}
+      STUDIO_RESEARCH_REDIRECT_URI: ${STUDIO_RESEARCH_REDIRECT_URI:-http://localhost:8080/connections/oauth/callback,http://localhost:8081/connections/oauth/callback}
     volumes:
       # studio-session gear: launches sibling Theia containers via the host
       # Docker daemon. The workspaces path must be IDENTICAL on host and in
@@ -359,6 +374,38 @@ services:
       graph-postgres:
         condition: service_healthy
 
+  # Constructor Research emulator (docs/research-emulator.md): the sign-in,
+  # account API, desk files and build logs Studio calls, with nothing really
+  # built or run. The backend's build exactly, so the image comes from its
+  # cache; it runs another subcommand. The browser reaches it at
+  # http://research.localhost:8095 (any *.localhost is the loopback); the
+  # backend reaches the same name through the network alias.
+  # Dashboard: http://research.localhost:8095/_emulator
+  research-emulator:
+    build:
+      context: .
+      dockerfile: studio-backend/Dockerfile.src
+      args:
+        CARGO_FEATURES: "--features theia-bridge"
+    container_name: studio-research-emulator
+    restart: unless-stopped
+    command: ["research-emulator"]
+    environment:
+      RESEARCH_EMULATOR_PUBLIC_URL: http://research.localhost:8095
+      RESEARCH_EMULATOR_CLIENT_ID: constructor-studio
+      RESEARCH_EMULATOR_CLIENT_SECRET: ${STUDIO_RESEARCH_CLIENT_SECRET:-research-emulator}
+      RESEARCH_EMULATOR_REDIRECT_URIS: http://localhost:8080/connections/oauth/callback,http://localhost:8081/connections/oauth/callback
+    ports:
+      - "127.0.0.1:8095:8095"
+    networks:
+      default:
+        aliases: [research.localhost]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8095/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   # Embedding model for the graph-storage `onnx` provider — a one-shot fetch
   # into the `studio_models` volume, pinned by SHA-256 (see the script). Runs
   # on every `up`; on a warm volume it only verifies the checksums. The model
@@ -397,8 +444,11 @@ services:
     # nginx.conf proxies /cf/ to http://studio-backend:8090 — the service's
     # container_name above must stay in sync with it.
 
-  # Prototype portal — the fast-moving UI (Artifacts, Spec Quality, Overview).
-  # Same build pattern as `frontend` (context = repo root); BACKEND_HOST is
+  # Prototype portal: since ADR-0069 the FrontX app in studio-frontend-prototype/
+  # growing to the old prototype's features as kits (the old prototype is the
+  # unbuilt archive studio-frontend-poc/). Same build pattern as `frontend`
+  # (context = repo root; npm ci and the full build: packages, every MFE, the
+  # MFE manifests); BACKEND_HOST is
   # baked into its image, and nginx proxies /cf/ to the backend. Published on
   # 8081 so it can run alongside the main portal on 8080. Part of the compose
   # project now, so `--remove-orphans` no longer deletes it.
@@ -408,6 +458,12 @@ services:
       dockerfile: studio-frontend-prototype/Dockerfile.src
     container_name: studio-frontend-prototype
     restart: unless-stopped
+    # The portal (the FrontX app, ADR-0069) signs in from the browser, so it
+    # needs the issuer the browser reaches: docker/10-runtime-env.sh writes
+    # these into env.js at start, as helm does on a cluster.
+    environment:
+      STUDIO_OIDC_ISSUER: ${STUDIO_OIDC_ISSUER_PUBLIC:-https://localhost:8443/realms/studio}
+      STUDIO_OIDC_CLIENT_ID: ${STUDIO_OIDC_PORTAL_CLIENT_ID:-studio-portal}
     ports:
       - "127.0.0.1:8081:8080"   # nginx-unprivileged listens on 8080 inside
     depends_on:

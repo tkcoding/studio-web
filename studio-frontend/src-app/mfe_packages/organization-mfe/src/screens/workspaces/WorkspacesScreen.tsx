@@ -12,6 +12,7 @@ import { Folder } from "lucide-react";
 import {
   DataGridEmptyStatePlugin,
   DataGridPaginationPlugin,
+  DataGridRowClickPlugin,
   DataGridTextSearchPlugin,
   Empty,
   EmptyDescription,
@@ -29,6 +30,7 @@ import {
   ListGrid,
   ListNoMatch,
   ListReadFailed,
+  matchesSearch,
   STUDIO_SHARED_PROPERTY_CONTEXT_WORKSPACE,
   useListRows,
   type OrganizationRef,
@@ -64,8 +66,7 @@ const WorkspacesEmpty: React.FC = () => {
 WorkspacesEmpty.displayName = "WorkspacesEmpty";
 
 function searchWorkspaces(rows: readonly Tenant[], text: string): readonly Tenant[] {
-  const needle = text.trim().toLowerCase();
-  return needle ? rows.filter((row) => row.name.toLowerCase().includes(needle)) : rows;
+  return rows.filter((row) => matchesSearch(text, row.name));
 }
 
 // @cpt-dod:cpt-studiofrontend-dod-workspaces-screen-level:p1
@@ -133,9 +134,8 @@ const WorkspaceList: React.FC<{
           noData: t("no_data"),
         },
         formatRelative,
-        onOpen: open,
       }),
-    [t, formatRelative, open],
+    [t, formatRelative],
   );
 
   const pending = translationsPending || (isLoading && all.length === 0);
@@ -184,6 +184,7 @@ const WorkspaceList: React.FC<{
                   autoHide
                 />
                 <DataGridEmptyStatePlugin component={WorkspacesEmpty} />
+                <DataGridRowClickPlugin<Tenant> click={open} />
                 {rowsBridge}
               </ListGrid>
             )}

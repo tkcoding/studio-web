@@ -432,7 +432,7 @@ connection before enqueuing, so an unusable one is a 400 at once.
 | Method | Path | Description | Stability |
 |--------|------|-------------|-----------|
 | `GET` | `/studio-connector/v1/providers` | The drivers linked into this deployment | unstable |
-| `GET` | `/studio-connector/v1/connections` | The caller's tenant catalogue, or the nearest ancestor's | unstable |
+| `GET` | `/studio-connector/v1/connections` | The caller's tenant catalogue, or the nearest ancestor's. `with_ancestors=true`: the tenant's own together with those held above it up to its organization (never the platform root's, unless the root is asked), each once, nearest first; every row says `inherited` when it is held above the tenant asked for (#1043) | unstable |
 | `POST` | `/studio-connector/v1/connections` | Verify, store the token, add; 201 with the account the credential belongs to | unstable |
 | `PATCH` | `/studio-connector/v1/connections/{id}` | Relabel, move or rotate; verified before written; id and reference preserved | unstable |
 | `DELETE` | `/studio-connector/v1/connections/{id}` | Remove the connection and its token; 204 | unstable |

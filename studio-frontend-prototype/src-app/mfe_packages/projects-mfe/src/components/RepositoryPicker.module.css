@@ -1,0 +1,229 @@
+.placeholder {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+.repoTabs {
+  width: 100%;
+  justify-content: flex-start;
+  gap: var(--space-4);
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+.repoTab {
+  flex: 0 0 auto;
+  padding-inline: 0;
+}
+
+.repoTab::after {
+  bottom: calc(-1 * var(--border-width));
+  background-color: var(--primary);
+}
+
+.repoViewport {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+}
+
+input.repoSearch {
+  width: 100%;
+  height: var(--control-height-sm);
+}
+
+.empty {
+  margin: auto;
+  border: 0;
+  white-space: normal;
+}
+
+.repoRows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.repoRowSkeleton {
+  height: 2.125rem;
+  border-radius: var(--radius-sm);
+}
+
+.repoScroll {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  scrollbar-width: thin;
+}
+
+.repoTable {
+  border-spacing: 0;
+  font-size: var(--text-label-size);
+  --radius-md: 0;
+}
+
+.repoTable tr {
+  --table-row-ring: transparent;
+  --table-row-fill: transparent;
+}
+
+.repoTable thead tr {
+  --table-row-fill: transparent;
+}
+
+.repoTable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: auto;
+  padding: 0.375rem var(--space-2);
+  background: var(--card);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-size);
+  line-height: var(--text-mono-line-height);
+  font-weight: var(--text-mono-weight);
+  letter-spacing: var(--text-mono-tracking);
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--muted-foreground);
+}
+
+.repoTable tbody tr {
+  cursor: pointer;
+}
+
+/* Hover only. The mockup gives a picked row no fill of its own — the filled
+   checkbox is what says it is chosen, and a second signal would fight it. */
+.repoTable tbody tr:hover > * {
+  background: var(--muted);
+}
+
+/* At the source cap the unpicked rows stop responding — say so visually, or an
+   ignored click reads as a broken table. */
+.repoTable tbody tr[aria-disabled] {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.repoTable tbody tr[aria-disabled]:hover,
+.repoTable tbody tr[aria-disabled]:hover > * {
+  background: none;
+}
+
+.repoTable tr.repoEmptyRow {
+  cursor: default;
+}
+
+.repoTable tr.repoEmptyRow:hover > * {
+  background: none;
+}
+
+/* The kit's row hover sets this at (0,3,0); an empty state is not a row to point at. */
+.repoTable tr.repoEmptyRow:hover {
+  --table-row-fill: transparent;
+}
+
+.repoTable tr.repoEmptyRow > td {
+  border-bottom: 0;
+}
+
+/* The mockup's 34px row with a hairline under it, against the kit's 12/16 cell
+   padding and per-row ring. */
+.repoTable tbody tr {
+  height: 2.125rem;
+}
+
+.repoTable tbody th,
+.repoTable tbody td {
+  padding: 0 var(--space-2);
+  border-bottom: var(--border-width) solid var(--border);
+  text-align: left;
+  font-weight: 400;
+}
+
+.repoCheckbox {
+  width: 1rem;
+  height: 1rem;
+}
+
+.repoCheckbox svg {
+  width: 0.7rem;
+  height: 0.7rem;
+}
+
+.repoPickHead {
+  width: 2.25rem;
+}
+
+.repoVisibilityHead {
+  width: 6rem;
+}
+
+.repoName {
+  height: auto;
+  font-size: var(--text-label-size);
+  font-weight: 600;
+  text-transform: none;
+  color: var(--foreground);
+}
+
+.repoVisibility {
+  font-size: var(--text-meta-size);
+}
+
+.repoVisibility {
+  color: var(--muted-foreground);
+}
+
+.repoVisibilityInner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* The prototype's 8px between chips, over the kit group's 4px. */
+.providers[role='group'] {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The prototype's chips and buttons set 14px text and a 10px radius; the kit's
+   small toggle reads 12px and 6px from these tokens, its small button 12px and 8px. */
+.provider {
+  --text-label-size: var(--text-body-size);
+  --radius-sm: var(--radius-lg);
+}
+
+.tryGithub {
+  --text-label-size: var(--text-body-size);
+  --radius-md: var(--radius-lg);
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+/* As tall as the chips it stands in for. */
+.providersSkeleton {
+  height: var(--control-height-sm);
+  border-radius: var(--radius-lg);
+}
+
+.account {
+  margin: 0;
+  font-size: var(--text-label-size);
+}

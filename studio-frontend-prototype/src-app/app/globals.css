@@ -1,0 +1,59 @@
+/* Font files ship in the bundle, not from a CDN: the portal is offline-capable
+ * by design (runtime /env.js, one image per environment). ui-kit declares the
+ * family via --font-sans but deliberately ships no files — loading them is the
+ * consuming app's build concern, which is this line.
+ *
+ * The variable face covers weights 100-900 in one import — no per-weight
+ * bookkeeping — but registers the family as **'Inter Variable'**, not 'Inter'.
+ * Every --font-sans stack must therefore name 'Inter Variable' first, in the
+ * shell themes AND inside each MFE (ui-kit's own token says 'Inter', and there
+ * is no @font-face under that name any more). Miss one and that surface falls
+ * back to system-ui with nothing in the console. */
+@import '@fontsource-variable/inter';
+
+/* The mono face, and the *static* package on purpose — it registers the family
+ * as 'JetBrains Mono', which is exactly the name ui-kit's `--font-mono` already
+ * says. So this line is the whole job: no token to restate, in the themes or in
+ * any MFE. The `-variable` package would register 'JetBrains Mono Variable' and
+ * drag the Inter rename dance into thirteen more places for a variable weight
+ * the design does not use.
+ *
+ * One weight, 400 — the design's `System Micro` role is JetBrains Mono Regular
+ * and nothing else asks for mono. The root `400.css` (not `latin-400.css`)
+ * declares six @font-face rules with `unicode-range`, so the browser downloads
+ * only the subsets actually on screen: 21 KB for a latin UI, cyrillic added
+ * only once cyrillic text appears. Picking the latin file alone would render
+ * translated labels in two different mono faces at once.
+ *
+ * @font-face is document-scoped and DOES reach into every shadow root, which is
+ * why no MFE imports a font of its own. Only the variable would not cross — and
+ * here it does not have to. */
+@import '@fontsource/jetbrains-mono/400.css';
+
+/* The kit's token values, the same file every MFE carries into its shadow root.
+ * Light or dark is chosen by `data-theme` on <html>: index.html starts it at
+ * light and themeRegistry.apply() keeps it in step with the theme's appearance.
+ * A theme's own tokens (--font-sans, Dracula's colours) are written as
+ * `:root:root`: it beats `[data-theme]` on specificity, ties with the kit's
+ * OS-dark fallback, and wins the tie because the theme's sheet comes later.
+ * Keep this import in the entry stylesheet. See docs/adr/0034. */
+@import '@gears-frontx/ui-kit/theme.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply overflow-hidden;
+  }
+  body {
+    @apply bg-background text-foreground font-sans overflow-hidden m-0;
+  }
+  #root {
+    @apply h-screen w-screen;
+  }
+}

@@ -1,6 +1,6 @@
 # Studio over MCP
 
-Studio's domain model, the requirements its specifications state, the
+The Studio domain model, a project's domain model, the requirements its specifications state, the
 spec-quality detectors and a project's pipeline -- sources, product
 description, infra, build, deploy -- as tools in the agent you already work in: Claude
 Code, Codex, Cursor or any other MCP client. It is one more way into Studio,
@@ -11,9 +11,9 @@ Every call acts as you. The server sends each tool's requests to Studio's own
 REST API with your token, so a tool can do exactly what you can do in the
 portal and nothing more.
 
-Most tools read or check. The ones that change something (the domain model,
+Most tools read or check. The ones that change something (the Studio domain model,
 a project's sources, its description, secrets, infra, builds and deploys) are
-marked so your agent asks you first. Every change to the domain model is a
+marked so your agent asks you first. Every change to the Studio domain model is a
 model version `domain_model_revert` undoes.
 
 | | |
@@ -139,7 +139,7 @@ project.
 
 | Tool | What it answers |
 | --- | --- |
-| `domain_model_types` | every type of the domain model, as stored |
+| `domain_model_types` | every type of the Studio domain model (Studio's own objects, not a project's), as stored |
 | `domain_type` | one type with everything it inherits |
 | `domain_type_conformance` | how stored objects measure up against a type |
 | `domain_model_query` | a type's objects: filtered, ordered, with relations |
@@ -156,6 +156,39 @@ project.
 | `domain_type_remove_field` | *changes the model:* removes a field from a type |
 | `domain_model_revert` | *changes the model:* restores an earlier version |
 
+**What to decide.** The project domain model (what a project's documents say;
+not the Studio domain model above): the portal's Issues and Project domain
+model tabs, read from the
+documents Studio holds for the project (studio-documents). The queue, its
+order and what stops a build are computed by the server, so an agent and a
+person see the same rows.
+
+| Tool | What it answers or does |
+| --- | --- |
+| `project_domain_model_issues` | what to decide before a build, most blocking first, each row with its `group` (`blocks`, `look`, `decided`) and `actions` |
+| `project_domain_model_readiness` | whether anything stops a build: `open`, `blocking`, `ready` |
+| `project_domain_model_facts` | the project domain model read from the documents, every fact with its `fact_key` |
+| `project_domain_model_build` | *changes:* starts reading the documents into the model, on your own model key; or reads again the ones `path`, `paths` or `glob` select |
+| `project_domain_model_build_status` | the running or last build: `documents`, `done`, `current`, `error`, when it started and finished |
+| `project_domain_model_coverage` | what is missing to interpret the model: each document's state with its error, facts and dropped facts, the documents not read and why, the open questions |
+| `project_domain_model_uploads` | the CSV, JSON and plain-text sources uploaded to the model, each with the `upload:<name>` path a build reads it under |
+| `project_domain_model_upload` | *changes:* uploads a CSV, JSON or plain-text source for the model to read, without committing it |
+| `project_domain_model_upload_remove` | *changes:* removes an uploaded source, its file and its facts |
+| `project_domain_model_fact_review` | *changes:* accepts, rejects, corrects (`corrected` with the new `value`) or puts back facts by `fact_key` |
+| `project_domain_model_finding_decide` | *changes:* confirms a problem as real or dismisses it, by `fingerprint` |
+| `project_domain_model_doc_quality` | what would make the documentation better (`onlyadr`, `nodefinition`, `onesided`, `norelation`, `twonames`), each row with the change ready to make; none stops a build |
+| `project_domain_model_entity_save` | *changes:* writes one entity's section of `docs/domain-model.md` (a `doc_quality` row's `edit`) |
+| `project_domain_model_sentence_propose` | *changes:* proposes a sentence after a passage as a pull request (a `doc_quality` row's `sentence`) |
+
+**The project itself.** Where a project stands, as its Overview says it
+(studio-organizations).
+
+| Tool | What it answers |
+| --- | --- |
+| `project_status` | one verdict (`blocked`, `at_risk`, `on_track`) with its reason, the signals behind it worst first, and the path to a build with the next step; `unread` names what could not be read |
+| `project_create` | *changes:* creates a project as one background run -- the tenant, its configuration, its sources, a repository for its gears with a starter gear, a PRD from the brief, its kits; checked as you, carried out by Studio; answers `run_id` and `project_id`. The same `idempotency_key` again continues a run that stopped |
+| `project_create_status` | where a creation stands: the run's state and each step's |
+
 **The pipeline.** A project goes from its sources to a running product
 without the portal; each step is the REST route the portal calls for it.
 
@@ -163,6 +196,7 @@ without the portal; each step is the REST route the portal calls for it.
 | --- | --- | --- |
 | Sources | `project_sources` | the repositories the project is made of |
 | | `project_sources_set` | *changes:* replaces the list (only `sources`; the rest of the config is kept) |
+| | `project_source_detach` | *changes:* takes one repository out of the sources and forgets what was synced from it, as one run (`task_run` reads it) |
 | | `project_connections` | the connections the project can read through |
 | | `connection_repositories` | the repositories one connection reaches |
 | Product | `product_description` | the latest description revision: text, number, `sources_lock` |
@@ -173,6 +207,11 @@ without the portal; each step is the REST route the portal calls for it.
 | | `product_check` | the engine's verdict for one profile, composed from the picks |
 | | `product_description_check` | the engine's verdict on a saved revision as written, for one profile: GBX diagnostics |
 | | `gdl_file` | a component's `gear.gdl`, `frontx.gdl` or `service.gdl` |
+| | `product_description_edit` | *changes:* structured edits of the description (`set_infra`, `put_infra_service`, `remove_infra_service`) saved as the next revision; `dry_run` answers the text only |
+| | `product_description_outline` | what a description says without its text: infra services, profiles, home source, which lines say which gear, screen or database |
+| | `product_infra` | the infra services as the description says them, merged with the catalogue's passports and the environment's side |
+| | `product_kind` | what the product is: Studio's proposal from the specs with its reasons, and the confirmed kind |
+| | `product_kind_confirm` | *changes:* keeps the kind in the project's configuration |
 | Environments | `deploy_targets` | where the product can deploy, the bindings, the secret keys |
 | | `project_environments` | the project's own environments |
 | | `deploy_bindings_set` | *changes:* which profile each environment runs |
@@ -184,9 +223,11 @@ without the portal; each step is the REST route the portal calls for it.
 | | `infra_services_set` | *changes:* replaces the list |
 | | `infra_service_public_url_set` | *changes:* sets or removes one service's `public_url`, keeping the rest |
 | | `infra_plan` | what a deploy to one environment does with them |
+| | `infra_keycloak_realm` | the Keycloak realm a project's Keycloak infra service imports, made from its passport and the latest description; nothing is written (`content` goes in with `infra_services_set`) |
 | | `image_import` | *changes:* copies an external image or chart into the project's path |
 | | `image_get` | one image: where, by digest, its state |
 | | `project_images` | the project's images and charts |
+| Path | `project_path` | where the project stands from its product to running: each step's state, why, what is missing, the next action, a failure's cause |
 | Build | `build_plan` | what a build would do and why it would be refused; starts nothing |
 | | `build_start` | *changes:* builds in an environment's cluster |
 | | `build_list` | the project's builds, newest first, with status and failure |
@@ -200,7 +241,34 @@ without the portal; each step is the REST route the portal calls for it.
 | | `deployment_decide` | *changes:* approves or declines (organization administrators) |
 | | `deployment_status` | the release as its cluster reports it now |
 | | `deployment_logs` | the end of each container's log |
+| Research (Constructor Research kit) | `research_projects` | the Constructor Research projects a `research` sign-in may run products in; `KIT_NOT_INSTALLED` without the kit |
+| | `research_hardware` | the hardware a Research project's services may run on, trial ones marked |
 | Runs | `task_run` | the background run an import, build or deploy started |
+| | `task_retry` | *changes:* runs a failed or cancelled run again; a project's creation continues where it stopped |
+
+**Kits.** What Studio has for an organization comes from kits (ADR-0068,
+ADR-0069 §4); an agent installs one the way a person does.
+
+| Tool | What it answers or does |
+| --- | --- |
+| `kits_catalog` | the kit library, each kit with its shelf (`builtin`, `official`, `organization`) |
+| `kits_describe` | one kit and what is inside it before install: screens, types, rules, functions, services, inbox, MCP tools, permissions, material, kinds, docs, and the manifest it was read from |
+| `kits_installed` | an organization's kits, or a project's with `project_id`: `base`, the organization's, the project's, and `effective` |
+| `kit_base_install` | *changes:* installs a kit for every organization (platform administrators) |
+| `kit_base_uninstall` | *changes:* stops a kit being a base kit (platform administrators) |
+| `kit_organization_install` | *changes:* installs a kit for one organization (its administrators) |
+| `kit_organization_uninstall` | *changes:* uninstalls the organization's own kit; a base kit is refused |
+| `kit_project_install` | *changes:* installs a kit for one project (the organization's kit administrators); only a kit whose levels include `project` |
+| `kit_project_uninstall` | *changes:* uninstalls the project's own kit; a base or organization kit is refused |
+| `kits_shelf` | the kits an organization added from its own repositories, each with its `origin` (connection, repository, directory, ref, pinned commit) |
+| `kit_shelf_preview` | reads a kit from a repository through the organization's connection without adding it (kit administrators) |
+| `kit_shelf_add` | *changes:* adds a kit from a repository to the organization's shelf, pinned to a commit (kit administrators); a slug Studio's library has is refused (`KIT_SLUG_TAKEN`) |
+| `kit_shelf_refresh` | *changes:* reads a shelf kit again at its ref and re-pins it |
+| `kit_shelf_remove` | *changes:* takes a kit off the shelf; refused while the organization has it installed (`KIT_INSTALLED`) |
+| `project_phase` | a project's phase (Project lifecycle): the phase, its owner, since when, and the moves open |
+| `project_phase_set` | *changes:* moves a project to a phase along the declared lifecycle (`NO_SUCH_TRANSITION` otherwise) |
+| `project_phases` | an organization's projects with their phases |
+| `kits_inbox_sources` | the Inbox sources of the kits installed for an organization: each query over a kit's objects that says what waits on whom |
 
 **The inbox.** Everything that waits for you in one organization, as the
 portal's Inbox lists it, and how to act on each item.
@@ -209,6 +277,7 @@ portal's Inbox lists it, and how to act on each item.
 | --- | --- |
 | `inbox` | deploys awaiting approval, reviews asked of you, pull requests whose next move is yours, your failed background work (an undelivered notification among it); each item's `act` names the tool that answers it |
 | `inbox_mark` | *changes:* marks an item done, snoozes it, or opens it again; the portal shows the same marks |
+| `me_inbox` | the Inbox the server composes (`GET /studio-user/v1/me/inbox`, ADR-0068 §6): review requests, pull requests and the installed kits' items (each with its `kit`) waiting on you across every workspace, overdue first, each naming its `source`; `view: hidden` for what you marked away |
 | `review_requests` | a project's or workspace's review requests; `waiting_on: "me"` for yours |
 | `review_verdict` | *changes:* approves a review request or asks for changes |
 
@@ -243,7 +312,7 @@ Each of these steps has its own route: `GET /studio-environments/v1/builds/{buil
 **Changes.** Every tool that changes something (marked *changes* above) is
 annotated for your agent (`readOnlyHint: false`, and `destructiveHint` for one
 that replaces or removes), so it asks you before calling it, and is marked
-experimental. A change to the domain model is a model version with its inverse: `domain_model_versions` shows it
+experimental. A change to the Studio domain model is a model version with its inverse: `domain_model_versions` shows it
 and `domain_model_revert` undoes it. Objects, relations and documents are not
 offered for writing: nothing records a version of them, and a specification
 changes through your own commit, which people review.

@@ -10,7 +10,7 @@
 //! The bytes live in the graph node's payload as a `data:` URL. A picture is a
 //! small WebP or PNG (a 1280x800 screen scaled down), and the catalogue's store
 //! is the only one every deployment has: the file-storage gear is
-//! config-gated and reads nothing back yet (`artifact_ingest::object_store`).
+//! config-gated and reads nothing back yet (`crate::object_store`).
 //! When it can, `image` becomes a reference and the wire shape stays.
 
 use std::collections::BTreeMap;

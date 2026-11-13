@@ -1,0 +1,42 @@
+{
+  "$id": "gts://gts.frontx.mfes.ext.extension.v1~constructor_studio.shell.slots.contribution.v1~",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Slot Contribution Extension Schema (Derived). What a kit puts into one of the shell's named slots (ADR-0068 §2 'section in a screen'; mfe/slots.ts): every slot domain pins this type as its extensionsTypeId, so a contribution chains through it. Modelled on extension_overlay.v1: base type pulled in via allOf, presentation required.",
+  "allOf": [
+    { "$ref": "gts://gts.frontx.mfes.ext.extension.v1~" }
+  ],
+  "properties": {
+    "presentation": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "$comment": "What the contribution is called: the shell names it when it does not come up."
+        },
+        "icon": { "type": "string" },
+        "order": {
+          "type": "number",
+          "$comment": "Ascending within the slot; ties by extension id; undeclared goes last."
+        },
+        "kit": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "$comment": "The kit that brings it: shown only where that kit is installed. The shell sets it for a kit's package loaded at run time, whatever the bundle says."
+        },
+        "level": {
+          "type": "string",
+          "enum": ["platform", "organization", "workspace", "project", "admin"],
+          "$comment": "Shown only at this level. Absent: at every level the slot is drawn on."
+        },
+        "screen": {
+          "type": "string",
+          "pattern": "^/",
+          "$comment": "Shown only with the screen at this route (the item's own route, its section included: '/projects/overview'). Absent: with every screen the slot is drawn on."
+        }
+      },
+      "required": ["label"]
+    }
+  },
+  "required": ["presentation"]
+}

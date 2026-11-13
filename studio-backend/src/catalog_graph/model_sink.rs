@@ -34,7 +34,7 @@ use super::sink::{CatalogNodeView, CatalogSink, GraphNodeType};
 use crate::domain_model::port::{DomainObjects, OwnedObject, TypeNeed};
 
 /// Each catalogue node type, the model type it becomes, and how it is named.
-const TYPES: [(&str, &str, &str, &str); 16] = [
+const TYPES: [(&str, &str, &str, &str); 17] = [
     (
         cgts::GEAR_TYPE,
         "gear",
@@ -76,6 +76,12 @@ const TYPES: [(&str, &str, &str, &str); 16] = [
         "frontx-package",
         "FrontX Package",
         "A FrontX micro-frontend package.",
+    ),
+    (
+        cgts::SERVICE_TYPE,
+        "catalog-service",
+        "Catalog Service",
+        "A service image and its service.gdl declaration, distinct from a gear crate.",
     ),
     (
         cgts::FIELD_SCHEMA_TYPE,
@@ -241,6 +247,7 @@ impl ModelSink {
         TYPES
             .iter()
             .map(|(type_id, entity, name, description)| TypeNeed {
+                declared_by: self.gear.clone(),
                 id: (*entity).to_owned(),
                 name: (*name).to_owned(),
                 description: (*description).to_owned(),
@@ -264,7 +271,12 @@ impl ModelSink {
                 held_by: self.owns(type_id).then(|| self.gear.clone()),
                 searchable: matches!(
                     *entity,
-                    "gear" | "catalog-kit" | "frontx-package" | "registry-entry" | "roadmap-item"
+                    "gear"
+                        | "catalog-kit"
+                        | "frontx-package"
+                        | "catalog-service"
+                        | "registry-entry"
+                        | "roadmap-item"
                 ),
             })
             .collect()
@@ -308,19 +320,21 @@ impl ModelSink {
         let Some(port) = self.port() else {
             return;
         };
-        let marker = format!("catalog-moved-v1:{}:{tenant}", self.gear);
+        let markers = [
+            format!("catalog-moved-v1:{}:{tenant}", self.gear),
+            format!("catalog-moved-v2:{}:{tenant}", self.gear),
+        ];
         let p = port.as_ref();
         let result = async {
             let (done, _) = p
-                .query(ctx, json!({"type": "sync-state", "where": {"id": {"_eq": marker}}, "limit": 1}))
+                .query(ctx, json!({"type": "sync-state", "where": {"id": {"_in": markers}}, "limit": 2}))
                 .await?;
-            if !done
-                .first()
-                .is_some_and(|o| o.payload.get("status").and_then(Value::as_str) == Some("done"))
+            if !done.iter().any(|o| o.payload.get("status").and_then(Value::as_str) == Some("done"))
             {
                 return anyhow::Ok(0usize);
             }
-            let entities: Vec<&str> = TYPES.iter().filter(|t| self.owns(t.0)).map(|t| t.1).collect();
+            let available: HashSet<_> = p.entity_types(ctx).await?.into_iter().map(|(id, _)| id).collect();
+            let entities: Vec<&str> = TYPES.iter().filter(|t| self.owns(t.0) && available.contains(t.1)).map(|t| t.1).collect();
             let rows = self.read(ctx, p, &entities, None).await?;
             let mut nodes = Vec::new();
             let mut snapshots = Vec::new();
@@ -351,11 +365,11 @@ impl ModelSink {
             p.put_objects(
                 ctx,
                 "sync-state",
-                vec![OwnedObject {
-                    id: marker.clone(),
+                markers.iter().map(|id| OwnedObject {
+                    id: id.clone(),
                     scope: String::new(),
                     payload: json!({"status": "returned", "message": format!("{} catalogue moved back to the graph store", self.gear)}),
-                }],
+                }).collect(),
             )
             .await?;
             anyhow::Ok(nodes.len() + snapshots.len())
@@ -413,7 +427,7 @@ impl ModelSink {
         {
             return Ok(Some(port));
         }
-        let marker = format!("catalog-moved-v1:{}:{tenant}", self.gear);
+        let marker = format!("catalog-moved-v2:{}:{tenant}", self.gear);
         let (done, _) = port
             .query(
                 ctx,
@@ -424,9 +438,24 @@ impl ModelSink {
             .first()
             .is_some_and(|o| o.payload.get("status").and_then(Value::as_str) == Some("done"));
         if !done {
+            // v1 did not map SERVICE_TYPE: its completion marker must not
+            // hide those legacy rows forever. Only the newly supported type
+            // moves on upgrade; old snapshots or late legacy writes cannot
+            // overwrite a newer authoritative domain copy.
+            let old_marker = format!("catalog-moved-v1:{}:{tenant}", self.gear);
+            let (previous, _) = port
+                .query(
+                    ctx,
+                    json!({"type":"sync-state", "where":{"id":{"_eq":old_marker}}, "limit":1}),
+                )
+                .await?;
+            let upgraded = previous
+                .first()
+                .is_some_and(|o| o.payload.get("status").and_then(Value::as_str) == Some("done"));
             let mut nodes = self.legacy.list(ctx, None).await?;
-            nodes.retain(|n| self.owns(n.type_id));
-            let snapshots = if self.owns(cgts::COMPONENT_SNAPSHOT_TYPE) {
+            nodes
+                .retain(|n| self.owns(n.type_id) && (!upgraded || n.type_id == cgts::SERVICE_TYPE));
+            let snapshots = if !upgraded && self.owns(cgts::COMPONENT_SNAPSHOT_TYPE) {
                 self.legacy
                     .snapshots(ctx, None, i64::MIN, i64::MAX)
                     .await
@@ -434,7 +463,17 @@ impl ModelSink {
             } else {
                 Vec::new()
             };
-            self.write(ctx, port.as_ref(), &nodes).await?;
+            let mut pending = Vec::new();
+            for node in &nodes {
+                if upgraded {
+                    let (existing, _) = port.query(ctx, json!({"type":"catalog-service", "where":{"id":{"_eq":object_id(&node.instance_id)}}, "limit":1})).await?;
+                    if !existing.is_empty() {
+                        continue;
+                    }
+                }
+                pending.push(node.clone());
+            }
+            self.write(ctx, port.as_ref(), &pending).await?;
             let snaps: Vec<GtsNode> = snapshots
                 .into_iter()
                 .map(|v| GtsNode {

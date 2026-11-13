@@ -56,9 +56,7 @@
       "description": "What constrains the organization and how it is enforced: the controls it must satisfy, the policies it writes, the rules Studio applies, and the evidence that they held.",
       "color": "#f4bb63",
       "layer": "core",
-      "entity_order": [
-        "policy"
-      ]
+      "entity_order": []
     },
     {
       "id": "connectors",
@@ -80,9 +78,9 @@
       "layer": "core",
       "entity_order": [
         "repository",
-        "document",
         "commit",
         "text-content",
+        "file",
         "repository-file",
         "template",
         "branch"
@@ -98,12 +96,7 @@
         "project",
         "organization",
         "workspace",
-        "milestone",
-        "risk",
-        "work-item",
-        "view",
-        "dependency",
-        "assignment"
+        "view"
       ]
     },
     {
@@ -113,12 +106,6 @@
       "color": "#38bdf8",
       "layer": "core",
       "entity_order": [
-        "pull-request",
-        "review-request",
-        "approval-request",
-        "approval",
-        "message",
-        "comment",
         "notification"
       ]
     },
@@ -135,9 +122,6 @@
         "worker",
         "evidence",
         "actor",
-        "finding",
-        "check",
-        "report",
         "transition",
         "event"
       ]
@@ -148,10 +132,7 @@
       "description": "Models, tools, agents, prompts, context snapshots and auditable tool calls.",
       "color": "#70c7ff",
       "layer": "core",
-      "entity_order": [
-        "model",
-        "tool"
-      ]
+      "entity_order": []
     },
     {
       "id": "kit-management",
@@ -160,9 +141,7 @@
       "color": "#b293ff",
       "layer": "core",
       "entity_order": [
-        "kit",
-        "lifecycle-stage",
-        "gears"
+        "kit"
       ]
     }
   ],
@@ -186,7 +165,8 @@
         "profiles": [
           "Arch",
           "Dev"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -218,7 +198,8 @@
         "profiles": [
           "Arch",
           "Dev"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -249,7 +230,8 @@
         "profiles": [
           "Arch",
           "Dev"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -302,7 +284,8 @@
         "profiles": [
           "Arch",
           "Dev"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -363,7 +346,8 @@
         "profiles": [
           "Arch",
           "Dev"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -402,7 +386,8 @@
         "profiles": [
           "Arch",
           "Dev"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -451,7 +436,8 @@
           "StudioAdmin",
           "Sec",
           "Arch"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -602,7 +588,8 @@
           "HR",
           "StudioAdmin",
           "Sec"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -683,16 +670,6 @@
           "extends": "edge"
         },
         {
-          "name": "authors",
-          "type": "Message",
-          "description": "",
-          "relation": "message",
-          "relationType": "member",
-          "relationLabel": "authors",
-          "required": false,
-          "extends": "link"
-        },
-        {
           "name": "has",
           "type": "Competency",
           "description": "",
@@ -758,7 +735,8 @@
           "StudioAdmin",
           "Sec",
           "Arch"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -982,7 +960,8 @@
           "StudioAdmin",
           "Sec",
           "Arch"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -1095,7 +1074,8 @@
           "StudioAdmin",
           "Sec",
           "Arch"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -1234,7 +1214,8 @@
           "StudioAdmin",
           "Sec",
           "Arch"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -1350,7 +1331,8 @@
           "StudioAdmin",
           "Sec",
           "Arch"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -1455,7 +1437,8 @@
           "Sec",
           "StudioAdmin",
           "DBA"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -1690,7 +1673,8 @@
           "Arch",
           "Dev",
           "QA"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -1752,32 +1736,12 @@
           "relationLabel": ""
         },
         {
-          "name": "scopes",
-          "type": "WorkItem",
-          "description": "",
-          "relation": "work-item",
-          "relationType": "composes",
-          "relationLabel": "includes",
-          "required": false,
-          "extends": "edge"
-        },
-        {
           "name": "uses",
           "type": "Repository",
           "description": "",
           "relation": "repository",
           "relationType": "references",
           "relationLabel": "uses",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "documented_by",
-          "type": "Document",
-          "description": "",
-          "relation": "document",
-          "relationType": "references",
-          "relationLabel": "documented by",
           "required": false,
           "extends": "edge"
         },
@@ -1818,16 +1782,6 @@
           "relation": "conversation",
           "relationType": "references",
           "relationLabel": "includes",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "tracks",
-          "type": "Risk",
-          "description": "",
-          "relation": "risk",
-          "relationType": "composes",
-          "relationLabel": "tracks",
           "required": false,
           "extends": "edge"
         },
@@ -2078,69 +2032,6 @@
           "description": "A tab of the project: what it shows."
         },
         {
-          "name": "issues",
-          "type": "finding",
-          "relation": "finding",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Issues",
-          "description": "A tab of the project: what it shows."
-        },
-        {
-          "name": "specs",
-          "type": "document",
-          "relation": "document",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Specs",
-          "description": "A tab of the project: what it shows."
-        },
-        {
-          "name": "model",
-          "type": "object-type",
-          "relation": "object-type",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Domain model",
-          "description": "A tab of the project: what it shows."
-        },
-        {
-          "name": "components",
-          "type": "project-product",
-          "relation": "project-product",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Product",
-          "description": "A tab of the project: what it shows."
-        },
-        {
-          "name": "parts",
-          "type": "gear",
-          "relation": "gear",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Components",
-          "description": "A tab of the project: what it shows."
-        },
-        {
-          "name": "releases",
-          "type": "deployment",
-          "relation": "deployment",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Releases",
-          "description": "A tab of the project: what it shows."
-        },
-        {
-          "name": "tests",
-          "type": "check",
-          "relation": "check",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Tests",
-          "description": "A tab of the project: what it shows."
-        },
-        {
           "name": "kits",
           "type": "kit",
           "relation": "kit",
@@ -2150,39 +2041,12 @@
           "description": "A tab of the project: what it shows."
         },
         {
-          "name": "artifacts",
-          "type": "repository-file",
-          "relation": "repository-file",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Artifacts",
-          "description": "A tab of the project: what it shows."
-        },
-        {
           "name": "sources",
           "type": "repository",
           "relation": "repository",
           "extends": "edge",
           "relationType": "shows",
           "relationLabel": "Sources",
-          "description": "A tab of the project: what it shows."
-        },
-        {
-          "name": "activity",
-          "type": "activity",
-          "relation": "activity",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Activity",
-          "description": "A tab of the project: what it shows."
-        },
-        {
-          "name": "people",
-          "type": "person",
-          "relation": "person",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Team",
           "description": "A tab of the project: what it shows."
         }
       ],
@@ -2304,7 +2168,8 @@
         "profiles": [
           "CTO",
           "PdM"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -2359,51 +2224,6 @@
           "description": "A tab of the organization: what it shows."
         },
         {
-          "name": "connectors",
-          "type": "connector",
-          "relation": "connector",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Connections",
-          "description": "A tab of the organization: what it shows."
-        },
-        {
-          "name": "environments",
-          "type": "deployment-environment",
-          "relation": "deployment-environment",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Infrastructure",
-          "description": "A tab of the organization: what it shows."
-        },
-        {
-          "name": "costs",
-          "type": "budget",
-          "relation": "budget",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Costs",
-          "description": "A tab of the organization: what it shows."
-        },
-        {
-          "name": "gears",
-          "type": "gear",
-          "relation": "gear",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Components",
-          "description": "A tab of the organization: what it shows."
-        },
-        {
-          "name": "reports",
-          "type": "report",
-          "relation": "report",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Reports",
-          "description": "A tab of the organization: what it shows."
-        },
-        {
           "name": "tasks",
           "type": "activity",
           "relation": "activity",
@@ -2431,7 +2251,8 @@
         "profiles": [
           "CTO",
           "PdM"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -2475,293 +2296,8 @@
           "relationType": "shows",
           "relationLabel": "Attributes",
           "description": "A tab of the workspace: what it shows."
-        },
-        {
-          "name": "ptypes",
-          "type": "project-type",
-          "relation": "project-type",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Templates & phases",
-          "description": "A tab of the workspace: what it shows."
-        },
-        {
-          "name": "types",
-          "type": "template",
-          "relation": "template",
-          "extends": "edge",
-          "relationType": "shows",
-          "relationLabel": "Document types",
-          "description": "A tab of the workspace: what it shows."
         }
       ]
-    },
-    {
-      "id": "milestone",
-      "bucket": "planning",
-      "name": "Milestone",
-      "kind": "delivery checkpoint",
-      "description": "A significant dated outcome or decision point on a roadmap, product or project.",
-      "meta": {
-        "relationship": "delivery-planning",
-        "priority": "P1",
-        "level": 3,
-        "badge": "",
-        "note": "",
-        "badge-style": "neutral",
-        "profiles": [
-          "CTO",
-          "PdM",
-          "Arch",
-          "Dev",
-          "QA"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "target_at",
-          "type": "timestamp",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "status",
-          "type": "planned | at_risk | achieved | missed | cancelled",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "completion_criteria",
-          "type": "Criterion[]",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "owner_ref",
-          "type": "EntityId?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "tracks",
-          "type": "Project",
-          "description": "",
-          "relation": "project",
-          "relationType": "references",
-          "relationLabel": "tracks",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "tracks_2",
-          "type": "WorkItem",
-          "description": "",
-          "relation": "work-item",
-          "relationType": "references",
-          "relationLabel": "tracks",
-          "required": false,
-          "extends": "edge"
-        }
-      ],
-      "methods": [
-        {
-          "name": "evaluate",
-          "description": "",
-          "input": "",
-          "result": "MilestoneStatus"
-        },
-        {
-          "name": "list_dependencies",
-          "description": "",
-          "input": "",
-          "result": "Object[]"
-        },
-        {
-          "name": "mark_achieved",
-          "description": "",
-          "input": "evidence",
-          "result": "void"
-        }
-      ],
-      "examples": [
-        "MVP ready",
-        "Public beta",
-        "Migration complete",
-        "General availability"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "managed-object"
-    },
-    {
-      "id": "risk",
-      "bucket": "planning",
-      "name": "Risk",
-      "kind": "governance record",
-      "description": "A scoped uncertainty that may affect delivery or outcomes, tracked with probability, impact, ownership, mitigation and evidence.",
-      "meta": {
-        "relationship": "delivery-planning",
-        "priority": "P1",
-        "level": 3,
-        "badge": "",
-        "note": "",
-        "badge-style": "neutral",
-        "profiles": [
-          "CTO",
-          "PdM",
-          "Arch",
-          "Dev",
-          "QA"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "title",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "scope_ref",
-          "type": "EntityRef",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "category",
-          "type": "schedule | cost | technical | security | compliance | operational",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "probability",
-          "type": "0..1",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "impact",
-          "type": "low | medium | high | critical",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "score",
-          "type": "decimal?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "owner_ref",
-          "type": "ActorRef?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "mitigation_ref",
-          "type": "EntityRef?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "status",
-          "type": "identified | analyzing | mitigating | accepted | closed",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "owned_by",
-          "type": "Person",
-          "description": "",
-          "relation": "person",
-          "relationType": "member",
-          "relationLabel": "owned by",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "mitigated_by",
-          "type": "WorkItem",
-          "description": "",
-          "relation": "work-item",
-          "relationType": "references",
-          "relationLabel": "mitigated by",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "assessed_as",
-          "type": "Evidence",
-          "description": "",
-          "relation": "evidence",
-          "relationType": "derives",
-          "relationLabel": "assessed as",
-          "required": false,
-          "extends": "link"
-        }
-      ],
-      "methods": [
-        {
-          "name": "assess",
-          "description": "",
-          "input": "",
-          "result": "RiskScore"
-        },
-        {
-          "name": "mitigate",
-          "description": "",
-          "input": "work",
-          "result": "void"
-        },
-        {
-          "name": "accept",
-          "description": "",
-          "input": "actor, reason",
-          "result": "Approval"
-        },
-        {
-          "name": "to_evidence",
-          "description": "",
-          "input": "",
-          "result": "Evidence"
-        }
-      ],
-      "examples": [
-        "Release schedule risk",
-        "Security exposure",
-        "Dependency risk",
-        "Operational capacity risk"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "managed-object"
     },
     {
       "id": "kit",
@@ -2781,7 +2317,8 @@
           "Arch",
           "PdM",
           "Dev"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -2894,105 +2431,6 @@
           "type": "ObjectType",
           "description": "",
           "relation": "object-type",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        },
-        {
-          "name": "packages_2",
-          "type": "RelationType",
-          "description": "",
-          "relation": "relation-type",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        },
-        {
-          "name": "packages_3",
-          "type": "TerminologyOverride",
-          "description": "",
-          "relation": "terminology-override",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        },
-        {
-          "name": "packages_4",
-          "type": "ReferenceCatalog",
-          "description": "",
-          "relation": "reference-catalog",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        },
-        {
-          "name": "packages_5",
-          "type": "Workflow",
-          "description": "",
-          "relation": "workflow",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        },
-        {
-          "name": "packages_6",
-          "type": "Action",
-          "description": "",
-          "relation": "action",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        },
-        {
-          "name": "packages_7",
-          "type": "Validator",
-          "description": "",
-          "relation": "validator",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        },
-        {
-          "name": "packages_8",
-          "type": "Template",
-          "description": "",
-          "relation": "template",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        },
-        {
-          "name": "packages_9",
-          "type": "Gears",
-          "description": "",
-          "relation": "gears",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        },
-        {
-          "name": "packages_10",
-          "type": "UIExtension",
-          "description": "",
-          "relation": "ui-extension",
           "relationType": "references",
           "relationLabel": "packages",
           "required": false,
@@ -3180,16 +2618,6 @@
           "extends": "link"
         },
         {
-          "name": "introduces_type_22",
-          "type": "Finding",
-          "description": "",
-          "relation": "security-finding",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "extends": "link"
-        },
-        {
           "name": "introduces_type_23",
           "type": "VulnerabilityFixGrade",
           "description": "",
@@ -3197,50 +2625,6 @@
           "relationType": "references",
           "relationLabel": "packages",
           "required": false,
-          "extends": "link"
-        },
-        {
-          "name": "packages_11",
-          "type": "PromptTemplate",
-          "description": "",
-          "relation": "prompt-template",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        },
-        {
-          "name": "packages_12",
-          "type": "Tool",
-          "description": "",
-          "relation": "tool",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        },
-        {
-          "name": "packages_13",
-          "type": "AgentDefinition",
-          "description": "",
-          "relation": "agent",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        },
-        {
-          "name": "packages_14",
-          "type": "ConnectorType",
-          "description": "",
-          "relation": "connector-type",
-          "relationType": "references",
-          "relationLabel": "packages",
-          "required": false,
-          "cardinality": "1:N",
           "extends": "link"
         }
       ],
@@ -3287,671 +2671,6 @@
       "extends": "record"
     },
     {
-      "id": "work-item",
-      "bucket": "planning",
-      "name": "Work Item",
-      "kind": "typed lifecycle object",
-      "description": "A provider-neutral instance of a configurable Work Item Type, retaining source identity and lifecycle history.",
-      "meta": {
-        "relationship": "delivery-planning",
-        "priority": "P1",
-        "level": 3,
-        "badge": "",
-        "note": "",
-        "badge-style": "neutral",
-        "profiles": [
-          "CTO",
-          "PdM",
-          "Arch",
-          "Dev",
-          "QA"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "type_id",
-          "type": "TypeId",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "external_id",
-          "type": "string?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "url",
-          "type": "URL?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "title",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "details",
-          "type": "JSON",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "state",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "priority",
-          "type": "Priority?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "source_system",
-          "type": "SourceId?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "updated_at",
-          "type": "timestamp",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "closed_at",
-          "type": "timestamp?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "assigned_to",
-          "type": "Person",
-          "description": "",
-          "relation": "person",
-          "relationType": "member",
-          "relationLabel": "assigned_to",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "implemented_by",
-          "type": "PullRequest",
-          "description": "",
-          "relation": "pull-request",
-          "relationType": "references",
-          "relationLabel": "implemented_by",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "instance_of",
-          "type": "WorkItemType",
-          "description": "",
-          "relation": "work-item-type",
-          "relationType": "references",
-          "relationLabel": "instance of",
-          "required": false,
-          "extends": "link"
-        }
-      ],
-      "methods": [
-        {
-          "name": "get_details",
-          "description": "",
-          "input": "",
-          "result": "JSON"
-        },
-        {
-          "name": "update_details",
-          "description": "",
-          "input": "patch",
-          "result": "WorkItem"
-        },
-        {
-          "name": "close",
-          "description": "",
-          "input": "resolution?",
-          "result": "void"
-        },
-        {
-          "name": "assign",
-          "description": "",
-          "input": "person",
-          "result": "void"
-        },
-        {
-          "name": "transition",
-          "description": "",
-          "input": "state",
-          "result": "void"
-        },
-        {
-          "name": "list_links",
-          "description": "",
-          "input": "",
-          "result": "Link[]"
-        },
-        {
-          "name": "get_history",
-          "description": "",
-          "input": "",
-          "result": "ChangeRecord[]"
-        }
-      ],
-      "examples": [
-        "Jira DEV-123",
-        "Linear ENG-42",
-        "GitHub issue #91",
-        "Service incident INC-7"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "managed-object"
-    },
-    {
-      "id": "pull-request",
-      "bucket": "collaboration",
-      "name": "Pull Request",
-      "kind": "entity",
-      "description": "A proposed repository change with review, discussion and merge state.",
-      "meta": {
-        "relationship": "human-loop",
-        "priority": "P1",
-        "level": 1,
-        "badge": "",
-        "note": "",
-        "badge-style": "neutral",
-        "profiles": [
-          "Dev",
-          "QA",
-          "Sec",
-          "Arch"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "repository_ref",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "author_ref",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "source_system",
-          "type": "SourceId",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "external_id",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "number",
-          "type": "integer",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "title",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "state",
-          "type": "open | merged | closed",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "source_branch",
-          "type": "BranchRef",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "target_branch",
-          "type": "BranchRef",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "merged_at",
-          "type": "timestamp?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "authored_by",
-          "type": "Person",
-          "description": "",
-          "relation": "person",
-          "relationType": "references",
-          "relationLabel": "authored by",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "sources_from",
-          "type": "Branch",
-          "description": "",
-          "relation": "branch",
-          "relationType": "references",
-          "relationLabel": "sources from",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "targets",
-          "type": "Branch",
-          "description": "",
-          "relation": "branch",
-          "relationType": "references",
-          "relationLabel": "targets",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "proposes",
-          "type": "Commit",
-          "description": "",
-          "relation": "commit",
-          "relationType": "references",
-          "relationLabel": "proposes",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "has_reviews",
-          "type": "Review",
-          "description": "",
-          "relation": "code-review",
-          "relationType": "composes",
-          "relationLabel": "has reviews",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "has_comments",
-          "type": "Comment",
-          "description": "",
-          "relation": "comment",
-          "relationType": "composes",
-          "relationLabel": "has comments",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "has_inline_conversations",
-          "type": "InlineConversation",
-          "description": "",
-          "relation": "inline-conversation",
-          "relationType": "composes",
-          "relationLabel": "has inline conversations",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "requests_reviews",
-          "type": "ReviewRequest",
-          "description": "",
-          "relation": "review-request",
-          "relationType": "composes",
-          "relationLabel": "requests reviews",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "validated_by",
-          "type": "CICheck",
-          "description": "",
-          "relation": "ci-check",
-          "relationType": "composes",
-          "relationLabel": "validated by",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "triggers",
-          "type": "Build",
-          "description": "",
-          "relation": "build",
-          "relationType": "derives",
-          "relationLabel": "triggers",
-          "required": false,
-          "extends": "edge"
-        }
-      ],
-      "methods": [
-        {
-          "name": "list_commits",
-          "description": "",
-          "input": "",
-          "result": "Commit[]"
-        },
-        {
-          "name": "list_changed_files",
-          "description": "",
-          "input": "",
-          "result": "FileChange[]"
-        },
-        {
-          "name": "list_reviews",
-          "description": "",
-          "input": "",
-          "result": "CodeReview[]"
-        },
-        {
-          "name": "list_comments",
-          "description": "",
-          "input": "",
-          "result": "Comment[]"
-        },
-        {
-          "name": "add_comment",
-          "description": "",
-          "input": "author, body",
-          "result": "Comment"
-        },
-        {
-          "name": "to_text",
-          "description": "",
-          "input": "",
-          "result": "TextContent"
-        }
-      ],
-      "examples": [
-        "GitHub pull request",
-        "GitLab merge request",
-        "Bitbucket pull request"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "managed-object"
-    },
-    {
-      "id": "comment",
-      "bucket": "collaboration",
-      "name": "Comment",
-      "kind": "threaded collaboration record",
-      "description": "A source-aware comment attached to a pull request or document, with authorship, threading, resolution and edit history.",
-      "meta": {
-        "relationship": "human-loop",
-        "priority": "P2",
-        "level": 3,
-        "badge": "",
-        "note": "",
-        "badge-style": "neutral",
-        "profiles": [
-          "PdM",
-          "Arch",
-          "Dev",
-          "QA"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "CommentId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "subject_ref",
-          "type": "EntityRef",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "subject_kind",
-          "type": "pull_request | document",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "author_ref",
-          "type": "ActorRef",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "body",
-          "type": "TextContent",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "parent_ref",
-          "type": "CommentId?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "thread_ref",
-          "type": "CommentId?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "source_system",
-          "type": "SourceId?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "external_id",
-          "type": "string?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "status",
-          "type": "active | resolved | deleted",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "updated_at",
-          "type": "timestamp?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "replies_to",
-          "type": "Comment",
-          "description": "",
-          "relation": "comment",
-          "relationType": "references",
-          "relationLabel": "replies to",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "authored_by",
-          "type": "Person",
-          "description": "",
-          "relation": "person",
-          "relationType": "references",
-          "relationLabel": "authored by",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "notifies",
-          "type": "Notification",
-          "description": "",
-          "relation": "notification",
-          "relationType": "derives",
-          "relationLabel": "produces",
-          "required": false,
-          "extends": "link"
-        },
-        {
-          "name": "belongs_to",
-          "type": "DiscussionThread",
-          "description": "",
-          "relation": "discussion-thread",
-          "relationType": "references",
-          "relationLabel": "belongs to",
-          "required": false,
-          "cardinality": "N:1",
-          "extends": "edge"
-        },
-        {
-          "name": "targets",
-          "type": "ManagedObject",
-          "description": "",
-          "relation": "managed-object",
-          "relationType": "references",
-          "relationLabel": "targets",
-          "required": false,
-          "cardinality": "N:1",
-          "extends": "edge"
-        },
-        {
-          "name": "targets_2",
-          "type": "CandidateObject",
-          "description": "",
-          "relation": "candidate-object",
-          "relationType": "references",
-          "relationLabel": "targets",
-          "required": false,
-          "cardinality": "N:1",
-          "extends": "link"
-        },
-        {
-          "name": "targets_3",
-          "type": "ActionRun",
-          "description": "",
-          "relation": "action-run",
-          "relationType": "references",
-          "relationLabel": "targets",
-          "required": false,
-          "cardinality": "N:1",
-          "extends": "link"
-        },
-        {
-          "name": "contains",
-          "type": "Mention",
-          "description": "",
-          "relation": "mention",
-          "relationType": "composes",
-          "relationLabel": "contains",
-          "required": false,
-          "extends": "link"
-        }
-      ],
-      "methods": [
-        {
-          "name": "reply",
-          "description": "",
-          "input": "author, body",
-          "result": "Comment"
-        },
-        {
-          "name": "edit",
-          "description": "",
-          "input": "body",
-          "result": "Comment"
-        },
-        {
-          "name": "resolve",
-          "description": "",
-          "input": "actor",
-          "result": "void"
-        },
-        {
-          "name": "delete",
-          "description": "",
-          "input": "actor",
-          "result": "void"
-        },
-        {
-          "name": "list_replies",
-          "description": "",
-          "input": "",
-          "result": "Comment[]"
-        }
-      ],
-      "examples": [
-        "GitHub pull-request comment",
-        "GitHub review thread",
-        "Confluence page comment",
-        "Confluence inline comment"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "managed-object"
-    },
-    {
       "id": "repository",
       "bucket": "content",
       "name": "Repository",
@@ -3968,7 +2687,8 @@
           "Dev",
           "Arch",
           "Sec"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -4049,16 +2769,6 @@
           "type": "timestamp",
           "description": "",
           "relationLabel": ""
-        },
-        {
-          "name": "hosts",
-          "type": "PullRequest",
-          "description": "",
-          "relation": "pull-request",
-          "relationType": "composes",
-          "relationLabel": "hosts",
-          "required": false,
-          "extends": "edge"
         },
         {
           "name": "has",
@@ -4167,7 +2877,8 @@
         "profiles": [
           "Dev",
           "QA"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -4274,7 +2985,8 @@
           "Dev",
           "QA",
           "Sec"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -4422,70 +3134,16 @@
       "extends": "managed-object"
     },
     {
-      "id": "repository-file",
+      "id": "file",
       "bucket": "content",
-      "name": "Repository File",
+      "name": "File",
       "kind": "artifact",
-      "description": "A path-addressed file at a specific repository revision; mutations create new revisions rather than changing history.",
+      "description": "A file independent of its storage: repositories, uploads and kit-specific sources extend this type.",
       "meta": {
-        "relationship": "knowledge",
-        "priority": "P2",
-        "level": 3,
-        "badge": "",
-        "note": "",
-        "badge-style": "neutral",
-        "profiles": [
-          "PdM",
-          "Arch",
-          "Dev",
-          "QA",
-          "Researcher"
-        ]
+        "origin": "studio",
+        "kit": null
       },
       "properties": [
-        {
-          "name": "id",
-          "type": "ArtifactId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "repository_ref",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "revision",
-          "type": "SHA",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "source_system",
-          "type": "SourceId",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "external_id",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "path",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
         {
           "name": "name",
           "type": "string",
@@ -4535,6 +3193,78 @@
         {
           "name": "updated_at",
           "type": "timestamp?",
+          "description": "",
+          "relationLabel": ""
+        }
+      ],
+      "methods": [],
+      "layer": "core",
+      "abstract": false,
+      "extends": "managed-object"
+    },
+    {
+      "id": "repository-file",
+      "bucket": "content",
+      "name": "Repository File",
+      "kind": "artifact",
+      "description": "A path-addressed file at a specific repository revision; mutations create new revisions rather than changing history.",
+      "meta": {
+        "relationship": "knowledge",
+        "priority": "P2",
+        "level": 3,
+        "badge": "",
+        "note": "",
+        "badge-style": "neutral",
+        "profiles": [
+          "PdM",
+          "Arch",
+          "Dev",
+          "QA",
+          "Researcher"
+        ],
+        "kit": null
+      },
+      "properties": [
+        {
+          "name": "id",
+          "type": "ArtifactId",
+          "required": true,
+          "description": "",
+          "relationLabel": "",
+          "override": true
+        },
+        {
+          "name": "repository_ref",
+          "type": "EntityId",
+          "required": true,
+          "description": "",
+          "relationLabel": ""
+        },
+        {
+          "name": "revision",
+          "type": "SHA",
+          "required": true,
+          "description": "",
+          "relationLabel": ""
+        },
+        {
+          "name": "source_system",
+          "type": "SourceId",
+          "required": true,
+          "description": "",
+          "relationLabel": ""
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "required": true,
+          "description": "",
+          "relationLabel": ""
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
           "description": "",
           "relationLabel": ""
         },
@@ -4618,192 +3348,7 @@
       ],
       "layer": "product",
       "abstract": false,
-      "extends": "managed-object"
-    },
-    {
-      "id": "document",
-      "bucket": "content",
-      "name": "Document",
-      "kind": "artifact",
-      "description": "A versioned document mirrored from a documentation source while preserving hierarchy and provenance.",
-      "meta": {
-        "relationship": "knowledge",
-        "priority": "P1",
-        "level": 2,
-        "badge": "",
-        "note": "",
-        "badge-style": "neutral",
-        "profiles": [
-          "PdM",
-          "Arch",
-          "Dev",
-          "QA",
-          "Researcher"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "ArtifactId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "space_ref",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "source_system",
-          "type": "SourceId",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "external_id",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "title",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "url",
-          "type": "URL?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "parent_id",
-          "type": "EntityId?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "version",
-          "type": "string?",
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "updated_at",
-          "type": "timestamp",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "contains_child",
-          "type": "Document",
-          "description": "",
-          "relation": "document",
-          "relationType": "composes",
-          "relationLabel": "contains",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "normalizes_as",
-          "type": "MarkdownDocument",
-          "description": "",
-          "relation": "markdown-document",
-          "relationType": "derives",
-          "relationLabel": "normalizes as",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "has_comments",
-          "type": "Comment",
-          "description": "",
-          "relation": "comment",
-          "relationType": "composes",
-          "relationLabel": "has comments",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "has_conversations",
-          "type": "DocumentConversation",
-          "description": "",
-          "relation": "document-conversation",
-          "relationType": "composes",
-          "relationLabel": "has conversations",
-          "required": false,
-          "extends": "edge"
-        }
-      ],
-      "methods": [
-        {
-          "name": "read",
-          "description": "",
-          "input": "",
-          "result": "ProviderContent"
-        },
-        {
-          "name": "to_text",
-          "description": "",
-          "input": "",
-          "result": "TextContent"
-        },
-        {
-          "name": "to_markdown",
-          "description": "",
-          "input": "",
-          "result": "TextContent"
-        },
-        {
-          "name": "list_children",
-          "description": "",
-          "input": "",
-          "result": "Document[]"
-        },
-        {
-          "name": "list_comments",
-          "description": "",
-          "input": "",
-          "result": "Comment[]"
-        },
-        {
-          "name": "add_comment",
-          "description": "",
-          "input": "author, body",
-          "result": "Comment"
-        },
-        {
-          "name": "get_history",
-          "description": "",
-          "input": "",
-          "result": "DocumentVersion[]"
-        }
-      ],
-      "examples": [
-        "Notion page",
-        "Confluence page",
-        "Wiki page",
-        "Technical note"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "managed-object"
+      "extends": "file"
     },
     {
       "id": "text-content",
@@ -4824,7 +3369,8 @@
           "Dev",
           "QA",
           "Researcher"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -4965,7 +3511,8 @@
           "Dev",
           "QA",
           "Researcher"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -5091,147 +3638,6 @@
       "extends": "managed-object"
     },
     {
-      "id": "approval",
-      "bucket": "collaboration",
-      "name": "Approval",
-      "kind": "human decision record",
-      "description": "An attributable human or delegated principal decision on a candidate change, quality gate or lifecycle transition.",
-      "meta": {
-        "relationship": "human-loop",
-        "priority": "P1",
-        "level": 2,
-        "badge": "",
-        "note": "",
-        "badge-style": "neutral",
-        "profiles": [
-          "CTO",
-          "PdM",
-          "Arch",
-          "Sec",
-          "GRC"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "ApprovalId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "subject_ref",
-          "type": "EntityRef",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "gate_ref",
-          "type": "EntityId?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "decision",
-          "type": "pending | approved | rejected | expired",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "decided_by",
-          "type": "ActorRef?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "reason",
-          "type": "TextContent?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "decided_at",
-          "type": "timestamp?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "records",
-          "type": "Evidence",
-          "description": "",
-          "relation": "evidence",
-          "relationType": "derives",
-          "relationLabel": "records",
-          "required": false,
-          "extends": "link"
-        },
-        {
-          "name": "notifies",
-          "type": "Notification",
-          "description": "",
-          "relation": "notification",
-          "relationType": "derives",
-          "relationLabel": "produces",
-          "required": false,
-          "extends": "link"
-        },
-        {
-          "name": "decides_on",
-          "type": "CandidateObject",
-          "description": "",
-          "relation": "candidate-object",
-          "relationType": "references",
-          "relationLabel": "decides_on",
-          "required": false,
-          "cardinality": "1:1 per decision event",
-          "extends": "link"
-        },
-        {
-          "name": "decides_on_2",
-          "type": "ActionRun",
-          "description": "",
-          "relation": "action-run",
-          "relationType": "references",
-          "relationLabel": "decides_on",
-          "required": false,
-          "cardinality": "1:1 per decision event",
-          "extends": "link"
-        }
-      ],
-      "methods": [
-        {
-          "name": "approve",
-          "description": "",
-          "input": "actor, reason?",
-          "result": "void"
-        },
-        {
-          "name": "reject",
-          "description": "",
-          "input": "actor, reason",
-          "result": "void"
-        },
-        {
-          "name": "is_current",
-          "description": "",
-          "input": "at?",
-          "result": "boolean"
-        }
-      ],
-      "examples": [
-        "Code review approval",
-        "Release approval",
-        "Risk acceptance",
-        "Production change approval"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "record"
-    },
-    {
       "id": "notification",
       "bucket": "collaboration",
       "name": "Notification",
@@ -5249,7 +3655,8 @@
           "Arch",
           "Dev",
           "QA"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -5406,7 +3813,8 @@
           "QA",
           "Sec",
           "StudioAdmin"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -5508,7 +3916,8 @@
           "QA",
           "Sec",
           "StudioAdmin"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -5628,7 +4037,8 @@
           "QA",
           "Sec",
           "StudioAdmin"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -5792,7 +4202,8 @@
           "QA",
           "Sec",
           "StudioAdmin"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -5954,7 +4365,8 @@
             "target": "governance-evidence",
             "note": "Name collision flagged in model.md §6.1"
           }
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -6076,506 +4488,6 @@
       "extends": "record"
     },
     {
-      "id": "policy",
-      "bucket": "governance",
-      "name": "Policy",
-      "kind": "content-backed governance document",
-      "description": "The organization's own normative document: a security regulation, a retention policy, a code of conduct. Content-backed and versioned; mirrored from a wiki or GRC tool, or authored in Studio. It states the commitment; Data Policy and Safety Constraint are what enforce it.",
-      "meta": {
-        "relationship": "control-loop",
-        "priority": "P1",
-        "level": 1,
-        "badge": "Changed",
-        "badge-style": "amber",
-        "profiles": [
-          "CTO",
-          "Sec",
-          "GRC",
-          "Arch"
-        ],
-        "note": "Rewritten from a generic Studio rule into the organization document §9 asks for. · model.md §9"
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "EntityId",
-          "description": "",
-          "required": true,
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "title",
-          "type": "string",
-          "description": "",
-          "required": true,
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "version",
-          "type": "string",
-          "description": "",
-          "required": true,
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "content_ref",
-          "type": "ContentRef",
-          "description": "The document itself, versioned",
-          "required": true,
-          "relationLabel": ""
-        },
-        {
-          "name": "policy_kind",
-          "type": "security | privacy | data_retention | engineering | compliance | other",
-          "description": "",
-          "required": true,
-          "relationLabel": ""
-        },
-        {
-          "name": "status",
-          "type": "draft | active | superseded | retired",
-          "description": "",
-          "required": true,
-          "relationLabel": ""
-        },
-        {
-          "name": "owner_ref",
-          "type": "EntityId",
-          "description": "",
-          "required": true,
-          "relationLabel": ""
-        },
-        {
-          "name": "effective_from",
-          "type": "timestamp?",
-          "description": "",
-          "required": false,
-          "relationLabel": ""
-        },
-        {
-          "name": "review_due",
-          "type": "timestamp?",
-          "description": "",
-          "required": false,
-          "relationLabel": ""
-        },
-        {
-          "name": "acquisition",
-          "type": "mirrored | authored",
-          "description": "",
-          "required": true,
-          "relationLabel": ""
-        },
-        {
-          "name": "implements",
-          "type": "Control",
-          "description": "",
-          "relation": "control",
-          "relationType": "references",
-          "relationLabel": "implements",
-          "required": false,
-          "extends": "edge"
-        }
-      ],
-      "methods": [
-        {
-          "name": "current_version",
-          "description": "",
-          "input": "",
-          "result": "ContentVersion"
-        },
-        {
-          "name": "list_enforcements",
-          "description": "The Data Policies and Safety Constraints that enforce this document",
-          "input": "",
-          "result": "PolicyRule[]"
-        },
-        {
-          "name": "is_due_for_review",
-          "description": "",
-          "input": "at?",
-          "result": "boolean"
-        }
-      ],
-      "examples": [
-        "Data Retention Policy v3",
-        "Secure Development Policy",
-        "Acceptable AI Use Policy"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "document"
-    },
-    {
-      "id": "model",
-      "bucket": "ai",
-      "name": "Model Endpoint",
-      "kind": "callable model endpoint",
-      "description": "A provider-neutral point at which Studio calls a model, selected by policy for quality, latency, privacy and cost. Its status describes the access, not the model itself.",
-      "meta": {
-        "relationship": "agentic-execution",
-        "priority": "P1",
-        "level": 1,
-        "badge": "Changed",
-        "note": "Renamed from Model: the card describes the endpoint Studio calls, not the model an organization has deployed (that is AI Model in the SDLC kit).",
-        "badge-style": "amber",
-        "profiles": [
-          "CTO",
-          "Arch",
-          "Dev",
-          "Researcher"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "ModelId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "provider",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "capabilities",
-          "type": "Capability[]",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "context_limit",
-          "type": "integer?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "pricing",
-          "type": "Pricing?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "data_policy",
-          "type": "DataPolicy",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "status",
-          "type": "available | degraded | disabled",
-          "description": "",
-          "relationLabel": ""
-        }
-      ],
-      "methods": [
-        {
-          "name": "supports",
-          "description": "",
-          "input": "capability",
-          "result": "boolean"
-        },
-        {
-          "name": "estimate_cost",
-          "description": "",
-          "input": "usage",
-          "result": "Cost"
-        },
-        {
-          "name": "get_limits",
-          "description": "",
-          "input": "",
-          "result": "ModelLimits"
-        },
-        {
-          "name": "get_health",
-          "description": "",
-          "input": "",
-          "result": "Health"
-        }
-      ],
-      "examples": [
-        "Hosted LLM / language model",
-        "Local LLM",
-        "Embedding model",
-        "Reranker",
-        "Multimodal model"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "record"
-    },
-    {
-      "id": "tool",
-      "bucket": "ai",
-      "name": "Tool",
-      "kind": "callable capability",
-      "description": "A discoverable typed capability callable by an agent, workflow or human through a governed provider.",
-      "meta": {
-        "relationship": "agentic-execution",
-        "priority": "P1",
-        "level": 2,
-        "badge": "",
-        "note": "",
-        "badge-style": "neutral",
-        "profiles": [
-          "CTO",
-          "Arch",
-          "Dev",
-          "Researcher"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "ToolId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "description",
-          "type": "string",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "input_schema",
-          "type": "JSONSchema",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "output_schema",
-          "type": "JSONSchema?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "side_effect",
-          "type": "none | read | write | destructive",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "approval_policy",
-          "type": "ApprovalPolicy?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "version",
-          "type": "string?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "invoked_as",
-          "type": "ToolCall",
-          "description": "",
-          "relation": "tool-call",
-          "relationType": "derives",
-          "relationLabel": "invoked as",
-          "required": false,
-          "extends": "link"
-        }
-      ],
-      "methods": [
-        {
-          "name": "validate_input",
-          "description": "",
-          "input": "input",
-          "result": "ValidationResult"
-        },
-        {
-          "name": "invoke",
-          "description": "",
-          "input": "input, context",
-          "result": "ToolCall"
-        },
-        {
-          "name": "estimate_risk",
-          "description": "",
-          "input": "input",
-          "result": "Risk"
-        },
-        {
-          "name": "dry_run",
-          "description": "",
-          "input": "input",
-          "result": "CandidateChange?"
-        }
-      ],
-      "examples": [
-        "Read object",
-        "Search graph",
-        "Create work item",
-        "Patch file",
-        "Deploy release"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "record"
-    },
-    {
-      "id": "message",
-      "bucket": "collaboration",
-      "name": "Message",
-      "kind": "interaction event",
-      "description": "An immutable turn carrying typed content, authorship, references, usage and optional tool activity.",
-      "meta": {
-        "relationship": "human-loop",
-        "priority": "P1",
-        "level": 3,
-        "badge": "",
-        "note": "A turn inside a Conversation, distinct from a Comment on an object.",
-        "badge-style": "neutral",
-        "profiles": [
-          "PdM",
-          "Arch",
-          "Dev",
-          "QA"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "MessageId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "role",
-          "type": "system | user | assistant | tool",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "author_ref",
-          "type": "ActorRef?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "content",
-          "type": "ContentPart[]",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "references",
-          "type": "EntityRef[]",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "usage",
-          "type": "ModelUsage?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "requests",
-          "type": "ToolCall",
-          "description": "",
-          "relation": "tool-call",
-          "relationType": "composes",
-          "relationLabel": "requests",
-          "required": false,
-          "extends": "link"
-        },
-        {
-          "name": "generated_by",
-          "type": "Model",
-          "description": "",
-          "relation": "model",
-          "relationType": "references",
-          "relationLabel": "generated by",
-          "required": false,
-          "extends": "link"
-        },
-        {
-          "name": "contains",
-          "type": "Mention",
-          "description": "",
-          "relation": "mention",
-          "relationType": "composes",
-          "relationLabel": "contains",
-          "required": false,
-          "extends": "link"
-        }
-      ],
-      "methods": [
-        {
-          "name": "to_text",
-          "description": "",
-          "input": "",
-          "result": "TextContent"
-        },
-        {
-          "name": "list_references",
-          "description": "",
-          "input": "",
-          "result": "Object[]"
-        },
-        {
-          "name": "list_tool_calls",
-          "description": "",
-          "input": "",
-          "result": "ToolCall[]"
-        },
-        {
-          "name": "get_usage",
-          "description": "",
-          "input": "",
-          "result": "ModelUsage?"
-        }
-      ],
-      "examples": [
-        "Instruction",
-        "Human request",
-        "Assistant response",
-        "Tool result",
-        "Approval request"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "record"
-    },
-    {
       "id": "object-type",
       "bucket": "graph",
       "name": "Object Type",
@@ -6592,7 +4504,8 @@
           "Arch",
           "Dev",
           "Researcher"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -6779,7 +4692,8 @@
           "StudioAdmin",
           "Sec",
           "Arch"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -6936,7 +4850,8 @@
           "Sec",
           "StudioAdmin",
           "Arch"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -7002,7 +4917,8 @@
           "Arch",
           "Dev",
           "Researcher"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -7207,7 +5123,8 @@
           "Arch",
           "Dev",
           "Researcher"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -7376,7 +5293,8 @@
           "Arch",
           "Dev",
           "QA"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -7481,7 +5399,8 @@
           "Sec",
           "StudioAdmin",
           "DBA"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -7572,7 +5491,8 @@
           "Sec",
           "StudioAdmin",
           "DBA"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -7670,7 +5590,8 @@
           "QA",
           "Sec",
           "StudioAdmin"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -7730,17 +5651,6 @@
           "required": false,
           "cardinality": "N:M",
           "extends": "link"
-        },
-        {
-          "name": "authors",
-          "type": "Comment",
-          "description": "",
-          "relation": "comment",
-          "relationType": "references",
-          "relationLabel": "authors",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
         }
       ],
       "methods": [
@@ -7767,419 +5677,6 @@
       "extends": "record"
     },
     {
-      "id": "finding",
-      "bucket": "automation",
-      "name": "Finding",
-      "kind": "graph issue or signal",
-      "description": "Observed issue over the graph: gap, drift, staleness, contradiction, duplicate, ownership hole or review/scan result.",
-      "meta": {
-        "relationship": "control-loop",
-        "priority": "P2",
-        "level": 4,
-        "badge": "From MaxV",
-        "note": "Added as the generic observed graph issue and signal object. · model.md §6.1",
-        "badge-style": "green",
-        "profiles": [
-          "Arch",
-          "Dev",
-          "QA",
-          "Sec",
-          "StudioAdmin"
-        ],
-        "links": [
-          {
-            "kind": "see-also",
-            "target": "security-finding",
-            "note": "Kit specialization of the generic Finding; renamed to Security Finding to clear the name collision"
-          }
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "FindingId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "title",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "finding_kind",
-          "type": "gap | drift | stale | contradiction | duplicate | ownership_hole | review | scan | cost_optimization | bloat",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "provenance_kind",
-          "type": "mirrored | computed | authored",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "subject_refs",
-          "type": "EntityRef[]",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "status",
-          "type": "detected | acknowledged | triaged | accepted | dismissed | auto_resolved",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "provenance_ref",
-          "type": "ProvenanceId?",
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "may_produce",
-          "type": "ActionRun",
-          "description": "",
-          "relation": "action-run",
-          "relationType": "derives",
-          "relationLabel": "may produce",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        },
-        {
-          "name": "may_produce_opportunity",
-          "type": "ManagedObject",
-          "description": "",
-          "relation": "managed-object",
-          "relationType": "derives",
-          "relationLabel": "may produce opportunity",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "accepted_as",
-          "type": "Opportunity",
-          "description": "",
-          "relation": "opportunity",
-          "relationType": "derives",
-          "relationLabel": "accepted as",
-          "required": false,
-          "extends": "edge"
-        }
-      ],
-      "methods": [
-        {
-          "name": "acknowledge",
-          "description": "",
-          "input": "actor",
-          "result": "void"
-        },
-        {
-          "name": "accept",
-          "description": "",
-          "input": "actor",
-          "result": "ActionRun"
-        },
-        {
-          "name": "auto_resolve",
-          "description": "",
-          "input": "",
-          "result": "void"
-        }
-      ],
-      "examples": [
-        "Capability gap",
-        "Stale artifact",
-        "Security finding"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "managed-object"
-    },
-    {
-      "id": "check",
-      "bucket": "automation",
-      "name": "Check",
-      "kind": "verification step",
-      "description": "One verification step performed while producing a Report — a rule evaluated, a query run, a file scanned, a comparison made — recording what was done and its outcome, whether or not it produced a Finding.",
-      "meta": {
-        "relationship": "control-loop",
-        "priority": "P3",
-        "level": 5,
-        "badge": "",
-        "note": "",
-        "badge-style": "neutral",
-        "profiles": [
-          "Arch",
-          "Dev",
-          "QA",
-          "Sec"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "check_kind",
-          "type": "rule | query | scan | comparison | manual",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "status",
-          "type": "passed | failed | skipped | error",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "input_ref",
-          "type": "EntityRef?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "details",
-          "type": "JSON",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "started_at",
-          "type": "timestamp",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "completed_at",
-          "type": "timestamp?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "belongs_to",
-          "type": "Report",
-          "description": "",
-          "relation": "report",
-          "relationType": "references",
-          "relationLabel": "belongs to",
-          "required": false,
-          "cardinality": "N:1",
-          "extends": "edge"
-        },
-        {
-          "name": "produced",
-          "type": "Finding",
-          "description": "",
-          "relation": "finding",
-          "relationType": "derives",
-          "relationLabel": "produced",
-          "required": false,
-          "extends": "edge"
-        }
-      ],
-      "methods": [
-        {
-          "name": "mark_result",
-          "description": "",
-          "input": "status, details",
-          "result": "void"
-        },
-        {
-          "name": "to_evidence",
-          "description": "",
-          "input": "",
-          "result": "Evidence"
-        }
-      ],
-      "examples": [
-        "A schema rule evaluated against an Object Type",
-        "A cross-document comparison query for contradiction detection",
-        "A manual reviewer check of an Approval Request"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "managed-object"
-    },
-    {
-      "id": "report",
-      "bucket": "automation",
-      "name": "Report",
-      "kind": "validation result aggregate",
-      "description": "The durable result of a validator or reviewer's work over a scope: a versioned aggregate composing the Findings it surfaced and the Checks it performed, with overall status and evidence.",
-      "meta": {
-        "relationship": "control-loop",
-        "priority": "P2",
-        "level": 3,
-        "badge": "",
-        "note": "",
-        "badge-style": "neutral",
-        "profiles": [
-          "Arch",
-          "Dev",
-          "QA",
-          "Sec",
-          "StudioAdmin"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "title",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "scope_ref",
-          "type": "EntityRef",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "report_kind",
-          "type": "automated | manual_review | mixed",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "status",
-          "type": "running | completed | failed",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "producer_ref",
-          "type": "EntityId?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "summary",
-          "type": "string?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "started_at",
-          "type": "timestamp",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "completed_at",
-          "type": "timestamp?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "contains",
-          "type": "Finding",
-          "description": "",
-          "relation": "finding",
-          "relationType": "composes",
-          "relationLabel": "contains",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "edge"
-        },
-        {
-          "name": "contains_2",
-          "type": "Check",
-          "description": "",
-          "relation": "check",
-          "relationType": "composes",
-          "relationLabel": "contains",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "edge"
-        },
-        {
-          "name": "records",
-          "type": "Evidence",
-          "description": "",
-          "relation": "evidence",
-          "relationType": "derives",
-          "relationLabel": "records",
-          "required": false,
-          "extends": "link",
-          "override": true
-        }
-      ],
-      "methods": [
-        {
-          "name": "list_findings",
-          "description": "",
-          "input": "",
-          "result": "Finding[]"
-        },
-        {
-          "name": "list_checks",
-          "description": "",
-          "input": "",
-          "result": "Check[]"
-        },
-        {
-          "name": "overall_result",
-          "description": "",
-          "input": "",
-          "result": "pass | fail | mixed"
-        },
-        {
-          "name": "to_evidence",
-          "description": "",
-          "input": "",
-          "result": "Evidence"
-        }
-      ],
-      "examples": [
-        "A governance-engine compare_objects run reporting contradiction/gap/bloat findings between a Feature Spec and its Design",
-        "A CI-triggered AI-skill review report attached to a Pull Request",
-        "A manual architecture review report"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "managed-object"
-    },
-    {
       "id": "transition",
       "bucket": "automation",
       "name": "Transition",
@@ -8198,7 +5695,8 @@
           "QA",
           "Sec",
           "StudioAdmin"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -8365,350 +5863,6 @@
       "extends": "record"
     },
     {
-      "id": "review-request",
-      "bucket": "collaboration",
-      "name": "Review Request",
-      "kind": "requested human review",
-      "description": "A routed request for one or more people or teams to review a pull request, document, change, risk or generated proposal.",
-      "meta": {
-        "relationship": "human-loop",
-        "priority": "P1",
-        "level": 2,
-        "badge": "",
-        "note": "Routes a human review request; accepted 2026-08-03.",
-        "badge-style": "neutral",
-        "profiles": [
-          "PdM",
-          "Arch",
-          "Dev",
-          "QA"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "subject_ref",
-          "type": "EntityRef",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "requester_ref",
-          "type": "ActorRef",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "reviewer_refs",
-          "type": "ActorRef[]",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "review_type",
-          "type": "code | document | architecture | security | release | custom",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "status",
-          "type": "requested | in_review | completed | dismissed | expired",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "due_at",
-          "type": "timestamp?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "collects",
-          "type": "Review",
-          "description": "",
-          "relation": "code-review",
-          "relationType": "composes",
-          "relationLabel": "collects",
-          "required": false,
-          "extends": "edge"
-        }
-      ],
-      "methods": [
-        {
-          "name": "accept",
-          "description": "",
-          "input": "actor",
-          "result": "void"
-        },
-        {
-          "name": "dismiss",
-          "description": "",
-          "input": "actor, reason?",
-          "result": "void"
-        },
-        {
-          "name": "complete",
-          "description": "",
-          "input": "review",
-          "result": "void"
-        },
-        {
-          "name": "list_reviews",
-          "description": "",
-          "input": "",
-          "result": "Review[]"
-        }
-      ],
-      "examples": [
-        "PR required reviewer request",
-        "Spec review request",
-        "Security review request",
-        "Architecture board review"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "managed-object"
-    },
-    {
-      "id": "approval-request",
-      "bucket": "collaboration",
-      "name": "Approval Request",
-      "kind": "requested decision",
-      "description": "A routed request for an explicit approval decision on a candidate change, gate, release, risk acceptance or lifecycle transition.",
-      "meta": {
-        "relationship": "human-loop",
-        "priority": "P1",
-        "level": 2,
-        "badge": "",
-        "note": "Routes an approval decision, separate from the recorded Approval; accepted 2026-08-03.",
-        "badge-style": "neutral",
-        "profiles": [
-          "CTO",
-          "PdM",
-          "Arch",
-          "Sec",
-          "GRC"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "subject_ref",
-          "type": "EntityRef",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "gate_ref",
-          "type": "EntityId?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "requester_ref",
-          "type": "ActorRef",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "approver_refs",
-          "type": "ActorRef[]",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "status",
-          "type": "requested | approved | rejected | expired | withdrawn",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "due_at",
-          "type": "timestamp?",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "collects_decisions",
-          "type": "Approval",
-          "description": "",
-          "relation": "approval",
-          "relationType": "composes",
-          "relationLabel": "collects decisions",
-          "required": false,
-          "extends": "link"
-        }
-      ],
-      "methods": [
-        {
-          "name": "approve",
-          "description": "",
-          "input": "actor, reason?",
-          "result": "Approval"
-        },
-        {
-          "name": "reject",
-          "description": "",
-          "input": "actor, reason",
-          "result": "Approval"
-        },
-        {
-          "name": "withdraw",
-          "description": "",
-          "input": "actor, reason?",
-          "result": "void"
-        },
-        {
-          "name": "list_decisions",
-          "description": "",
-          "input": "",
-          "result": "Approval[]"
-        }
-      ],
-      "examples": [
-        "Release approval request",
-        "Production change approval request",
-        "Risk acceptance request",
-        "Tool authorization request"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "managed-object"
-    },
-    {
-      "id": "lifecycle-stage",
-      "bucket": "kit-management",
-      "name": "Lifecycle Stage",
-      "kind": "kit lifecycle stage",
-      "description": "One stage of a kit-defined construction lifecycle, containing activities per performer role and gates.",
-      "meta": {
-        "relationship": "configuration",
-        "priority": "P1",
-        "level": 2,
-        "badge": "From MaxV",
-        "note": "Added for per-role configured activities, gates and checkpoints. · model.md §7",
-        "badge-style": "green",
-        "profiles": [
-          "StudioAdmin",
-          "Arch",
-          "PdM",
-          "Dev"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "phase_ref",
-          "type": "PhaseId",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "ordinal",
-          "type": "integer",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "activity_refs",
-          "type": "EntityId[]",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "quality_gate_refs",
-          "type": "EntityId[]",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "defines",
-          "type": "Activity",
-          "description": "",
-          "relation": "activity",
-          "relationType": "composes",
-          "relationLabel": "defines",
-          "required": false,
-          "cardinality": "1:N",
-          "extends": "link"
-        }
-      ],
-      "methods": [
-        {
-          "name": "list_activities",
-          "description": "",
-          "input": "role?",
-          "result": "Activity[]"
-        },
-        {
-          "name": "list_gates",
-          "description": "",
-          "input": "",
-          "result": "QualityGate[]"
-        }
-      ],
-      "examples": [
-        "Intent",
-        "Design",
-        "Release"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "record"
-    },
-    {
       "id": "activity",
       "bucket": "automation",
       "name": "Activity",
@@ -8727,7 +5881,8 @@
           "QA",
           "Sec",
           "StudioAdmin"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -8816,335 +5971,6 @@
       "extends": "managed-object"
     },
     {
-      "id": "gears",
-      "bucket": "kit-management",
-      "name": "Gears",
-      "kind": "reusable platform module",
-      "description": "Constructor Gears module used by kits and actions as a reusable engine, module or developer/operations tool.",
-      "meta": {
-        "relationship": "configuration",
-        "priority": "P2",
-        "level": 3,
-        "badge": "From MaxV",
-        "note": "Added as Constructor Gears building blocks bundled by kits and actions. · model.md §7",
-        "badge-style": "green",
-        "profiles": [
-          "StudioAdmin",
-          "Arch",
-          "PdM",
-          "Dev"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "EntityId",
-          "required": true,
-          "description": "",
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "version",
-          "type": "string",
-          "required": true,
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "capabilities",
-          "type": "Capability[]",
-          "description": "",
-          "relationLabel": ""
-        },
-        {
-          "name": "status",
-          "type": "active | deprecated",
-          "description": "",
-          "relationLabel": ""
-        }
-      ],
-      "methods": [
-        {
-          "name": "invoke",
-          "description": "",
-          "input": "input",
-          "result": "ActionRun"
-        },
-        {
-          "name": "list_capabilities",
-          "description": "",
-          "input": "",
-          "result": "Capability[]"
-        }
-      ],
-      "examples": [
-        "Code generator gear",
-        "Scanner gear"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "record"
-    },
-    {
-      "id": "dependency",
-      "bucket": "planning",
-      "name": "Dependency",
-      "kind": "reified relationship",
-      "description": "A dated, attributed record that one object depends on another: what blocks what, since when, and how badly. A reified relationship, so its dates and criticality survive.",
-      "meta": {
-        "relationship": "delivery-planning",
-        "priority": "P2",
-        "level": 3,
-        "badge": "From MaxV",
-        "note": "Reified relationship required by invariant 8. · model.md §8.2",
-        "badge-style": "green",
-        "profiles": [
-          "PdM",
-          "Arch",
-          "Dev",
-          "CTO",
-          "QA"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "EntityId",
-          "description": "",
-          "required": true,
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "source_ref",
-          "type": "EntityId",
-          "description": "The object that depends",
-          "required": true,
-          "relationLabel": ""
-        },
-        {
-          "name": "target_ref",
-          "type": "EntityId",
-          "description": "The object depended on",
-          "required": true,
-          "relationLabel": ""
-        },
-        {
-          "name": "dependency_kind",
-          "type": "blocks | requires | affects",
-          "description": "",
-          "required": true,
-          "relationLabel": ""
-        },
-        {
-          "name": "criticality",
-          "type": "low | medium | high | blocking",
-          "description": "",
-          "required": false,
-          "relationLabel": ""
-        },
-        {
-          "name": "valid_from",
-          "type": "timestamp",
-          "description": "",
-          "required": true,
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "valid_to",
-          "type": "timestamp?",
-          "description": "",
-          "required": false,
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "status",
-          "type": "proposed | confirmed | resolved | retired",
-          "description": "",
-          "required": true,
-          "relationLabel": ""
-        },
-        {
-          "name": "note",
-          "type": "string?",
-          "description": "",
-          "required": false,
-          "relationLabel": ""
-        },
-        {
-          "name": "depends_on",
-          "type": "ManagedObject",
-          "description": "",
-          "relation": "managed-object",
-          "relationType": "references",
-          "relationLabel": "depends_on",
-          "required": false,
-          "extends": "edge"
-        }
-      ],
-      "methods": [
-        {
-          "name": "is_active",
-          "description": "",
-          "input": "at?",
-          "result": "boolean"
-        },
-        {
-          "name": "resolve",
-          "description": "",
-          "input": "actor",
-          "result": "void"
-        },
-        {
-          "name": "explain",
-          "description": "",
-          "input": "",
-          "result": "Provenance"
-        }
-      ],
-      "examples": [
-        "Clean Restore blocked by a storage-layer change",
-        "A release requires a third-party component upgrade"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "managed-object"
-    },
-    {
-      "id": "assignment",
-      "bucket": "planning",
-      "name": "Assignment",
-      "kind": "reified relationship",
-      "description": "A dated record that work was allocated to someone: who, to what, in which job role, from when. A reified relationship, distinct from ownership, which is accountability rather than allocation.",
-      "meta": {
-        "relationship": "delivery-planning",
-        "priority": "P2",
-        "level": 3,
-        "badge": "From MaxV",
-        "note": "Reified relationship required by invariant 8. Not the same as Ownership. · model.md §8.2",
-        "badge-style": "green",
-        "profiles": [
-          "PdM",
-          "Dev",
-          "QA",
-          "Arch",
-          "HR"
-        ]
-      },
-      "properties": [
-        {
-          "name": "id",
-          "type": "EntityId",
-          "description": "",
-          "required": true,
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "assignee_ref",
-          "type": "EntityId",
-          "description": "",
-          "required": true,
-          "relationLabel": ""
-        },
-        {
-          "name": "assignee_kind",
-          "type": "person | team | agent",
-          "description": "",
-          "required": true,
-          "relationLabel": ""
-        },
-        {
-          "name": "subject_ref",
-          "type": "EntityId",
-          "description": "The work being allocated",
-          "required": true,
-          "relationLabel": ""
-        },
-        {
-          "name": "job_role",
-          "type": "string?",
-          "description": "The role the assignee acts in for this work",
-          "required": false,
-          "relationLabel": ""
-        },
-        {
-          "name": "valid_from",
-          "type": "timestamp",
-          "description": "",
-          "required": true,
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "valid_to",
-          "type": "timestamp?",
-          "description": "",
-          "required": false,
-          "relationLabel": "",
-          "override": true
-        },
-        {
-          "name": "status",
-          "type": "proposed | active | completed | withdrawn",
-          "description": "",
-          "required": true,
-          "relationLabel": ""
-        },
-        {
-          "name": "assigns",
-          "type": "ManagedObject",
-          "description": "",
-          "relation": "managed-object",
-          "relationType": "references",
-          "relationLabel": "assigns",
-          "required": false,
-          "extends": "edge"
-        },
-        {
-          "name": "assigned_to",
-          "type": "Person",
-          "description": "",
-          "relation": "person",
-          "relationType": "member",
-          "relationLabel": "assigned_to",
-          "required": false,
-          "extends": "edge"
-        }
-      ],
-      "methods": [
-        {
-          "name": "is_active",
-          "description": "",
-          "input": "at?",
-          "result": "boolean"
-        },
-        {
-          "name": "withdraw",
-          "description": "",
-          "input": "actor",
-          "result": "void"
-        }
-      ],
-      "examples": [
-        "Ivanov assigned to the Clean Restore spec as author",
-        "QA team assigned to the release validation"
-      ],
-      "layer": "product",
-      "abstract": false,
-      "extends": "managed-object"
-    },
-    {
       "id": "organization-entity",
       "layer": "product",
       "extends": "managed-object",
@@ -9164,7 +5990,8 @@
           "Arch",
           "Dev",
           "StudioAdmin"
-        ]
+        ],
+        "kit": null
       },
       "properties": [],
       "methods": [],
@@ -9194,7 +6021,8 @@
           "Arch",
           "Dev",
           "StudioAdmin"
-        ]
+        ],
+        "kit": null
       },
       "properties": [
         {
@@ -9225,5 +6053,66 @@
         "Cost Metric"
       ]
     }
+  ],
+  "moved_to_kits": {
+    "actor.authors": "project-activity",
+    "approval": "project-specs",
+    "approval-request": "components",
+    "assignment": "project-team",
+    "check": "project-tests",
+    "comment": "project-activity",
+    "dependency": "project-lifecycle",
+    "document": "project-specs",
+    "finding": "project-issues",
+    "kit.introduces_type_22": "project-issues",
+    "lifecycle-stage": "project-lifecycle",
+    "message": "assistant",
+    "milestone": "project-lifecycle",
+    "model": "assistant",
+    "organization.connectors": "org-connections",
+    "organization.costs": "org-costs",
+    "organization.environments": "org-infrastructure",
+    "organization.gears": "components",
+    "organization.reports": "org-reports",
+    "person.authors": "assistant",
+    "policy": "project-specs",
+    "project.activity": "project-activity",
+    "project.artifacts": "project-artifacts",
+    "project.components": "product-releases",
+    "project.documented_by": "project-specs",
+    "project.issues": "project-issues",
+    "project.model": "project-domain-model",
+    "project.parts": "components",
+    "project.people": "project-team",
+    "project.releases": "product-releases",
+    "project.scopes": "project-issues",
+    "project.specs": "project-specs",
+    "project.tests": "project-tests",
+    "project.tracks": "project-lifecycle",
+    "pull-request": "project-git",
+    "report": "org-reports",
+    "repository.hosts": "project-git",
+    "review-request": "project-specs",
+    "risk": "project-lifecycle",
+    "tool": "assistant",
+    "work-item": "project-issues",
+    "workspace.ptypes": "project-lifecycle",
+    "workspace.types": "project-specs"
+  },
+  "dropped_from_core": [
+    "gears",
+    "kit.packages_10",
+    "kit.packages_11",
+    "kit.packages_12",
+    "kit.packages_13",
+    "kit.packages_14",
+    "kit.packages_2",
+    "kit.packages_3",
+    "kit.packages_4",
+    "kit.packages_5",
+    "kit.packages_6",
+    "kit.packages_7",
+    "kit.packages_8",
+    "kit.packages_9"
   ]
 }

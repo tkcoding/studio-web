@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "stripInternal": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "alwaysStrict": true,
+    "noImplicitThis": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src-app/*"],
+      "@/app/*": ["./src-app/app/*"],
+      "@/mfe_packages/*": ["./src-app/mfe_packages/*"],
+      "@/screensets/*": ["./src-app/screensets/*"],
+      "@gears-frontx/frontx-template-shell": ["./src/index.ts"],
+      "@gears-frontx/frontx-template-shell/*": ["./src/*"],
+      "@frontx-test-utils/*": ["./src-app/__test-utils__/*"]
+    }
+  },
+  "include": [
+    "src-app"
+  ],
+  "exclude": [
+    "**/__tests__",
+    "src-app/mfe_packages"
+  ],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}

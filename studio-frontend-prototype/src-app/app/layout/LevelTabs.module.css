@@ -1,0 +1,163 @@
+/* The kit's NavigationMenu centres a fitted bar; the level's row spans the page
+   from the gutter, and wraps on a narrow window rather than hiding a tab. */
+.row {
+  flex: none;
+  display: flex;
+  max-width: none;
+  justify-content: flex-start;
+  padding-block: var(--space-2);
+  padding-inline: var(--space-6);
+  border-block-end: var(--border-width) solid var(--border);
+  background-color: var(--card);
+}
+
+.row .list {
+  flex: 1;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: var(--space-1);
+}
+
+/* The kit's link stacks a title over a description; a tab is an icon beside
+   its label. */
+.list .tab {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.list .tab .glyph {
+  stroke-width: 1.5;
+  color: var(--muted-foreground);
+}
+
+.list .tab[data-active] .glyph {
+  color: inherit;
+}
+
+.pending {
+  height: var(--control-height-xs);
+  width: 24rem;
+  max-width: 100%;
+}
+
+/* A kit's tab that works but whose place is not settled (presentation.experimental). */
+.exp {
+  padding: 0 0.3rem;
+  border-radius: 0.25rem;
+  background: color-mix(in oklab, var(--warning, #d97706) 18%, transparent);
+  color: var(--warning-foreground, #b45309);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+}
+
+/* Reordering (the prototype's section band): the dragged tab fades, and a
+   bar marks where it would land. */
+.list .tab.dragging {
+  opacity: 0.5;
+}
+
+.list .tab.dropBefore {
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+
+.list .tab.dropAfter {
+  box-shadow: inset -2px 0 0 var(--primary);
+}
+
+/* What follows the tabs — Default order, Pin — is about the row, not a place
+   to go: quieter than a tab. */
+.aside {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--control-height-xs);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-md, 0.375rem);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.aside:hover {
+  background-color: var(--muted);
+  color: var(--foreground);
+}
+
+.aside:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.asideOn {
+  color: var(--foreground);
+}
+
+.asideGlyph {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+/* Customize tabs (the prototype's band editor): a panel under its button. */
+.editorAnchor {
+  position: relative;
+}
+
+.editor {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-1));
+  inset-inline-end: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 20rem;
+  max-width: calc(100vw - 2rem);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+  background-color: var(--popover, var(--card));
+  color: var(--popover-foreground, var(--foreground));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+  font-size: 0.8125rem;
+}
+
+.editorNote {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+.editorList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 50vh;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.editorRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.editorError {
+  margin: 0;
+  color: var(--destructive);
+}
+
+.editorFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.editorSpacer {
+  flex: 1;
+}

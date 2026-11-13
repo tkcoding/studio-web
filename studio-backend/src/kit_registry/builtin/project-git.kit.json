@@ -1,0 +1,293 @@
+{
+  "manifest_version": "1",
+  "slug": "project-git",
+  "name": "Git",
+  "description": "A project's Git host workflow: the pull requests of its repositories and what waits on review.",
+  "publisher": "Constructor Fabric",
+  "levels": [
+    "organization",
+    "project"
+  ],
+  "model": {
+    "types": [
+      {
+        "name": "pull-request",
+        "id": "pull-request",
+        "label": "Pull Request",
+        "description": "A proposed repository change with review, discussion and merge state.",
+        "entity": {
+          "id": "pull-request",
+          "bucket": "collaboration",
+          "name": "Pull Request",
+          "kind": "entity",
+          "description": "A proposed repository change with review, discussion and merge state.",
+          "meta": {
+            "relationship": "human-loop",
+            "priority": "P1",
+            "level": 1,
+            "badge": "",
+            "note": "",
+            "badge-style": "neutral",
+            "profiles": [
+              "Dev",
+              "QA",
+              "Sec",
+              "Arch"
+            ]
+          },
+          "properties": [
+            {
+              "name": "id",
+              "type": "EntityId",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "repository_ref",
+              "type": "EntityId",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "author_ref",
+              "type": "EntityId",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "source_system",
+              "type": "SourceId",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "external_id",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "number",
+              "type": "integer",
+              "required": true,
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "relationLabel": "",
+              "override": true
+            },
+            {
+              "name": "state",
+              "type": "open | merged | closed",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "source_branch",
+              "type": "BranchRef",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "target_branch",
+              "type": "BranchRef",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "merged_at",
+              "type": "timestamp?",
+              "description": "",
+              "relationLabel": ""
+            },
+            {
+              "name": "authored_by",
+              "type": "Person",
+              "description": "",
+              "relation": "person",
+              "relationType": "references",
+              "relationLabel": "authored by",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "sources_from",
+              "type": "Branch",
+              "description": "",
+              "relation": "branch",
+              "relationType": "references",
+              "relationLabel": "sources from",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "targets",
+              "type": "Branch",
+              "description": "",
+              "relation": "branch",
+              "relationType": "references",
+              "relationLabel": "targets",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "proposes",
+              "type": "Commit",
+              "description": "",
+              "relation": "commit",
+              "relationType": "references",
+              "relationLabel": "proposes",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "has_reviews",
+              "type": "Review",
+              "description": "",
+              "relation": "code-review",
+              "relationType": "composes",
+              "relationLabel": "has reviews",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "has_comments",
+              "type": "Comment",
+              "description": "",
+              "relation": "comment",
+              "relationType": "composes",
+              "relationLabel": "has comments",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "has_inline_conversations",
+              "type": "InlineConversation",
+              "description": "",
+              "relation": "inline-conversation",
+              "relationType": "composes",
+              "relationLabel": "has inline conversations",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "requests_reviews",
+              "type": "ReviewRequest",
+              "description": "",
+              "relation": "review-request",
+              "relationType": "composes",
+              "relationLabel": "requests reviews",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "validated_by",
+              "type": "CICheck",
+              "description": "",
+              "relation": "ci-check",
+              "relationType": "composes",
+              "relationLabel": "validated by",
+              "required": false,
+              "extends": "edge"
+            },
+            {
+              "name": "triggers",
+              "type": "Build",
+              "description": "",
+              "relation": "build",
+              "relationType": "derives",
+              "relationLabel": "triggers",
+              "required": false,
+              "extends": "edge"
+            }
+          ],
+          "methods": [
+            {
+              "name": "list_commits",
+              "description": "",
+              "input": "",
+              "result": "Commit[]"
+            },
+            {
+              "name": "list_changed_files",
+              "description": "",
+              "input": "",
+              "result": "FileChange[]"
+            },
+            {
+              "name": "list_reviews",
+              "description": "",
+              "input": "",
+              "result": "CodeReview[]"
+            },
+            {
+              "name": "list_comments",
+              "description": "",
+              "input": "",
+              "result": "Comment[]"
+            },
+            {
+              "name": "add_comment",
+              "description": "",
+              "input": "author, body",
+              "result": "Comment"
+            },
+            {
+              "name": "to_text",
+              "description": "",
+              "input": "",
+              "result": "TextContent"
+            }
+          ],
+          "examples": [
+            "GitHub pull request",
+            "GitLab merge request",
+            "Bitbucket pull request"
+          ],
+          "layer": "product",
+          "abstract": false,
+          "extends": "managed-object"
+        }
+      }
+    ],
+    "properties": [
+      {
+        "on": "repository",
+        "property": {
+          "name": "hosts",
+          "type": "PullRequest",
+          "description": "",
+          "relation": "pull-request",
+          "relationType": "composes",
+          "relationLabel": "hosts",
+          "required": false,
+          "extends": "edge"
+        }
+      }
+    ]
+  },
+  "inbox": [
+    {
+      "id": "pull-requests",
+      "label": "Pull requests waiting on you",
+      "kind": "studio"
+    }
+  ]
+}

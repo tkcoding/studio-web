@@ -1,0 +1,436 @@
+/*
+ * People over ui-kit semantic tokens (see theme.css in @gears-frontx/ui-kit).
+ * No Tailwind: inside the shadow root the re-anchored kit tokens shadow the
+ * shell's HSL triplets.
+ */
+
+.screen {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 100%;
+  padding: var(--space-6);
+  color: var(--foreground);
+}
+
+.screen[data-theme] {
+  background: transparent;
+}
+
+.skeleton {
+  height: 12rem;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-heading-1-size);
+  line-height: var(--text-heading-1-line-height);
+  font-weight: var(--text-heading-1-weight);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.headerAction {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 60rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.about p {
+  margin: 0;
+}
+
+.about summary {
+  cursor: pointer;
+}
+
+.muted {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.block {
+  display: block;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.error {
+  margin: 0;
+  color: var(--destructive);
+  font-size: 0.875rem;
+}
+
+.notice {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.toggle {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 1px solid var(--primary);
+  border-radius: 0.25rem;
+}
+
+.cellSwatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 0.125rem;
+}
+
+.search {
+  max-width: 20rem;
+}
+
+.sortBtn {
+  all: unset;
+  cursor: pointer;
+}
+
+.row {
+  cursor: pointer;
+}
+
+.pcell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pname {
+  all: unset;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.photo {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.photoLarge {
+  width: 3.5rem;
+  height: 3.5rem;
+  font-size: 1.125rem;
+}
+
+.stack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.proj {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 14rem;
+  padding: 0.125rem var(--space-2) 0.125rem 0.125rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.8125rem;
+}
+
+.projAccess {
+  border-style: dashed;
+  background: transparent;
+}
+
+.projActive {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.projMark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.25rem;
+  background: var(--muted);
+  font-size: 0.625rem;
+  font-weight: 600;
+}
+
+.projName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projRole {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.more {
+  all: unset;
+  cursor: pointer;
+  padding: 0 var(--space-1);
+  color: var(--primary);
+  font-size: 0.8125rem;
+}
+
+/* Activity intensity, 0 (nothing seen) to 4. */
+.i0 {
+  --intensity: 0%;
+}
+
+.i1 {
+  --intensity: 15%;
+}
+
+.i2 {
+  --intensity: 35%;
+}
+
+.i3 {
+  --intensity: 60%;
+}
+
+.i4 {
+  --intensity: 85%;
+}
+
+.cellSwatch.i1,
+.cellSwatch.i2,
+.cellSwatch.i3,
+.cellSwatch.i4 {
+  background: color-mix(in srgb, var(--primary) var(--intensity), transparent);
+}
+
+.matrixWrap {
+  overflow: auto;
+  max-width: 100%;
+}
+
+.matrix {
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.matrix th,
+.matrix td {
+  padding: 0.125rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.mxCorner {
+  text-align: left;
+}
+
+.mxWs {
+  text-align: left;
+  border-left: 1px solid var(--border);
+  padding: var(--space-1) var(--space-2);
+}
+
+.mxProj {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  max-height: 10rem;
+  font-weight: 400;
+}
+
+.mxProjName {
+  display: inline-block;
+  max-height: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wsFirst {
+  border-left: 1px solid var(--border);
+}
+
+.mxPerson {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.mxPersonBtn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.mxCell {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.6875rem;
+  background: color-mix(in srgb, var(--primary) var(--intensity), transparent);
+}
+
+.mxCell.granted {
+  outline: 1px solid var(--primary);
+  outline-offset: -1px;
+}
+
+.panel {
+  max-height: 85vh;
+  overflow: auto;
+}
+
+.panelHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.panelSec {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.panelSec h3,
+.panelSec h4 {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.panelList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.panelProj {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  cursor: pointer;
+}
+
+.kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  min-width: 7rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.kpiValue {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.kpiLabel {
+  font-size: 0.8125rem;
+}
+
+.warn {
+  border-color: var(--warning, var(--border));
+}
+
+.danger {
+  border-color: var(--destructive);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

@@ -9,8 +9,10 @@
 //! engine -- the platform's by this layer, on every engine route of this gear
 //! and the catalogue's, an organization's by [`scope_for`], when a request
 //! names it -- at most once a minute; a change is checked out on the next use.
-//! Only a first read is waited for; a due one runs in the background while
-//! the request is served from the roots read last.
+//! Only a first read of the platform's list, and of an organization's own
+//! list, is waited for; a due one, and every read of an organization's
+//! projects, runs in the background while the request is served from the
+//! roots read last.
 //! While the platform has none, the deployment's corpus stays its one root.
 
 use std::sync::Arc;
@@ -204,6 +206,20 @@ fn projects_not_read(
     }
 }
 
+/// What an organization's projects say while their first read runs: their
+/// own gears and product files are not there yet, and will be.
+fn projects_reading() -> super::project_roots::UnreadableSource {
+    super::project_roots::UnreadableSource {
+        project_id: None,
+        source: super::project_roots::ORGANIZATION_PROJECTS.to_owned(),
+        reason: PROJECTS_READING.to_owned(),
+    }
+}
+
+/// [`projects_reading`]'s reason.
+const PROJECTS_READING: &str =
+    "still being read after a restart: the projects' own gears and product files show in a moment";
+
 /// Read organization `org`'s gear repositories and its projects' own roots
 /// and product files into the engine: the slow part is the projects', a
 /// clone or fetch of each repository (bounded by `project_roots`' deadline).
@@ -272,11 +288,14 @@ async fn list_org_now(
 /// `now`). The platform's root and no organization are the platform's scope.
 /// The caller has already shown that `ctx` reaches `org`.
 ///
-/// Only the first read of an organization is waited for: there is nothing to
-/// serve before it. After that a due read runs on a task of its own, one per
-/// organization at a time, and the request serves the roots there are -- on
-/// studio-dev a read on the way in fetched every project's repository and
-/// held the request up to 25 s once a minute.
+/// A read of the projects runs on a task of its own, one per organization at
+/// a time, and the request serves the roots there are -- on studio-dev a read
+/// on the way in fetched every project's repository and held the request up
+/// to 25 s once a minute, and after a start the first read held every request
+/// of a screen behind the gateway's 30 s (#1041). Only the organization's own
+/// gear repositories, one listing, are read on the way in the first time (and
+/// when `now`), so a scope never lacks them; until the projects' first read
+/// lands, its sources say they are being read ([`projects_reading`]).
 pub async fn scope_for(
     gearbox: &Arc<Gearbox>,
     connectors: &Connectors,
@@ -294,14 +313,12 @@ pub async fn scope_for(
     if !gearbox.begin_org_refresh(org, now) {
         return Some(org);
     }
-    if first {
-        if let Some(_reading) = gearbox.claim_org_read(org) {
-            read_org(gearbox, connectors, hub, ctx, org).await;
-        }
-        return Some(org);
-    }
-    if now {
+    if first || now {
         list_org_now(gearbox, connectors, ctx, org).await;
+    }
+    if first {
+        // Replaced by whatever the read below finds, failures included.
+        gearbox.use_unreadable_sources(org, vec![projects_reading()]);
     }
     let (gearbox, connectors, hub, ctx) = (
         Arc::clone(gearbox),
@@ -423,6 +440,23 @@ mod tests {
                 .unreadable_sources_of(Uuid::from_u128(0x0c))
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn projects_being_read_say_so_until_the_read_lands() {
+        let gearbox = gearbox();
+        let org = Uuid::from_u128(0x0d);
+        gearbox.use_unreadable_sources(org, vec![projects_reading()]);
+        let said = gearbox.unreadable_sources_of(org);
+        assert_eq!(said.len(), 1);
+        assert_eq!(
+            said[0].source,
+            super::super::project_roots::ORGANIZATION_PROJECTS
+        );
+        assert_eq!(said[0].reason, PROJECTS_READING);
+        // What `read_org` does when every project was read.
+        gearbox.use_unreadable_sources(org, Vec::new());
+        assert!(gearbox.unreadable_sources_of(org).is_empty());
     }
 
     #[test]

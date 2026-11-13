@@ -23,19 +23,6 @@ export const SORT_OPTIONS: readonly ProjectSortOption[] = [
 ];
 
 /**
- * Which column carries the sort indicator. The mockup draws the chevron in the
- * header of the column the sort acts on; ours acts on the name or the
- * timestamp, so it is one of those two.
- */
-export function sortedColumn(option: ProjectSortOption): 'project' | 'updated' {
-  return option === 'alphabetical' ? 'project' : 'updated';
-}
-
-export function sortDirection(option: ProjectSortOption): 'asc' | 'desc' {
-  return option === 'recent' ? 'desc' : 'asc';
-}
-
-/**
  * Row order for a chosen sort. One rule and no tie-breaker by tenant type: every
  * row is a project now that the list is rooted at a workspace.
  */

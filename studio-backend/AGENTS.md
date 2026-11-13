@@ -60,6 +60,13 @@ the artifact index follow from it:
 - **A new query feature** goes into both executors, `query.rs` (graph) and
   `query/sql.rs` (SQL), and into `mirror_tests.rs`, which asks both the same
   question and compares. It needs Docker: `cargo test -- domain_model::mirror`.
+- **A scoped read filters in the graph.** Every domain node type declares
+  `/payload/_scope` in its `index` trait (`gts::derived_node_schema`), so
+  `list_objects` with a scope sends `$filter=payload/_scope eq '…'` on every
+  page. Another filterable path goes into `gts::INDEX_PATHS` with a typed
+  property, and the registration (`Update` + `revalidate`) brings stored types
+  up to it; a type that refuses keeps walking. Test against the gear itself:
+  `cargo test -- domain_model::store_graph_tests`.
 - **Never delete a domain node** in graph-storage: its key could never be
   written again. Mark it (`store::DELETED_FIELD`), as `POST /mutate` does.
 

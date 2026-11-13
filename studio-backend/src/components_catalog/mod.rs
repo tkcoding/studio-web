@@ -16,6 +16,7 @@ mod frontx_gdl;
 mod gdl_literal;
 mod history;
 mod kit_gdl;
+pub(crate) use kit_gdl::{FILE as KIT_GDL_FILE, read as read_kit_gdl};
 mod memo;
 mod ownership;
 pub mod port;

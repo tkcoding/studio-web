@@ -233,7 +233,7 @@ caller's token.
 
 | Method | Path | Description | Stability |
 |--------|------|-------------|-----------|
-| `POST` | `/studio-notify/v1/messages` | Validate and queue; 202 with `run_id` and `poll` (`/studio-tasks/v1/runs/{run_id}`). `tenant_id` omitted means the caller's own | unstable |
+| `POST` | `/studio-notify/v1/messages` | Validate and queue; 202 with `run_id` and `poll` (`/studio-tasks/v1/runs/{run_id}`). `tenant_id` omitted means the caller's own. An administrator of that tenant (`connector.manage`, or its owner) or a platform administrator sends; anybody else 403 `ORG_ADMIN_REQUIRED` (#1044). Gears notify through the in-process port, which is not gated | unstable |
 
 There is deliberately nothing else: a second set of read routes over the same
 runs would only be a second thing to keep in step. The synchronous

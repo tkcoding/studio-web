@@ -371,6 +371,7 @@ and unscoped listings.
 |--------|------|-------------|-----------|
 | `POST` | `/studio-artifact-ingest/v1/sync` | Queue an `artifact.ingest` run; the task id is the run id on `/studio-tasks/v1/runs/{id}` | unstable |
 | `POST` | `/studio-artifact-ingest/v1/reconcile` | Forget, in one scope, every synced repository not in `keep`, with its document bindings | unstable |
+| `POST` | `/studio-artifact-ingest/v1/sources/detach` | `?project_id=`, `{clone_url}`: take a source out of the project's config and forget what was synced from it, as one resumable `artifact.source_detach` run (202 `{run_id}`); checked as the caller at enqueue (the project reached, the source listed, else 404), the run writes the config as the worker scoped to the project, behind any sync of the repository still running. Issue #1042 | unstable |
 | `GET` | `/studio-artifact-ingest/v1/nodes` | Ingested nodes by `type`, `scope`, `repo`, `q`, `sort=updated`, `offset`, `limit` | unstable |
 | `GET` | `/studio-artifact-ingest/v1/edges` | Relations as endpoint pairs, by `scope` | unstable |
 | `GET` | `/studio-artifact-ingest/v1/source-activity` | Pull requests and commits per repository over `days` (default 7, at most 90) | unstable |
@@ -389,7 +390,7 @@ and unscoped listings.
 Without a connector driver linked the routes stay mounted and answer 503 with
 the reason. In process the gear
 publishes seven ports on the ClientHub (`port.rs`): `RepoFileReader` (a
-checkout's text files), `ArtifactFiles` (a scope's file nodes),
+checkout's text files, and the commit and branch it is at), `ArtifactFiles` (a scope's file nodes),
 `ArtifactCounter` and `ProjectSignalSource` (portfolio and projects-table
 rollups), `ProjectWork` (a scope's issues, pull requests and commits with their
 text, which the documents gear links to the identifiers its documents define),

@@ -1,0 +1,134 @@
+import type { StudioArtifactKind } from '@constructor-studio/mfe-shared';
+
+/** `GET /nodes`. Keyed by the shell's artifact kinds but a Studio document, which is no node: a missing or extra one does not compile. */
+export const ARTIFACT_NODE_TYPES = {
+  repo: 'gts.cf.studio.artifact.repo.v1~',
+  file: 'gts.cf.studio.artifact.file.v1~',
+  issue: 'gts.cf.studio.artifact.issue.v1~',
+  pullRequest: 'gts.cf.studio.artifact.pull_request.v1~',
+  // Not in the gear's default listing ("graph detail"); reached through `type`.
+  commit: 'gts.cf.studio.artifact.commit.v1~',
+  comment: 'gts.cf.studio.artifact.comment.v1~',
+  user: 'gts.cf.studio.artifact.user.v1~',
+} as const satisfies Record<Exclude<StudioArtifactKind, 'document'>, string>;
+
+export type ArtifactKind = keyof typeof ARTIFACT_NODE_TYPES;
+
+export const ARTIFACT_REPO_TYPE = 'repo';
+
+export interface ArtifactNodeValue {
+  repo?: string;
+  full_path?: string;
+  title?: string;
+  path?: string;
+  number?: number;
+  state?: string;
+  author?: string;
+  provider?: string;
+  url?: string;
+  size?: number;
+  sha?: string;
+  /** Commits only. */
+  short_sha?: string;
+  login?: string;
+  is_dir?: boolean;
+  /** Files read from a checkout rather than listed through a connector. */
+  from_checkout?: boolean;
+  /** Written by syncs before 2026-10-05, beside an excerpt they no longer store. */
+  has_text?: boolean;
+  /** RFC 3339. Issues, pull requests, commits and comments — files, repos and users have none. */
+  created_at?: string;
+  updated_at?: string;
+  origin?: string;
+  workspace_id?: string;
+  project_id?: string;
+  /** Repos only: the `secret_ref` its sync was sent, `studio-connection-<connection id>`. */
+  connector_id?: string;
+  /** Repos only. RFC 3339, when the last sync finished; absent before the first one does. */
+  synced_at?: string;
+}
+
+export interface ArtifactNodeDto {
+  type_id: string;
+  instance_id: string;
+  value: ArtifactNodeValue;
+}
+
+export interface ArtifactNodeListDto {
+  nodes: ArtifactNodeDto[];
+  total: number;
+  next_cursor?: string;
+}
+
+/** `POST /sync` */
+export interface SyncBody {
+  provider: string;
+  base_url?: string;
+  secret_ref: string;
+  repo_full_path: string;
+  workspace_id?: string;
+  project_id?: string;
+}
+
+/** `202` from `POST /sync`: the studio-tasks run doing it. */
+export interface SyncEnqueuedDto {
+  run_id: string;
+  status: string;
+}
+
+/** Mirrors `DetachSourceRequest`: the source of `?project_id=` to detach. */
+export interface DetachSourceBody {
+  clone_url: string;
+}
+
+/** Mirrors `SourceDetachQueued`: the `artifact.source_detach` run. */
+export interface SourceDetachQueuedDto {
+  run_id: string;
+  status: string;
+}
+
+/** Mirrors `RepoActivityDto`: one repository's movement over the window. */
+export interface RepoActivityDto {
+  /** The repo node's instance id. */
+  repo: string;
+  /** Pull requests open now, however old. */
+  open: number;
+  /** Pull requests merged inside the window. */
+  merged: number;
+  /** Commits inside the window. */
+  commits: number;
+  /** One bucket per day, oldest first, always `days` long. */
+  days: number[];
+}
+
+/** Mirrors `SourceActivityListDto`. */
+export interface SourceActivityListDto {
+  items: RepoActivityDto[];
+  total: number;
+  /** The window, in days. */
+  days: number;
+}
+
+/** Mirrors `AttachedRepo`: the pair a sync of the repository is sent. */
+export interface AttachedRepo {
+  secret_ref: string;
+  repo_full_path: string;
+}
+
+/** Mirrors `ReconcileRequest`. */
+export interface ReconcileRequest {
+  workspace_id?: string;
+  project_id?: string;
+  /**
+   * Every repository the scope has attached now. Any other synced into it is
+   * forgotten, with everything synced from it.
+   */
+  keep: AttachedRepo[];
+}
+
+/** Mirrors `ReconcileResponse`: what was forgotten. */
+export interface ReconcileResponse {
+  repos: number;
+  nodes: number;
+  bindings: number;
+}

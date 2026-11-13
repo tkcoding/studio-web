@@ -46,6 +46,7 @@ pub use super::registry::{
     CatalogVersion, Oci, RegistryAccess, RegistryCatalog, TokenScopes, catalog_for, same_registry,
     token_scopes, too_broad,
 };
+pub use super::research::KEY_LIFETIME_DAYS as RESEARCH_KEY_LIFETIME_DAYS;
 pub use super::research::PROVIDER as RESEARCH_PROVIDER;
 /// The Research connector's calls to Research's public API (ADR-0049 §6).
 pub mod research {

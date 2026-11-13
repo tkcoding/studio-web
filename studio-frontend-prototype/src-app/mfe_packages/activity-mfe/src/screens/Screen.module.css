@@ -1,0 +1,185 @@
+/*
+ * Project › Activity and Timeline over ui-kit semantic tokens (see theme.css
+ * in @gears-frontx/ui-kit). No Tailwind: inside the shadow root the
+ * re-anchored kit tokens shadow the shell's HSL triplets.
+ */
+
+.screen {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 100%;
+  padding: var(--space-6);
+  color: var(--foreground);
+}
+
+/* The kit's theme.css paints `[data-theme]`; the shell's screen keeps its own. */
+.screen[data-theme] {
+  background: transparent;
+}
+
+.skeleton {
+  height: 12rem;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-heading-1-size);
+  line-height: var(--text-heading-1-line-height);
+  font-weight: var(--text-heading-1-weight);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.grow {
+  flex: 1;
+}
+
+.about {
+  margin: 0;
+  max-width: 60rem;
+  color: var(--muted-foreground);
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+.error {
+  margin: 0;
+  color: var(--destructive);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.search {
+  max-width: 20rem;
+}
+
+.kinds {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.sortButton {
+  all: unset;
+  cursor: pointer;
+  font-weight: inherit;
+}
+
+.sub {
+  color: var(--muted-foreground);
+  font-size: 0.875em;
+}
+
+.runToggle {
+  cursor: pointer;
+  margin-inline-start: var(--space-2);
+}
+
+.runList {
+  margin: 0;
+  padding-inline-start: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.milestone {
+  display: grid;
+  grid-template-columns: 7rem 1.125rem 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.milestone:first-child {
+  border-top: none;
+}
+
+.date {
+  font-variant-numeric: tabular-nums;
+}
+
+.dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.dot[data-tone='success'] {
+  background: var(--success, var(--primary));
+}
+
+.dot[data-tone='danger'] {
+  background: var(--destructive);
+}
+
+.what {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.todayMark {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--primary);
+  font-size: 0.75rem;
+  list-style: none;
+}
+
+.todayMark::before,
+.todayMark::after {
+  content: '';
+  flex: 1;
+  border-top: 1px dashed var(--primary);
+}
+
+.form {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 11rem) 1fr;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+}
+
+.label {
+  color: var(--muted-foreground);
+  font-size: 0.875em;
+}

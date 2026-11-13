@@ -1,0 +1,31 @@
+{
+  "$id": "gts://gts.frontx.mfes.comm.action.v1~constructor_studio.shell.place.open.v1~",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Shell-owned action an MFE executes against the domain it is mounted in (the screen or the overlay domain) to go to a place: an organization, a workspace in it, or a project in that workspace — what Search finds. The shell opens the deepest level named on its entry screen and moves the address as a pick in the path bar does. See placeOpen in contextActions.ts.",
+  "allOf": [
+    {
+      "$ref": "gts://gts.frontx.mfes.comm.action.v1~"
+    }
+  ],
+  "properties": {
+    "payload": {
+      "type": "object",
+      "properties": {
+        "organizationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1,
+          "$comment": "Optional: the workspace level; required for a project, whose address names its workspace."
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["organizationId"]
+    }
+  }
+}

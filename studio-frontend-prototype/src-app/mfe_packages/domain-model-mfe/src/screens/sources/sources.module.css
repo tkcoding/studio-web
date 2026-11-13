@@ -1,0 +1,36 @@
+/* Project domain model › Sources (the prototype's .sm-sides.sm-two, .sm-rel-pair, .sm-work-items). */
+
+.two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.uploadPick {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 0.375rem);
+  cursor: pointer;
+}
+
+.uploadPick input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.uploadPick:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.workItems {
+  margin: 0;
+  padding-left: var(--space-4);
+  display: grid;
+  gap: var(--space-1);
+}

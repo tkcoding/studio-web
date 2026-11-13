@@ -1,0 +1,72 @@
+/* The New workspace card.*/
+
+.form {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 28rem;
+  padding: var(--space-8);
+  font-family: var(--font-sans);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line-height);
+  background: var(--card);
+  color: var(--foreground);
+}
+
+/* The kit's theme.css paints `body, [data-theme]` with --background, and this
+ * root carries data-theme. A class and an attribute (0,2,0) keep the card
+ * surface wherever the sheets land. */
+.form[data-theme] {
+  background: var(--card);
+}
+
+.title {
+  margin: 0 0 var(--space-5);
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.titleSkeleton {
+  margin: 0 0 var(--space-5);
+  height: var(--text-body-line-height);
+  width: 12ch;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fieldLabel {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-size);
+  line-height: var(--text-mono-line-height);
+  font-weight: var(--text-mono-weight);
+  letter-spacing: var(--text-mono-tracking);
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.fieldHint {
+  font-size: var(--text-meta-size);
+  color: var(--muted-foreground);
+}
+
+.bodySkeleton {
+  height: 4.5rem;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--text-label-size);
+  color: var(--destructive);
+}

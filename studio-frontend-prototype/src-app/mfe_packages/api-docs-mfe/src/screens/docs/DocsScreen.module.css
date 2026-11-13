@@ -1,0 +1,30 @@
+/* Docs & API: the viewer's frame fills the screen under the shell's bar. */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 7.5rem);
+  color: var(--foreground);
+}
+
+.frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+}
+
+.muted {
+  padding: var(--space-6);
+  color: var(--muted-foreground);
+}
+
+.error {
+  padding: var(--space-6);
+  color: var(--destructive);
+}
+
+.skeleton {
+  height: 2rem;
+  width: 16rem;
+  margin: var(--space-6);
+}

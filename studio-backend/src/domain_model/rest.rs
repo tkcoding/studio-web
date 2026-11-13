@@ -1,4 +1,6 @@
-//! REST surface for the domain model.
+//! REST surface for the Studio domain model (Studio's own types and objects;
+//! not a project's domain model, which studio-documents serves under
+//! `/project-domain-model`).
 //!
 //! The routes fall into four groups, all under `/studio-domain-model/v1`
 //! (`register_routes` below is the full list):
@@ -77,6 +79,16 @@ fn access_problem(e: &anyhow::Error) -> Option<CanonicalError> {
         super::access::AccessError::Held(_) => StudioDomainModelError::permission_denied()
             .with_reason("DOMAIN_OBJECT_HELD_BY_GEAR")
             .create(),
+        e @ super::access::AccessError::Dormant { kit, .. } => {
+            StudioDomainModelError::failed_precondition()
+                .with_precondition_violation(kit.clone(), e.to_string(), "DOMAIN_TYPE_DORMANT")
+                .create()
+        }
+        e @ super::access::AccessError::NotInstalled { kit, .. } => {
+            StudioDomainModelError::not_found(e.to_string())
+                .with_resource(format!("DOMAIN_TYPE_NOT_INSTALLED:{kit}"))
+                .create()
+        }
     })
 }
 
@@ -356,7 +368,7 @@ pub struct ModelSyncResponse {
     pub skipped_endpoints: u64,
 }
 
-/// Upload a domain model to make it the active ontology.
+/// Upload a Studio domain model to make it the active ontology.
 #[derive(Debug)]
 #[toolkit_macros::api_dto(request)]
 pub struct ImportModelRequest {
@@ -590,6 +602,13 @@ pub struct LegacyScopesQuery {
 }
 
 #[derive(Debug, serde::Deserialize)]
+pub struct TypesQuery {
+    /// `dormant` adds the types and fields kits left behind; only an
+    /// administrator of the model is answered with them.
+    pub include: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
 pub struct ConformanceQuery {
     /// Narrow to one workspace/project scope.
     pub scope: Option<String>,
@@ -662,6 +681,7 @@ pub struct RevertResponse {
 async fn list_types(
     crate::org_scope::OrgCtx(ctx): crate::org_scope::OrgCtx,
     Extension(handle): Extension<Handle>,
+    Query(q): Query<TypesQuery>,
 ) -> ApiResult<JsonBody<TypesResponse>> {
     let ontology = handle
         .0
@@ -669,6 +689,17 @@ async fn list_types(
         .await
         .map_err(|e| CanonicalError::internal(format!("{e:#}")).create())?;
     let can_edit_model = may_edit_model(&ctx, &handle).await;
+    // What kits left dormant shows only in Admin › Domain model, which asks
+    // for it (ADR-0070 §4); every other screen reads the installed model.
+    let with_dormant = can_edit_model
+        && q.include
+            .as_deref()
+            .is_some_and(|i| i.split(',').any(|p| p.trim() == "dormant"));
+    let ontology = if with_dormant {
+        ontology
+    } else {
+        super::ontology::Ontology::without_dormant(&ontology)
+    };
     let gts = super::gts::catalog_of(&ontology);
     Ok(Json(TypesResponse {
         ontology: with_origins(ontology),
@@ -1565,6 +1596,35 @@ async fn query_objects(
             group_by: a.group_by,
         }),
     };
+    // A type whose kit is not installed here is absent for everybody: say
+    // which kit brings it rather than "unknown type" (ADR-0070 §6).
+    if let Some(kit) = handle
+        .0
+        .absent_kit(&ctx, &query.type_ref)
+        .await
+        .map_err(|e| CanonicalError::internal(format!("{e:#}")).create())?
+    {
+        let refused = anyhow::Error::from(super::access::AccessError::NotInstalled {
+            entity: query.type_ref.clone(),
+            kit,
+        });
+        return Err(access_problem(&refused).expect("an access error"));
+    }
+    // A type a kit left dormant is not installed for a member; an
+    // administrator still reads its objects (ADR-0070 §4).
+    if let Some(kit) = handle
+        .0
+        .dormant_kit(&ctx, &query.type_ref)
+        .await
+        .map_err(|e| CanonicalError::internal(format!("{e:#}")).create())?
+        && !may_edit_model(&ctx, &handle).await
+    {
+        let refused = anyhow::Error::from(super::access::AccessError::NotInstalled {
+            entity: query.type_ref.clone(),
+            kit,
+        });
+        return Err(access_problem(&refused).expect("an access error"));
+    }
     let outcome = handle.0.query(&ctx, &query).await.map_err(|e| match e {
         QueryError::Invalid(m) => bad(m),
         QueryError::Failed(e) => access_problem(&e)
@@ -1599,7 +1659,7 @@ pub fn register_routes(
 ) -> Router {
     let router = OperationBuilder::get("/studio-domain-model/v1/types")
         .operation_id("studio_domain_model.list_types")
-        .summary("The stored domain-model ontology")
+        .summary("The stored Studio domain model ontology")
         .description(
             "Returns every domain type with its fields and relations — the \
              domain-entity document the model UI renders from, so the frontend \
@@ -1614,6 +1674,12 @@ pub fn register_routes(
             "string",
         )
         .require_license_features::<License>([])
+        .query_param_typed(
+            "include",
+            false,
+            "`dormant`: also the types and fields kits left behind, marked `meta.left_by` / `left_by` (administrators of the model only)",
+            "string",
+        )
         .handler(list_types)
         .json_response_with_schema::<TypesResponse>(openapi, StatusCode::OK, "The ontology")
         .error_401(openapi)
@@ -1771,6 +1837,7 @@ pub fn register_routes(
             "Matching objects with their relations",
         )
         .error_400(openapi)
+        .error_404(openapi)
         .error_403(openapi)
         .error_401(openapi)
         .error_500(openapi)
@@ -1872,11 +1939,11 @@ pub fn register_routes(
 
     let router = OperationBuilder::post("/studio-domain-model/v1/model/sync")
         .operation_id("studio_domain_model.sync_model")
-        .summary("Sync the domain model into the graph as a graph")
+        .summary("Sync the Studio domain model into the graph as a graph")
         .description(
             "Materializes the model itself: one object-type node per entity, \
              joined by `inherits` (extends) and `declares` (relation) edges, so \
-             the domain model with its relations is queryable in the graph. \
+             the Studio domain model with its relations is queryable in the graph. \
              Idempotent — deterministic keys, so a re-sync converges.",
         )
         .tag("StudioDomainModel")
@@ -1901,7 +1968,7 @@ pub fn register_routes(
 
     let router = OperationBuilder::post("/studio-domain-model/v1/model/import")
         .operation_id("studio_domain_model.import_model")
-        .summary("Upload a domain model to make it the active ontology")
+        .summary("Upload a Studio domain model to make it the active ontology")
         .description(
             "Replaces the active ontology with an uploaded domain-entity \
              document (the shape GET /types returns) and registers its types, \
@@ -1917,7 +1984,7 @@ pub fn register_routes(
             "string",
         )
         .require_license_features::<License>([])
-        .json_request::<ImportModelRequest>(openapi, "The domain model to load")
+        .json_request::<ImportModelRequest>(openapi, "The Studio domain model to load")
         .handler(import_model)
         .json_response_with_schema::<ImportModelResponse>(
             openapi,
@@ -1984,7 +2051,7 @@ pub fn register_routes(
 
     let router = OperationBuilder::post("/studio-domain-model/v1/types")
         .operation_id("studio_domain_model.create_type")
-        .summary("Add a type to the domain model")
+        .summary("Add a type to the Studio domain model")
         .description(
  "Adds an entity type: an id (lower-case words joined by hyphens), a name, a bucket, and the type it extends, whose fields and relations it inherits. It starts with no fields of its own; `POST /types/{id}/fields` adds them. A versioned model edit like a field edit, so `POST /model/revert` undoes it. Needs the authority to change the model (ADR-0035). Answers 201.",
         )
@@ -2283,3 +2350,7 @@ pub fn register_routes(
         None => router,
     }
 }
+
+#[cfg(test)]
+#[path = "kit_lifecycle_tests.rs"]
+mod kit_lifecycle_tests;
