@@ -22,6 +22,7 @@ mod documents; // document management: types + templates + section-checklist val
 mod domain_model; // store the Studio domain model as GTS types in the graph; create/extend objects
 mod environments; // studio-environments: an organization's deployment environments and deploys (ADR-0043)
 mod git_proxy; // studio-git: the Git remote a desktop session clones from (ADR-0027)
+mod gears_matcher; // the gears-matcher on the Studio side: the id mapping so far (ADR-0071)
 mod graph_error; // a gear refusal said in full: CanonicalError plus its field violations
 mod gts_audit; // `gts-audit`: diff the live registries against that inventory (ADR-0013)
 mod gts_inventory; // every GTS document the assembly registers, built offline for the drift test
