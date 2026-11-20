@@ -3212,6 +3212,116 @@ impl IngestService {
         self.list_in_scope(ctx, Some("mapping_decision"), scope)
             .await
     }
+
+    /// Record one run of a matcher for the gears-matcher pilot (HYP-3182). One record per
+    /// (matcher, Studio run); recording again replaces it. Written through the `GraphStore`
+    /// like every artifact, so the index follows.
+    // Nothing calls it until the pilot's writer does (HYP-3182).
+    #[allow(dead_code)]
+    pub async fn record_matcher_run(
+        &self,
+        ctx: &SecurityContext,
+        run: &MatcherRun,
+    ) -> anyhow::Result<GtsNode> {
+        use super::gts;
+        let recorded_at = time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default();
+        let mut value = serde_json::json!({
+            "title": format!("{} run {}: {}", run.matcher, run.studio_run, run.state),
+            "matcher": run.matcher,
+            "studio_run": run.studio_run,
+            "state": run.state,
+            "requirements": run.requirements,
+            "suggestions": run.suggestions,
+            "catalogue": run.catalogue,
+            "report_schema_version": run.report_schema_version,
+            "recorded_at": recorded_at,
+            "workspace_id": run.workspace_id,
+        });
+        if let (Some(obj), Some(project)) = (value.as_object_mut(), &run.project_id) {
+            obj.insert(
+                "project_id".to_string(),
+                serde_json::Value::String(project.clone()),
+            );
+        }
+        let node = GtsNode {
+            type_id: gts::MATCHER_RUN_TYPE,
+            instance_id: gts::matcher_run_instance_id(&run.matcher, &run.studio_run),
+            value,
+        };
+        self.graph
+            .upsert_nodes(ctx, std::slice::from_ref(&node))
+            .await?;
+        Ok(node)
+    }
+
+    /// Record what a member did with one suggestion of a matcher run (HYP-3182). One record per
+    /// (matcher, Studio run, gear); choosing again replaces it.
+    // Nothing calls it until the pilot's writer does (HYP-3182).
+    #[allow(dead_code)]
+    pub async fn record_matcher_choice(
+        &self,
+        ctx: &SecurityContext,
+        choice: &MatcherChoice,
+    ) -> anyhow::Result<GtsNode> {
+        use super::gts;
+        let chosen_at = time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default();
+        let mut value = serde_json::json!({
+            "title": format!("{} {}: {} {}", choice.matcher, choice.studio_run, choice.choice, choice.gear),
+            "matcher": choice.matcher,
+            "studio_run": choice.studio_run,
+            "gear": choice.gear,
+            "choice": choice.choice,
+            "chosen_by": ctx.subject_id().to_string(),
+            "chosen_at": chosen_at,
+            "workspace_id": choice.workspace_id,
+        });
+        if let (Some(obj), Some(project)) = (value.as_object_mut(), &choice.project_id) {
+            obj.insert(
+                "project_id".to_string(),
+                serde_json::Value::String(project.clone()),
+            );
+        }
+        let node = GtsNode {
+            type_id: gts::MATCHER_CHOICE_TYPE,
+            instance_id: gts::matcher_choice_instance_id(
+                &choice.matcher,
+                &choice.studio_run,
+                &choice.gear,
+            ),
+            value,
+        };
+        self.graph
+            .upsert_nodes(ctx, std::slice::from_ref(&node))
+            .await?;
+        Ok(node)
+    }
+
+    /// The matcher runs recorded in a workspace or project: the end-of-November count is this
+    /// listing, one query.
+    // Nothing calls it until the pilot's writer does (HYP-3182).
+    #[allow(dead_code)]
+    pub async fn list_matcher_runs(
+        &self,
+        ctx: &SecurityContext,
+        scope: &str,
+    ) -> anyhow::Result<Vec<GtsNode>> {
+        self.list_in_scope(ctx, Some("matcher_run"), scope).await
+    }
+
+    /// The choices recorded in a workspace or project, the second query of the count.
+    // Nothing calls it until the pilot's writer does (HYP-3182).
+    #[allow(dead_code)]
+    pub async fn list_matcher_choices(
+        &self,
+        ctx: &SecurityContext,
+        scope: &str,
+    ) -> anyhow::Result<Vec<GtsNode>> {
+        self.list_in_scope(ctx, Some("matcher_choice"), scope).await
+    }
 }
 
 /// A member's decision on one proposed mapping, as the portal sends it.
@@ -3237,6 +3347,43 @@ pub struct MappingDecision {
     pub step: String,
     /// `confirmed` or `rejected`.
     pub decision: String,
+}
+
+/// One run of a matcher, as the pilot records it (HYP-3182).
+// Nothing builds it until the pilot's writer does (HYP-3182).
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatcherRun {
+    pub workspace_id: String,
+    pub project_id: Option<String>,
+    /// `keyword` or `verified`: the same record for both, so the two compare.
+    pub matcher: String,
+    /// The id Studio gave the run (the service's `Idempotency-Key`).
+    pub studio_run: String,
+    /// `succeeded`, `partial`, `failed` or `cancelled`.
+    pub state: String,
+    pub requirements: u32,
+    /// How many Gears the matcher suggested.
+    pub suggestions: u32,
+    /// The catalogue pins the run used, as the report names them.
+    pub catalogue: String,
+    pub report_schema_version: String,
+}
+
+/// What a member did with one suggestion, as the pilot records it (HYP-3182).
+// Nothing builds it until the pilot's writer does (HYP-3182).
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatcherChoice {
+    pub workspace_id: String,
+    pub project_id: Option<String>,
+    pub matcher: String,
+    pub studio_run: String,
+    /// The Gear by the matcher's id (`gears-rust/ledger`).
+    pub gear: String,
+    /// `accepted`, `rejected`, `missed` (a Gear the member added that the matcher did not
+    /// suggest) or `skipped`.
+    pub choice: String,
 }
 
 /// What the portfolio counts, answered without a page to count.

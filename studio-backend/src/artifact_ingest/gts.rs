@@ -62,9 +62,16 @@ pub const FILE_CONTENT_TYPE: &str = "gts.cf.studio.artifact.file_content.v1~";
 /// gear covers a capability a document declares, or that it does not
 /// (`cpt-studio-fr-mapping-decisions`).
 pub const MAPPING_DECISION_TYPE: &str = "gts.cf.studio.artifact.mapping_decision.v1~";
+/// One run of a matcher on a project's specification, kept for the gears-matcher pilot
+/// (HYP-3182). Separate from [`MAPPING_DECISION_TYPE`] on purpose: a pilot record never
+/// re-ranks the keyword matcher's results. Dropped as a whole when the pilot ends.
+pub const MATCHER_RUN_TYPE: &str = "gts.cf.studio.artifact.matcher_run.v1~";
+/// What a member did with one suggestion of a matcher run (accepted, rejected, missed or
+/// skipped), kept for the pilot (HYP-3182). Same shape for both matchers, so the two compare.
+pub const MATCHER_CHOICE_TYPE: &str = "gts.cf.studio.artifact.matcher_choice.v1~";
 
 /// Every artifact node type, for registering and enumerating.
-pub const ALL_NODE_TYPES: [&str; 15] = [
+pub const ALL_NODE_TYPES: [&str; 17] = [
     REPO_TYPE,
     ISSUE_TYPE,
     PULL_REQUEST_TYPE,
@@ -75,6 +82,8 @@ pub const ALL_NODE_TYPES: [&str; 15] = [
     COMMIT_TYPE,
     FILE_CONTENT_TYPE,
     MAPPING_DECISION_TYPE,
+    MATCHER_RUN_TYPE,
+    MATCHER_CHOICE_TYPE,
     WORKFLOW_RUN_TYPE,
     WORKFLOW_JOB_TYPE,
     BUILD_TYPE,
@@ -213,7 +222,7 @@ pub fn our_type_from_graph(graph_type: &str) -> Option<&'static str> {
 }
 
 /// The node types, with a title and a description each.
-const NODE_TYPE_DOCS: [(&str, &str, &str); 15] = [
+const NODE_TYPE_DOCS: [(&str, &str, &str); 17] = [
     (
         REPO_TYPE,
         "Repository",
@@ -263,6 +272,16 @@ const NODE_TYPE_DOCS: [(&str, &str, &str); 15] = [
         MAPPING_DECISION_TYPE,
         "MappingDecision",
         "A member's decision on which gear covers a capability a document declares.",
+    ),
+    (
+        MATCHER_RUN_TYPE,
+        "MatcherRun",
+        "One run of a spec-to-gears matcher, kept for the gears-matcher pilot.",
+    ),
+    (
+        MATCHER_CHOICE_TYPE,
+        "MatcherChoice",
+        "What a member did with one suggestion of a matcher run, kept for the gears-matcher pilot.",
     ),
     (
         WORKFLOW_RUN_TYPE,
@@ -1311,6 +1330,22 @@ pub fn mapping_decision_instance_id(
     anon_id(&["mapping_decision", document, section, capability, gear])
 }
 
+// ── Pilot records (HYP-3182) ──
+
+/// One record per (matcher, Studio run): recording a run again replaces it.
+// Nothing calls it until the pilot's writer does (HYP-3182).
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn matcher_run_instance_id(matcher: &str, studio_run: &str) -> String {
+    anon_id(&["matcher_run", matcher, studio_run])
+}
+
+/// One record per (matcher, Studio run, gear): choosing again replaces it.
+// Nothing calls it until the pilot's writer does (HYP-3182).
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn matcher_choice_instance_id(matcher: &str, studio_run: &str, gear: &str) -> String {
+    anon_id(&["matcher_choice", matcher, studio_run, gear])
+}
+
 /// mapping_decision → document (the document whose capability it decides).
 pub fn decision_on_edge(decision_id: &str, document_id: &str) -> GtsEdge {
     GtsEdge {
@@ -1364,6 +1399,38 @@ mod tests {
             node.instance_id,
             file_instance_id("scope", "connector", "acme/specs", "docs/adr/0007.md"),
         );
+    }
+
+    /// The pilot's records (HYP-3182): one per (matcher, run) and one per (matcher, run, gear),
+    /// the same for both matchers, and listed by their own leaf, never among the mapping decisions.
+    #[test]
+    fn the_pilot_records_are_keyed_per_matcher_and_listed_apart_from_decisions() {
+        assert_eq!(
+            matcher_run_instance_id("verified", "run-1"),
+            matcher_run_instance_id("verified", "run-1")
+        );
+        assert_ne!(
+            matcher_run_instance_id("verified", "run-1"),
+            matcher_run_instance_id("keyword", "run-1"),
+            "the two matchers' records of one run are two records"
+        );
+        assert_ne!(
+            matcher_choice_instance_id("verified", "run-1", "gears-rust/ledger"),
+            matcher_choice_instance_id("verified", "run-1", "gears-rust/pricing")
+        );
+        assert_ne!(
+            matcher_choice_instance_id("verified", "run-1", "gears-rust/ledger"),
+            mapping_decision_instance_id("run-1", "", "", "gears-rust/ledger"),
+        );
+        assert_eq!(
+            resolve_listable_types(Some("matcher_run")),
+            vec![MATCHER_RUN_TYPE]
+        );
+        assert_eq!(
+            resolve_listable_types(Some("matcher_choice")),
+            vec![MATCHER_CHOICE_TYPE]
+        );
+        assert!(!resolve_listable_types(None).contains(&MATCHER_RUN_TYPE));
     }
 
     fn pull(state: &str) -> RemotePullRequest {

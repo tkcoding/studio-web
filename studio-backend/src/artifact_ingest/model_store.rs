@@ -77,7 +77,7 @@ const MOVE_RETRY_FIRST: std::time::Duration = std::time::Duration::from_secs(300
 const MOVE_RETRY_MAX: std::time::Duration = std::time::Duration::from_secs(3600);
 
 /// Each artifact type and the model type it becomes.
-const KINDS: [(&str, &str); 15] = [
+const KINDS: [(&str, &str); 17] = [
     (gts::REPO_TYPE, "repository"),
     (gts::ISSUE_TYPE, "work-item"),
     (gts::PULL_REQUEST_TYPE, "pull-request"),
@@ -88,6 +88,8 @@ const KINDS: [(&str, &str); 15] = [
     (gts::COMMIT_TYPE, "commit"),
     (gts::FILE_CONTENT_TYPE, "text-content"),
     (gts::MAPPING_DECISION_TYPE, "mapping-decision"),
+    (gts::MATCHER_RUN_TYPE, "matcher-run"),
+    (gts::MATCHER_CHOICE_TYPE, "matcher-choice"),
     (gts::WORKFLOW_RUN_TYPE, "ci-run"),
     (gts::WORKFLOW_JOB_TYPE, "ci-job"),
     (gts::BUILD_TYPE, "product-build"),
